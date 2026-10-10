@@ -759,6 +759,54 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!1 &162891309
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 162891311}
+  - component: {fileID: 162891310}
+  m_Layer: 0
+  m_Name: PerfCapture
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &162891310
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 162891309}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3be5a63c2a9dbc5438eab1b9a5868897, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FrameTimingCapture
+  durationSeconds: 30
+  warmupSeconds: 2
+  note: BridgeScene, moderate, stop
+  targetHz: 90
+--- !u!4 &162891311
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 162891309}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &179738521
 GameObject:
   m_ObjectHideFlags: 0
@@ -2933,6 +2981,7 @@ MonoBehaviour:
   shipMotion: {fileID: 1663476064}
   sunLight: {fileID: 1815318736}
   oceanMaterial: {fileID: 2100000, guid: 0b2086a71065f754e8576f40aac3b7ad, type: 2}
+  rainEffect: {fileID: 806489818}
   currentPreset: moderate
 --- !u!4 &743935981
 Transform:
@@ -2969,6 +3018,59 @@ MonoBehaviour:
   overcastFrom: 0.45
   overcastTo: 0.8
   cloudDriftSpeed: 0.02
+--- !u!1 &752309093
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 752309095}
+  - component: {fileID: 752309094}
+  m_Layer: 2
+  m_Name: RainShelter
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!65 &752309094
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 752309093}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 6.7529716, y: 4.440834, z: 8.101312}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!4 &752309095
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 752309093}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 2.513516, y: 2.329, z: -1.5682607}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1663476065}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &793920446
 GameObject:
   m_ObjectHideFlags: 0
@@ -3421,6 +3523,69 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!1 &806489817
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 806489819}
+  - component: {fileID: 806489818}
+  m_Layer: 0
+  m_Name: Rain
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &806489818
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 806489817}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0efef12669ee78644a92de93a6b6f933, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RainEffect
+  followTarget: {fileID: 1477584441}
+  worldOrigin: {fileID: 660588862}
+  oceanWaves: {fileID: 1840327445}
+  rainMaterial: {fileID: 2100000, guid: 509236433fb59e642bb731621b17ac32, type: 2}
+  shelters:
+  - {fileID: 752309094}
+  intensity: 0
+  emissionRate: 2000
+  maxParticles: 6000
+  area: 30
+  spawnHeight: 10
+  fallBelowCamera: 8
+  waterLevelY: -5
+  fallSpeed: 6.5
+  windSpeed: 15
+  dropWidth: 0.012
+  streakVelocityScale: 0.035
+  brightness: 1.8
+  alpha: 0.35
+--- !u!4 &806489819
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 806489817}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &807253158
 GameObject:
   m_ObjectHideFlags: 0
@@ -6499,6 +6664,11 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 462322728475301653, guid: 0cf5b21d0646cb04b8c9f74ab13f62ba, type: 3}
   m_PrefabInstance: {fileID: 88694271}
   m_PrefabAsset: {fileID: 0}
+--- !u!4 &1477584441 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 7917674758326848202, guid: 77e7c27b2c5525e4aa8cc9f99d654486, type: 3}
+  m_PrefabInstance: {fileID: 1373153106}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1548251155
 GameObject:
   m_ObjectHideFlags: 0
@@ -7409,6 +7579,7 @@ Transform:
   - {fileID: 325178211}
   - {fileID: 2016271469}
   - {fileID: 858814860}
+  - {fileID: 752309095}
   m_Father: {fileID: 440562506}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1663476066
@@ -10497,3 +10668,5 @@ SceneRoots:
   - {fileID: 743935981}
   - {fileID: 660588863}
   - {fileID: 1840327448}
+  - {fileID: 162891311}
+  - {fileID: 806489819}

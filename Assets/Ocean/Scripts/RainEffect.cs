@@ -58,13 +58,19 @@ public class RainEffect : MonoBehaviour
     public float fallSpeed = 6.5f;
     [Tooltip("Скорость ветра в шторм, м/с (7 баллов Бофорта ≈ 14–17 м/с)")]
     public float windSpeed = 15f;
+    // Внешний вид можно подбирать в Play Mode — применяется каждый кадр
     [Tooltip("Толщина капли, м")]
-    public float dropWidth = 0.012f;
+    public float dropWidth = 0.02f;
     [Tooltip("Длина штриха = скорость · коэффициент (имитация смаза при выдержке)")]
     public float streakVelocityScale = 0.035f;
     [Tooltip("Яркость капли относительно цвета тумана")]
-    public float brightness = 1.8f;
-    [Range(0f, 1f)] public float alpha = 0.35f;
+    public float brightness = 3f;
+    [Range(0f, 1f)] public float alpha = 0.6f;
+    [Tooltip("Писать в консоль включение/выключение дождя")]
+    public bool logState = true;
+
+    private bool wasRaining;
+    private float rainSince = -1f;
 
     private ParticleSystem rainSystem;
     private ParticleSystemRenderer rainRenderer;
@@ -125,6 +131,8 @@ public class RainEffect : MonoBehaviour
         float life = (cam.y + spawnHeight - killY) / Mathf.Max(0.1f, fallSpeed);
         var main = rainSystem.main;
         main.startLifetime = Mathf.Max(0.2f, life);
+        main.startSize = dropWidth;
+        rainRenderer.velocityScale = streakVelocityScale;
 
         var vel = rainSystem.velocityOverLifetime;
         vel.x = relH.x;
@@ -149,6 +157,22 @@ public class RainEffect : MonoBehaviour
         {
             rainSystem.Stop(false, ParticleSystemStopBehavior.StopEmitting);
         }
+
+        bool raining = intensity > 0.001f;
+        if (logState && raining != wasRaining)
+            Debug.Log(raining
+                ? $"[RainEffect] Дождь начался (камера y = {cam.y:F1} м, излучатель y = {rainSystem.transform.position.y:F1} м, " +
+                  $"жизнь капли {life:F1} с, относительный ветер {relH.magnitude:F1} м/с)"
+                : $"[RainEffect] Дождь закончился (частиц в воздухе: {rainSystem.particleCount})", this);
+        if (raining && !wasRaining) rainSince = Time.time;
+        // Контроль через 4 с: если частиц почти нет — их уничтожает RainShelter или они вне кадра
+        if (logState && raining && rainSince >= 0f && Time.time - rainSince > 4f)
+        {
+            Debug.Log($"[RainEffect] Частиц в воздухе: {rainSystem.particleCount} из {maxParticles} " +
+                      $"(интенсивность {intensity:F2})", this);
+            rainSince = -1f;
+        }
+        wasRaining = raining;
     }
 
     void CreateRainSystem()
@@ -209,6 +233,10 @@ public class RainEffect : MonoBehaviour
         {
             // Копия — чтобы цвет в рантайме не менял ассет
             runtimeMaterial = new Material(rainMaterial);
+            // После воды: вода тоже Transparent (3000) и без записи глубины — при равной
+            // очереди Unity сортирует по расстоянию и вода может перекрыть капли.
+            // У ассета URP сбрасывает очередь в 3000 + _QueueOffset, поэтому задаём здесь.
+            runtimeMaterial.renderQueue = 3100;
             rainRenderer.sharedMaterial = runtimeMaterial;
         }
         else

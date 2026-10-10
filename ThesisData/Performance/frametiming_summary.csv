@@ -1,0 +1,2 @@
+﻿date;render_mode;editor;aborted;duration_s;frames;fps_mean;frame_dt_mean_ms;cpu_mean_ms;cpu_p95_ms;gpu_mean_ms;gpu_median_ms;gpu_p95_ms;gpu_p99_ms;over_budget_pct;draw_calls_mean;setpass_mean;note
+2026-10-10 18:09:32;MultiPass;1;0;30.0;2456;81.8;12.222;12.222;22.004;3.892;2.985;7.833;8.837;24.19;-1.0;54.8;BridgeScene, moderate, stop

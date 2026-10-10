@@ -71,6 +71,15 @@ public static class SetupRain
         rain.oceanWaves = FindInScene<OceanWaves>(scene);
         rain.rainMaterial = mat;
         rain.shelters = shelter != null ? new Collider[] { shelter } : new Collider[0];
+        // Первая версия была слишком бледной: обновляем только нетронутые старые значения
+        if (Mathf.Approximately(rain.dropWidth, 0.012f) && Mathf.Approximately(rain.brightness, 1.8f)
+            && Mathf.Approximately(rain.alpha, 0.35f))
+        {
+            rain.dropWidth = 0.02f;
+            rain.brightness = 3f;
+            rain.alpha = 0.6f;
+            log.AppendLine("  + капли заметнее: толщина 0.02 м, яркость 3, альфа 0.6");
+        }
         OceanRadialMesh ocean = FindInScene<OceanRadialMesh>(scene);
         if (ocean != null) rain.waterLevelY = ocean.transform.position.y;
         log.AppendLine($"  + RainEffect: камера = {Name(rain.followTarget)}, WorldOrigin = {Name(rain.worldOrigin)}, " +
@@ -100,12 +109,9 @@ public static class SetupRain
     // Мягкое круглое пятно: при растяжении по скорости — штрих с мягкими концами
     private static Texture2D EnsureTexture(StringBuilder log)
     {
-        var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(TexturePath);
-        if (tex != null)
-        {
-            log.AppendLine("  = текстура капли уже есть");
-            return tex;
-        }
+        // Генерируется всегда (результат детерминирован): первая версия имела ошибку —
+        // Mathf.SmoothStep(a, b, t) в Unity интерполирует между a и b, а не как smoothstep
+        // в шейдере, из-за чего непрозрачность в центре была 0.2 вместо 1.
         Directory.CreateDirectory(Path.GetDirectoryName(TexturePath));
         const int size = 64;
         var t = new Texture2D(size, size, TextureFormat.RGBA32, false);
@@ -114,12 +120,20 @@ public static class SetupRain
         {
             float dx = (x + 0.5f) / size * 2f - 1f;
             float dy = (y + 0.5f) / size * 2f - 1f;
-            float r2 = dx * dx + dy * dy;
-            float a = Mathf.Clamp01(Mathf.Exp(-r2 * 4f) * (1f - Mathf.SmoothStep(0.8f, 1f, Mathf.Sqrt(r2))));
+            float r = Mathf.Sqrt(dx * dx + dy * dy);
+            float edge = Mathf.Clamp01((1f - r) / 0.2f);          // плавно в 0 у края круга
+            edge = edge * edge * (3f - 2f * edge);
+            float a = Mathf.Exp(-r * r * 3f) * edge;
             t.SetPixel(x, y, new Color(1f, 1f, 1f, a));
         }
-        File.WriteAllBytes(TexturePath, t.EncodeToPNG());
+        byte[] png = t.EncodeToPNG();
         Object.DestroyImmediate(t);
+        if (File.Exists(TexturePath) && SameBytes(File.ReadAllBytes(TexturePath), png))
+        {
+            log.AppendLine("  = текстура капли актуальна");
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(TexturePath);
+        }
+        File.WriteAllBytes(TexturePath, png);
         AssetDatabase.ImportAsset(TexturePath);
         var importer = (TextureImporter)AssetImporter.GetAtPath(TexturePath);
         importer.alphaIsTransparency = true;
@@ -127,7 +141,7 @@ public static class SetupRain
         importer.sRGBTexture = true;
         importer.mipmapEnabled = true;
         importer.SaveAndReimport();
-        log.AppendLine("  + текстура " + TexturePath);
+        log.AppendLine("  + текстура " + TexturePath + " (центр непрозрачный)");
         return AssetDatabase.LoadAssetAtPath<Texture2D>(TexturePath);
     }
 
@@ -136,7 +150,16 @@ public static class SetupRain
         var mat = AssetDatabase.LoadAssetAtPath<Material>(MaterialPath);
         if (mat != null)
         {
-            log.AppendLine("  = материал Rain.mat уже есть");
+            if (mat.GetTexture("_BaseMap") != tex || mat.renderQueue < 3050)
+            {
+                mat.SetTexture("_BaseMap", tex);
+                mat.SetFloat("_QueueOffset", 50f);
+                mat.renderQueue = 3050;
+                EditorUtility.SetDirty(mat);
+                AssetDatabase.SaveAssetIfDirty(mat);
+                log.AppendLine("  + Rain.mat: текстура и очередь 3050 (после воды)");
+            }
+            else log.AppendLine("  = материал Rain.mat уже есть");
             return mat;
         }
         Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
@@ -158,7 +181,8 @@ public static class SetupRain
         mat.SetFloat("_ZWrite", 0f);
         mat.SetOverrideTag("RenderType", "Transparent");
         mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-        mat.renderQueue = 3100;   // после воды (Transparent = 3000, ZWrite Off)
+        mat.SetFloat("_QueueOffset", 50f);
+        mat.renderQueue = 3050;   // после воды (Transparent = 3000, ZWrite Off); в рантайме RainEffect ставит 3100
         Directory.CreateDirectory(Path.GetDirectoryName(MaterialPath));
         AssetDatabase.CreateAsset(mat, MaterialPath);
         log.AppendLine("  + материал " + MaterialPath);
@@ -252,6 +276,13 @@ public static class SetupRain
     }
 
     private static string Name(Object o) => o != null ? o.name : "—";
+
+    private static bool SameBytes(byte[] a, byte[] b)
+    {
+        if (a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++) if (a[i] != b[i]) return false;
+        return true;
+    }
 
     private static T FindInScene<T>(Scene scene) where T : Component
     {
