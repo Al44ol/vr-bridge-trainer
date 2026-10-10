@@ -6,6 +6,9 @@
 // IMO Res. MSC.137(76) «Standards for ship manoeuvrability» (2002)
 // и пояснения MSC/Circ.1053 (2002).
 //
+// Модель — любая IVesselModel (A3.2): по умолчанию ShipDynamicsModel(Parameters),
+// для калибровки — эталон MarinerModel через TrialSettings.ModelFactory.
+//
 // Система отсчёта испытания: старт в (0, 0), начальный курс 000° (север),
 //   X — вправо от начального курса (восток), м;
 //   Y — вдоль начального курса (север), м.
@@ -84,6 +87,11 @@ public sealed class TrialSettings
     public double StopThresholdKn = 0.1;
     /// <summary>Интервал записи траектории в CSV, с.</summary>
     public double SampleInterval = 0.5;
+    /// <summary>
+    /// Другая модель судна (A3.2: эталон Mariner, повтор руля при идентификации).
+    /// Аргумент — начальная скорость, м/с. null — ShipDynamicsModel(Parameters).
+    /// </summary>
+    public Func<double, IVesselModel> ModelFactory;
 
     public static double DefaultTestSpeedMs(ShipParameters p) => 0.9 * p.ServiceSpeedMs;
 }
@@ -117,7 +125,7 @@ public static class ManoeuvringTrials
     /// <summary>Модель + запись + геометрия относительно точки старта.</summary>
     private sealed class Run
     {
-        public readonly ShipDynamicsModel Model;
+        public readonly IVesselModel Model;
         public readonly TrialSettings S;
         public readonly TrialResult Result;
         public double T, DeltaPsiDeg, Path;
@@ -126,7 +134,13 @@ public static class ManoeuvringTrials
         public Run(TrialSettings s, string id, string title, double u0, double sf)
         {
             S = s;
-            Model = new ShipDynamicsModel(s.Parameters) { Psi = 0, U = u0, SpeedFactor = sf };
+            if (s.ModelFactory == null)
+                Model = new ShipDynamicsModel(s.Parameters) { Psi = 0, U = u0, SpeedFactor = sf };
+            else
+            {
+                Model = s.ModelFactory(u0);
+                Model.SpeedFactor = sf;
+            }
             Result = new TrialResult { Id = id, Title = title };
             Record();
             nextSample = s.SampleInterval;
@@ -134,7 +148,7 @@ public static class ManoeuvringTrials
 
         public double X => Model.East;
         public double Y => Model.North;
-        public double L => Math.Max(1.0, S.Parameters.length);
+        public double L => Model.Length;
         public bool TimeLeft => T < S.MaxDuration;
 
         public void Step()
@@ -186,7 +200,7 @@ public static class ManoeuvringTrials
     private static double Frac(double prev, double cur, double threshold) =>
         Math.Abs(cur - prev) < 1e-12 ? 1.0 : (threshold - prev) / (cur - prev);
 
-    private static double TestSf(TrialSettings s) =>
+    private static double TestSf(TrialSettings s) => s.Parameters == null ? 1.0 :
         ShipDynamicsModel.Clamp(s.TestSpeedMs / Math.Max(1e-6, s.Parameters.ServiceSpeedMs), 0.0, 1.0);
 
     private static void SetCriterion(TrialMetric m, string text, bool pass)
@@ -198,11 +212,11 @@ public static class ManoeuvringTrials
     // ─────────── Циркуляция ───────────
 
     /// <summary>Циркуляция с рулём 35° (или δ_max, если меньше): starboard — на правый борт.</summary>
-    public static TrialResult Turning(TrialSettings s, bool starboard)
+    public static TrialResult Turning(TrialSettings s, bool starboard, double rudderDeg = 35.0)
     {
-        double rudder = Math.Min(35.0, s.Parameters.maxRudderAngle);
+        double rudder = s.Parameters != null ? Math.Min(rudderDeg, s.Parameters.maxRudderAngle) : rudderDeg;
         string side = starboard ? "ПБ" : "ЛБ";
-        var run = new Run(s, starboard ? "turning_35_stbd" : "turning_35_port",
+        var run = new Run(s, $"turning_{rudderDeg:F0}_{(starboard ? "stbd" : "port")}",
                           $"Циркуляция, руль {rudder:F0}° {side}", s.TestSpeedMs, TestSf(s));
         double sign = starboard ? 1.0 : -1.0;
         run.Model.RudderCommandDeg = sign * rudder;
@@ -254,9 +268,10 @@ public static class ManoeuvringTrials
         SetCriterion(run.Metric("Тактический диаметр", tactical, "м", true),
             $"≤ {TacticalDiameterLimitL:0.0#}L (MSC.137(76) 5.2.1)", tactical / run.L <= TacticalDiameterLimitL);
         var d = run.Metric("Диаметр установившейся циркуляции", steadyD, "м", true);
-        d.Note = $"теория 2L/(K'·δ) = {p.TheoreticalCircleDiameter((float)rudder):F0} м";
+        if (s.ModelFactory == null && p != null && p.yawModel == YawModel.Nomoto && p.turnSpeedLossCoeff == 0f)
+            d.Note = $"теория 2L/(K'·δ) = {p.TheoreticalCircleDiameter((float)rudder):F0} м";
         var v = run.Metric("Скорость на установившейся циркуляции", u360 / KnotsToMs, "уз");
-        v.Note = $"на подходе {s.TestSpeedMs / KnotsToMs:F1} уз; потеря скорости моделью не учитывается";
+        v.Note = $"на подходе {s.TestSpeedMs / KnotsToMs:F1} уз; потеря {100.0 * (1.0 - u360 / s.TestSpeedMs):F0} %";
         run.Metric("Время поворота на 90°", t90, "с");
         run.Metric("Время поворота на 180°", t180, "с");
         run.Metric("Время поворота на 360°", t360, "с");

@@ -1,0 +1,3 @@
+﻿stage;title;yaw_model;K_prime;T_prime;alpha_prime;Cr_prime;tau_acc_s;cost_J;evaluations;recommended
+nomoto;Номото;Nomoto;1.75354;1.57677;0.00000;0.00000;90.00;0.664666;299;
+norrbin;Норрбин;Norrbin;4.57844;3.18201;5.81914;0.00000;90.00;0.453992;639;да

@@ -12,8 +12,20 @@
 //   скорость: du/dt = (u_зад − u)/τ, u_зад = SF·V_эксп (·k_зх на заднем ходу);
 //   рулевая машина: |dδ/dt| ≤ ω_δ; СОЛАС гл. II-1 правило 29:
 //       35° одного борта → 30° другого не более чем за 28 с → ω_δ ≥ 65/28 ≈ 2.32 °/с.
+//
+// A3.2 (калибровка) — переключаемые расширения, по умолчанию выключены
+// (yawModel = Nomoto, α' = 0, C_r' = 0 → прежняя модель бит в бит):
+//   Норрбин: T·dr/dt + r + α·r³ = K·δ, α = α'·(L/U)²;
+//   потеря скорости на циркуляции: du/dt = (u_зад − u)/τ − C_r'·L·r².
 // ============================================================
 using UnityEngine;
+
+/// <summary>Уравнение поворота: Номото 1-го порядка или нелинейная модель Норрбина.</summary>
+public enum YawModel
+{
+    Nomoto = 0,
+    Norrbin = 1,
+}
 
 [CreateAssetMenu(fileName = "ShipParameters", menuName = "VR Bridge/Ship Parameters")]
 public class ShipParameters : ScriptableObject
@@ -40,6 +52,14 @@ public class ShipParameters : ScriptableObject
     [Tooltip("Минимальная расчётная скорость U_min, м/с — только защита от деления на ноль")]
     public float minCalcSpeed = 0.05f;
 
+    [Header("Расширения модели (A3.2), по умолчанию выключены")]
+    [Tooltip("Nomoto: T·ṙ + r = K·δ. Norrbin: T·ṙ + r + α·r³ = K·δ")]
+    public YawModel yawModel = YawModel.Nomoto;
+    [Tooltip("Безразмерный коэффициент Норрбина α' (α = α'·(L/U)²); используется при yawModel = Norrbin")]
+    public float norrbinAlphaPrime = 0f;
+    [Tooltip("Коэффициент потери скорости на циркуляции C_r': du/dt = … − C_r'·L·r² (0 — выключено)")]
+    public float turnSpeedLossCoeff = 0f;
+
     [Header("Рулевая машина")]
     [Tooltip("Максимальная перекладка руля δ_max, градусы на борт")]
     public float maxRudderAngle = 35f;
@@ -49,7 +69,34 @@ public class ShipParameters : ScriptableObject
     public const float KnotsToMs = 0.514444f;
     public float ServiceSpeedMs => serviceSpeedKnots * KnotsToMs;
 
-    /// <summary>Теоретический диаметр установившейся циркуляции, м: D = 2L/(K'·δ).</summary>
+    /// <summary>Копия параметров в памяти (без ассета) — для идентификации и испытаний.</summary>
+    public ShipParameters Clone()
+    {
+        var c = CreateInstance<ShipParameters>();
+        c.name = name;
+        c.CopyFrom(this);
+        return c;
+    }
+
+    /// <summary>Скопировать значения всех параметров (без имени ассета).</summary>
+    public void CopyFrom(ShipParameters o)
+    {
+        length = o.length;
+        serviceSpeedKnots = o.serviceSpeedKnots;
+        accelerationTimeConstant = o.accelerationTimeConstant;
+        decelerationTimeConstant = o.decelerationTimeConstant;
+        asternFactor = o.asternFactor;
+        nomotoKPrime = o.nomotoKPrime;
+        nomotoTPrime = o.nomotoTPrime;
+        minCalcSpeed = o.minCalcSpeed;
+        yawModel = o.yawModel;
+        norrbinAlphaPrime = o.norrbinAlphaPrime;
+        turnSpeedLossCoeff = o.turnSpeedLossCoeff;
+        maxRudderAngle = o.maxRudderAngle;
+        rudderRate = o.rudderRate;
+    }
+
+    /// <summary>Теоретический диаметр установившейся циркуляции линейной модели Номото, м: D = 2L/(K'·δ).</summary>
     public float TheoreticalCircleDiameter(float rudderDeg)
     {
         float d = Mathf.Abs(rudderDeg) * Mathf.Deg2Rad;

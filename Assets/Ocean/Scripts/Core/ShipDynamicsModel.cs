@@ -20,11 +20,24 @@
 //        точно: r(t+dt) = K·δ + (r − K·δ)·e^(−dt/T).
 // 4. Кинематика: ψ += r·dt; E += u·sin ψ·dt; N += u·cos ψ·dt.
 // Подробные пояснения — в шапке ShipNavigation.cs.
+//
+// Расширения A3.2 (по умолчанию выключены — тогда шаг совпадает с прежним бит в бит):
+// 2а. Потеря скорости на циркуляции: du/dt = (u_зад − u)/τ − C_r'·L·r².
+//     Обоснование: в уравнении продольной силы модели Абковица (Abkowitz, 1964)
+//     потерю скорости на повороте дают члены X'_vv·v'², X'_rr·r'², X'_vr·v'·r';
+//     на циркуляции v' ∝ r', поэтому все три ∝ r'². В размерном виде
+//     ΔX/m = (X'/m')·L·r², отсюда безразмерный C_r'. Шаг точный при r = const:
+//         u(t+dt) = u* + (u − u*)·e^(−dt/τ), u* = u_зад − sign(u)·C_r'·L·r²·τ;
+//     установившаяся потеря Δu = τ·C_r'·L·r². Потеря только уменьшает |u|.
+// 3а. Норрбин (Norrbin, 1963): T·ṙ + r + α·r³ = K·δ, α = α'·(L/U)², α' ≥ 0.
+//     Шаг: экспонента с «замороженным» множителем g = 1 + α·r̄²
+//     (T_эфф = T/g, r_уст = K·δ/g), r̄ — середина шага (предиктор-корректор).
+//     Устойчиво при любом dt; в установившемся режиме r + α·r³ = K·δ точно.
 // ============================================================
 using System;
 using UnityEngine;
 
-public sealed class ShipDynamicsModel
+public sealed class ShipDynamicsModel : IVesselModel
 {
     public ShipParameters Parameters;
 
@@ -77,10 +90,20 @@ public sealed class ShipDynamicsModel
         }
         bool accelerating = Math.Abs(uSet) > Math.Abs(U) && U * uSet >= 0.0;
         double tau = Math.Max(0.1, accelerating ? p.accelerationTimeConstant : p.decelerationTimeConstant);
-        U = uSet + (U - uSet) * Math.Exp(-dt / tau);
-
-        // 3. Поворот — модель Номото 1-го порядка
         double L = Math.Max(1.0, p.length);
+        double uTarget = uSet;
+        if (p.turnSpeedLossCoeff != 0f && !HoldServiceSpeed && Math.Abs(U) > p.minCalcSpeed)
+        {
+            // 2а. Потеря скорости на циркуляции (A3.2)
+            double lossAccel = p.turnSpeedLossCoeff * L * R * R;      // м/с²
+            uTarget = uSet - Math.Sign(U) * lossAccel * tau;
+            // Потеря не разворачивает ход: если цель без неё того же знака, что u, — не дальше нуля.
+            // (При торможении «назад» u_зад и u разных знаков — цель не трогаем.)
+            if (uSet * U >= 0.0 && uTarget * U < 0.0) uTarget = 0.0;
+        }
+        U = uTarget + (U - uTarget) * Math.Exp(-dt / tau);
+
+        // 3. Поворот — модель Номото 1-го порядка (или Норрбина, A3.2)
         double Uc = Math.Max(Math.Abs(U), Math.Max(1e-4, p.minCalcSpeed));
         // K — по фактической скорости (A3): на стопе K → 0 и руль не поворачивает судно.
         // До A3 здесь было K'·sign(u)·Uc/L: при |u| < U_min судно медленно вращалось
@@ -89,12 +112,59 @@ public sealed class ShipDynamicsModel
         double K = p.nomotoKPrime * U / L;
         double T = p.nomotoTPrime * L / Uc;
         double rSteady = K * Delta * Mathf.Deg2Rad;
-        R = rSteady + (R - rSteady) * Math.Exp(-dt / T);
+        double alpha = p.yawModel == YawModel.Norrbin ? Math.Max(0.0, p.norrbinAlphaPrime) * (L / Uc) * (L / Uc) : 0.0;
+        if (alpha == 0.0)
+        {
+            R = rSteady + (R - rSteady) * Math.Exp(-dt / T);
+        }
+        else
+        {
+            // 3а. Норрбин: предиктор по r в начале шага, корректор по середине шага
+            double g = 1.0 + alpha * R * R;
+            double rPred = rSteady / g + (R - rSteady / g) * Math.Exp(-dt * g / T);
+            double rMid = 0.5 * (R + rPred);
+            g = 1.0 + alpha * rMid * rMid;
+            R = rSteady / g + (R - rSteady / g) * Math.Exp(-dt * g / T);
+        }
 
         // 4. Кинематика
         Psi = Wrap2Pi(Psi + R * dt);
         East += U * Math.Sin(Psi) * dt;
         North += U * Math.Cos(Psi) * dt;
+    }
+
+    // ── IVesselModel (стенд испытаний) ──
+    double IVesselModel.Psi => Psi;
+    double IVesselModel.R => R;
+    double IVesselModel.U => U;
+    double IVesselModel.Delta => Delta;
+    double IVesselModel.Ordered => Ordered;
+    double IVesselModel.East => East;
+    double IVesselModel.North => North;
+    double IVesselModel.Length => Math.Max(1.0, Parameters.length);
+    double IVesselModel.RudderCommandDeg { get => RudderCommandDeg; set => RudderCommandDeg = value; }
+    double IVesselModel.SpeedFactor { get => SpeedFactor; set => SpeedFactor = value; }
+
+    /// <summary>
+    /// Установившаяся угловая скорость при руле δ и скорости u, рад/с:
+    /// Номото r = K·δ; Норрбин — корень r + α·r³ = K·δ (Ньютон).
+    /// </summary>
+    public static double SteadyYawRate(ShipParameters p, double u, double deltaDeg)
+    {
+        double L = Math.Max(1.0, p.length);
+        double Uc = Math.Max(Math.Abs(u), Math.Max(1e-4, p.minCalcSpeed));
+        double kd = p.nomotoKPrime * u / L * deltaDeg * Mathf.Deg2Rad;   // как в Step
+        double alpha = p.yawModel == YawModel.Norrbin ? Math.Max(0.0, p.norrbinAlphaPrime) * (L / Uc) * (L / Uc) : 0.0;
+        if (alpha == 0.0) return kd;
+        double r = kd;
+        for (int i = 0; i < 50; i++)
+        {
+            double f = r + alpha * r * r * r - kd;
+            double step = f / (1.0 + 3.0 * alpha * r * r);
+            r -= step;
+            if (Math.Abs(step) < 1e-15) break;
+        }
+        return r;
     }
 
     /// <summary>Установившаяся скорость при положении телеграфа SF, м/с.</summary>

@@ -84,7 +84,9 @@ public static class TrialsReport
         var sb = new StringBuilder();
         sb.AppendLine($"# Манёвренные испытания: {p.name}");
         sb.AppendLine();
-        sb.AppendLine($"Дата: {DateTime.Now.ToString("yyyy-MM-dd HH:mm", Inv)}. Модель: Номото 1-го порядка + скорость 1-го порядка " +
+        string yaw = p.yawModel == YawModel.Norrbin ? $"Норрбин (α' = {F(p.norrbinAlphaPrime, 2)})" : "Номото 1-го порядка";
+        string loss = p.turnSpeedLossCoeff != 0f ? $", потеря скорости на циркуляции C_r' = {F(p.turnSpeedLossCoeff, 4)}" : "";
+        sb.AppendLine($"Дата: {DateTime.Now.ToString("yyyy-MM-dd HH:mm", Inv)}. Модель: {yaw} + скорость 1-го порядка{loss} " +
                       $"(ShipDynamicsModel), шаг dt = {F(s.Dt, 3)} с.");
         sb.AppendLine();
         sb.AppendLine($"Параметры: L = {F(p.length, 1)} м; V_эксп = {F(p.serviceSpeedKnots, 1)} уз; " +
@@ -176,6 +178,8 @@ public sealed class SvgPlot
 
     public string Title = "", XLabel = "", YLabel = "";
     public bool EqualAspect;
+    /// <summary>Легенда в правом нижнем углу (по умолчанию — в правом верхнем), если линии идут вверх-вправо.</summary>
+    public bool LegendBottomRight;
     public float Width = 680, Height = 480;
 
     private readonly List<(string label, Dash dash, List<Vector2> pts)> series = new List<(string, Dash, List<Vector2>)>();
@@ -247,8 +251,8 @@ public sealed class SvgPlot
             sb.AppendLine($"<polyline clip-path=\"url(#plot)\" fill=\"none\" stroke=\"black\" stroke-width=\"1.6\"{DashAttr(s.dash)} points=\"{pts}\"/>");
         }
 
-        // Легенда (правый верхний угол поля)
-        float ly = mt + 16;
+        // Легенда (правый верхний угол поля или правый нижний)
+        float ly = LegendBottomRight ? mt + ph - 20 * series.Count + 10 : mt + 16;
         foreach (var s in series)
         {
             float lx = ml + pw - 250;
