@@ -66,11 +66,18 @@ XR Origin — дочерний объект Ship, игрок качается в
 - Знак штурвала: Auto — по часовой с места оператора = ПБ. Курс ψ: 0 = N, по часовой; δ > 0 — ПБ.
 - Пока ShipNavigation включён, `WorldOrigin.ExternalControl = true` (ход от телеграфа A1 и стрелки отключены).
 - Тест циркуляции: F5 или контекстное меню ShipNavigation; лог — выдвиг, тактический диаметр, D (теория при умолчаниях: 614 м = 4.1 L).
-- Пункты меню: Setup A1 Ocean → Setup A1.1 Hull Water → Setup Telegraph Model → Setup A2 Navigation → Setup Console and Sky → Setup A2.2 Controls → Setup Rain, Setup Frame Timing (запрос 1). Окна: Manoeuvring Trials (запрос 2), Model Calibration (запрос 3).
+- Пункты меню: Setup A1 Ocean → Setup A1.1 Hull Water → Setup Telegraph Model → Setup A2 Navigation → Setup Console and Sky → Setup A2.2 Controls → Setup Rain, Setup Frame Timing (запрос 1), Setup Seakeeping (запрос 4). Окна: Manoeuvring Trials (запрос 2), Model Calibration (запрос 3), Seakeeping Trials (запрос 4) → `ThesisData/Seakeeping/`.
+
+## Качка на волнах (запрос 4)
+- Поле волн — чистый класс `Core/Seakeeping/OceanWaveField` (единый источник для шейдера и C#). `OceanWaves` заполняет его (`ConfigureField`) и шлёт те же значения в шейдер. Фазы θ продвигаются в **FixedUpdate**; в кадре — перенос на время отображения `OceanWaves.RenderTimeOffset` = −(1 − α)·Δt (та же α, что в ShipNavigation).
+- Порядок выполнения: WorldOrigin −100 → ShipNavigation −90 → OceanWaves −80 → ShipMotion −70.
+- Высота воды для других объектов (буи B1, суда B3): `OceanWaves.Instance.SampleHeight(WorldPosition)` / `SampleWaterLevel(Vector3 сцены)` — обратная задача Герстнера, 3 итерации.
+- Мореходные поля ShipParameters (B, d, GM, C_B, C_WP, T_φ/T_z/T_θ, ζ) заполнены только у `Model45m` (Setup Seakeeping, допущения помечены в `ShipParameters_Sources.md`).
+- Шейдер у борта по-прежнему гасит волны к нулю (`_HullDampMin`): если в шлеме корпус «отрывается» от воды — правка «вода у борта → плоскость ватерлинии судна» (отложена до проверки).
 - Дождь (запрос 1) **отложен**: частицы есть (~3900), но в шлеме не видны. После исправления текстуры/очереди Setup Rain ещё не перезапускался — начинать с этого.
 
 ## Ключевые скрипты (`Assets/Ocean/Scripts`)
-- `ShipMotion` — кинематическая качка (сумма синусоид roll/pitch/yaw/heave × seaState), каждый кадр пишет `_WaveIntensity` в материал. Хода/курса нет.
+- `ShipMotion` — качка (запрос 4). Режим `Waves` (по умолчанию): в FixedUpdate вода сэмплируется в сетке 5×3 точек корпуса, плоскость МНК → звенья 2-го порядка (`Core/Seakeeping/SeakeepingModel`, периоды и ζ — в ShipParameters), отображение интерполируется как в навигации, поворот вокруг `pivotLocal` (мидель, ватерлиния). Комфорт: `comfortScale`, мягкие пределы `maxRollDeg`/`maxPitchDeg`. Режим `Sinusoidal` — прежние синусоиды. Каждый кадр пишет `_WaveIntensity` = seaState в материал. Время шага — `stepTimeUs` в инспекторе.
 - `SteeringWheel` — угол руля ±35° (`RudderAngle`), пока никем не читается.
 - `EngineTelegraph` — 9 положений, `SpeedFactor` −1..1, пока никем не читается.
 - `WeatherController` — пресеты calm/moderate/storm/night (клавиши 1–4), плавный переход; меняет свет, туман, `_WaveIntensity`, `_WaveSpeed`.

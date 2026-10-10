@@ -1,23 +1,32 @@
 // ============================================================
 // OceanWaves.cs — Параметры волн Герстнера и их фазы
 //
-// Единый источник параметров волн для шейдера OceanSurface
-// (и в будущем — для расчёта качки на CPU).
+// Единый источник параметров волн для шейдера OceanSurface и для расчёта
+// высоты воды на CPU (качка судна, буи, чужие суда). Математика поля волн —
+// в чистом классе OceanWaveField (Scripts/Core/Seakeeping); здесь — настройки
+// в инспекторе, связь с погодой (материал воды) и передача в шейдер.
 //
 // Плавающее начало координат: шейдер работает с координатами сцены
 // (около судна), а смещение судна в мире учитывается фазой волны.
-// Фазы считаются здесь в double по модулю 2π:
+// Фазы считаются в double по модулю 2π:
 //   φᵢ = (kᵢ · dot(Dᵢ, позиция судна) − θᵢ) mod 2π,
 //   θᵢ += ωᵢ · speedScaleᵢ · s · dt,   ωᵢ = √(g·kᵢ)  (дисперсия глубокой воды),
 //   s = 1 + (_WaveSpeed − 1) · speedInfluence.
 // В шейдер уходят готовые фазы — точность не теряется даже через 20+ км.
+//
+// Время (запрос 4): θ накапливается в FixedUpdate (симуляционное время), там же
+// качка (ShipMotion) читает высоту воды. Для кадра фазы переносятся на время
+// отображения навигации t_f − (1 − α)·Δt, α = (Time.time − Time.fixedTime)/Δt —
+// то же, по которому ShipNavigation интерполирует курс и позицию, а ShipMotion —
+// качку. θ линейна по t, поэтому перенос точный: вода, позиция судна и качка
+// в кадре соответствуют одному моменту.
 //
 // Направление волн задаётся одним параметром — направлением ветра
 // (морской пеленг «откуда дует», 0° = N, по часовой). Каждая волна
 // отклонена от направления ветра на свой угол (веер ±40°).
 //
 // Кроме 4 «геометрических» волн есть 4 мелкие волны ряби — они влияют
-// только на нормали (попиксельно), вершины не смещают.
+// только на нормали (попиксельно), вершины не смещают и качку не вызывают.
 //
 // Барашки привязаны к воде: смещение шума пены считается в double
 // по модулю периода шума; два слоя попеременно появляются и гаснут.
@@ -29,6 +38,7 @@
 using UnityEngine;
 
 [ExecuteAlways]
+[DefaultExecutionOrder(-80)]   // после ShipNavigation (−90), до ShipMotion (−70)
 public class OceanWaves : MonoBehaviour
 {
     [System.Serializable]
@@ -47,9 +57,11 @@ public class OceanWaves : MonoBehaviour
         public float speedScale;
     }
 
-    public const int WaveCount = 4;
+    /// <summary>Поверхность воды сцены (для буёв, чужих судов, качки).</summary>
+    public static OceanWaves Instance { get; private set; }
+
+    public const int WaveCount = OceanWaveField.WaveCount;
     private const double TwoPi = 2.0 * System.Math.PI;
-    private const double Gravity = 9.81;
 
     [Header("Ветер")]
     [Tooltip("Откуда дует ветер, морской пеленг (0° = N, 90° = E). " +
@@ -89,9 +101,10 @@ public class OceanWaves : MonoBehaviour
     public const double FoamPeriod = 240.0;
     public const double FoamStretch = 2.5;
 
-    // Накопленная временная фаза каждой волны (рад, 0..2π) и дрейф пены (м)
-    private readonly double[] timePhase = new double[WaveCount];
-    private readonly double[] detailTimePhase = new double[WaveCount];
+    // Поля волн: геометрические (шейдер + CPU) и рябь (только шейдер)
+    private readonly OceanWaveField field = new OceanWaveField();
+    private readonly OceanWaveField detailField = new OceanWaveField();
+
     private double foamDrift;
     private double foamCycle;                       // фаза цикла барашков, 0..1
     private Vector2 foamShiftA, foamShiftB;         // случайные сдвиги слоёв (м)
@@ -99,6 +112,10 @@ public class OceanWaves : MonoBehaviour
 
     private static readonly int WaveSpeedId     = Shader.PropertyToID("_WaveSpeed");
     private static readonly int WaveIntensityId = Shader.PropertyToID("_WaveIntensity");
+    private static readonly int FadeStartId     = Shader.PropertyToID("_WaveFadeStart");
+    private static readonly int FadeEndId       = Shader.PropertyToID("_WaveFadeEnd");
+    private static readonly int MeshMinStepId   = Shader.PropertyToID("_OceanMeshMinStep");
+    private static readonly int MeshAngleStepId = Shader.PropertyToID("_OceanMeshAngleStep");
     private static readonly int DirXId      = Shader.PropertyToID("_OceanWaveDirX");
     private static readonly int DirZId      = Shader.PropertyToID("_OceanWaveDirZ");
     private static readonly int KId         = Shader.PropertyToID("_OceanWaveK");
@@ -146,19 +163,74 @@ public class OceanWaves : MonoBehaviour
     /// <summary>Направление распространения волн (по ветру): x = восток, y = север.</summary>
     public Vector2 WindDirection => BearingToVector(windFromDeg + 180f);
 
+    /// <summary>Поле геометрических волн (те же значения, что в шейдере). Фазы — на момент последнего FixedUpdate.</summary>
+    public OceanWaveField Field => field;
+
+    /// <summary>Средний уровень воды в сцене (y объекта океана), м.</summary>
+    public float MeanLevel => transform.position.y;
+
+    /// <summary>
+    /// Сдвиг времени отображения относительно последнего FixedUpdate, с (≤ 0):
+    /// −(1 − α)·Δt — так же интерполируют ShipNavigation и ShipMotion.
+    /// </summary>
+    public static double RenderTimeOffset
+    {
+        get
+        {
+            if (!Application.isPlaying) return 0.0;
+            float dt = Time.fixedDeltaTime;
+            if (dt <= 0f) return 0.0;
+            double alpha = System.Math.Min(1.0, System.Math.Max(0.0, (Time.time - Time.fixedTime) / dt));
+            return -(1.0 - alpha) * dt;
+        }
+    }
+
+    /// <summary>
+    /// Высота воды над средним уровнем (м) в мировой точке в текущем кадре —
+    /// то, что видно в шлеме. Для буёв (B1), чужих судов (B3).
+    /// </summary>
+    public double SampleHeight(WorldPosition p) => field.SampleHeight(p.East, p.North, RenderTimeOffset);
+
+    /// <summary>Уровень воды в сцене (y, м) под точкой сцены scenePos в текущем кадре.</summary>
+    public float SampleWaterLevel(Vector3 scenePos)
+    {
+        WorldOrigin origin = Origin;
+        WorldPosition p = origin != null ? origin.SceneToWorld(scenePos) : new WorldPosition(scenePos.x, scenePos.z);
+        return MeanLevel + (float)SampleHeight(p);
+    }
+
+    private WorldOrigin Origin => worldOrigin != null ? worldOrigin : WorldOrigin.Instance;
+
     void OnEnable()
     {
+        if (Instance == null || !Application.isPlaying) Instance = this;
+        RefreshFields();
         PushToShader(0.0);
+    }
+
+    void OnDisable()
+    {
+        if (Instance == this) Instance = null;
     }
 
     void OnValidate()
     {
+        RefreshFields();
         PushToShader(0.0);
+    }
+
+    void FixedUpdate()
+    {
+        // Симуляционное время: фазы продвигаются шагом физики
+        RefreshFields();
+        field.Advance(Time.fixedDeltaTime);
+        detailField.Advance(Time.fixedDeltaTime);
     }
 
     void LateUpdate()
     {
         // В редакторе без Play волны стоят на месте
+        RefreshFields();
         PushToShader(Application.isPlaying ? Time.deltaTime : 0.0);
     }
 
@@ -175,21 +247,71 @@ public class OceanWaves : MonoBehaviour
         return new Vector2(Mathf.Sin(b), Mathf.Cos(b));
     }
 
-    private void PushToShader(double dt)
+    /// <summary>
+    /// Заполнить поле волн из сериализуемых параметров — единственное место перевода
+    /// (λ, a, угол) → (k, k·a, D); используется и стендом мореходности.
+    /// </summary>
+    public static void ConfigureField(OceanWaveField f, Wave[] set, float windFromDeg, float ampScale)
     {
-        float waveSpeed = 1f, intensity = 0.3f;
+        for (int i = 0; i < WaveCount; i++)
+        {
+            if (set == null || i >= set.Length)
+            {
+                f.ClearWave(i);   // амплитуда 0 — волна не влияет
+                continue;
+            }
+            Wave w = set[i];
+            Vector2 d = BearingToVector(windFromDeg + 180f + w.angleOffsetDeg);
+            float k = (float)(TwoPi / Mathf.Max(w.wavelength, 0.01f));
+            f.SetWave(i, d.x, d.y, k, k * Mathf.Max(0f, w.amplitude) * ampScale, w.intensityExponent, w.speedScale);
+        }
+    }
+
+    // Параметры из инспектора и погоды (материал воды) → поля волн
+    private void RefreshFields()
+    {
+        ConfigureField(field, waves, windFromDeg, 1f);
+        ConfigureField(detailField, detailWaves, windFromDeg, detailStrength);
+
+        float waveSpeed = 1f, intensity = 0.3f, fadeStart = 1500f, fadeEnd = 6000f;
         if (oceanMaterial != null)
         {
             if (oceanMaterial.HasProperty(WaveSpeedId))     waveSpeed = oceanMaterial.GetFloat(WaveSpeedId);
             if (oceanMaterial.HasProperty(WaveIntensityId)) intensity = oceanMaterial.GetFloat(WaveIntensityId);
+            if (oceanMaterial.HasProperty(FadeStartId))     fadeStart = oceanMaterial.GetFloat(FadeStartId);
+            if (oceanMaterial.HasProperty(FadeEndId))       fadeEnd = oceanMaterial.GetFloat(FadeEndId);
         }
         double speed = 1.0 + (waveSpeed - 1.0) * speedInfluence;
 
-        WorldOrigin origin = worldOrigin != null ? worldOrigin : WorldOrigin.Instance;
+        WorldOrigin origin = Origin;
         WorldPosition ship = origin != null ? origin.ShipPosition : default;
+        float minStep = Shader.GetGlobalFloat(MeshMinStepId), angleStep = Shader.GetGlobalFloat(MeshAngleStepId);
 
-        PushSet(waves, timePhase, ship, speed, dt, 1f, DirXId, DirZId, KId, AmpId, ExpId, PhasesId);
-        PushSet(detailWaves, detailTimePhase, ship, speed, dt, detailStrength, DDirXId, DDirZId, DKId, DAmpId, DExpId, DPhasesId);
+        ApplyEnvironment(field, intensity, speed, ship, fadeStart, fadeEnd, minStep, angleStep);
+        ApplyEnvironment(detailField, intensity, speed, ship, fadeStart, fadeEnd, minStep, angleStep);
+    }
+
+    private static void ApplyEnvironment(OceanWaveField f, float intensity, double speed, WorldPosition ship,
+                                         float fadeStart, float fadeEnd, float minStep, float angleStep)
+    {
+        f.Intensity = intensity;
+        f.Speed = speed;
+        f.CenterEast = ship.East;
+        f.CenterNorth = ship.North;
+        f.FadeStart = fadeStart;
+        f.FadeEnd = fadeEnd;
+        f.MeshMinStep = minStep;
+        f.MeshAngleStep = angleStep;
+    }
+
+    private void PushToShader(double frameDt)
+    {
+        WorldOrigin origin = Origin;
+        WorldPosition ship = origin != null ? origin.ShipPosition : default;
+        double timeOffset = RenderTimeOffset;
+
+        PushSet(field, ship, timeOffset, DirXId, DirZId, KId, AmpId, ExpId, PhasesId);
+        PushSet(detailField, ship, timeOffset, DDirXId, DDirZId, DKId, DAmpId, DExpId, DPhasesId);
 
         // Пена: координаты вдоль ветра (u) и поперёк (v), по модулю периода шума.
         // Шейдер берёт шум в точке ((u + u0)/stretch, v + v0), период по u — FoamPeriod·stretch.
@@ -197,12 +319,12 @@ public class OceanWaves : MonoBehaviour
         // когда вес слоя равен 0, его сдвиг заменяется случайным — барашки
         // появляются и исчезают в случайных местах, а не стоят пятнами.
         Vector2 wind = WindDirection;
-        foamDrift = Wrap(foamDrift + foamDriftSpeed * intensity * dt, FoamPeriod * FoamStretch);
+        foamDrift = Wrap(foamDrift + foamDriftSpeed * field.Intensity * frameDt, FoamPeriod * FoamStretch);
         double u0 = (double)wind.x * ship.East + (double)wind.y * ship.North - foamDrift;
         double v0 = (double)wind.y * ship.East - (double)wind.x * ship.North;
 
         double prevCycle = foamCycle;
-        foamCycle += dt / System.Math.Max(0.5, whitecapLifetime);
+        foamCycle += frameDt / System.Math.Max(0.5, whitecapLifetime);
         if (prevCycle < 0.5 && foamCycle >= 0.5) foamShiftA = RandomShift();   // слой A невидим
         if (foamCycle >= 1.0) { foamCycle -= 1.0; foamShiftB = RandomShift(); } // слой B невидим
         float weightA = 0.5f + 0.5f * Mathf.Cos(2f * Mathf.PI * (float)foamCycle);
@@ -221,36 +343,20 @@ public class OceanWaves : MonoBehaviour
                            (float)(foamRandom.NextDouble() * FoamPeriod));
     }
 
-    private void PushSet(Wave[] set, double[] phaseAcc, WorldPosition ship, double speed, double dt, float ampScale,
-                         int dirXId, int dirZId, int kId, int ampId, int expId, int phasesId)
+    // Поле волн → глобалы шейдера (каждая компонента float4 — одна из 4 волн)
+    private static void PushSet(OceanWaveField f, WorldPosition ship, double timeOffset,
+                                int dirXId, int dirZId, int kId, int ampId, int expId, int phasesId)
     {
         Vector4 dirX = Vector4.zero, dirZ = Vector4.zero, kVec = Vector4.zero, amp = Vector4.zero, exps = Vector4.one, phases = Vector4.zero;
-
         for (int i = 0; i < WaveCount; i++)
         {
-            if (set == null || i >= set.Length)
-            {
-                kVec[i] = 1f; // амплитуда 0 — волна не влияет
-                continue;
-            }
-
-            Wave w = set[i];
-            Vector2 d = BearingToVector(windFromDeg + 180f + w.angleOffsetDeg);
-            // Те же float-значения k и D, что получит шейдер, — фазы согласованы точно
-            float k = (float)(TwoPi / Mathf.Max(w.wavelength, 0.01f));
-            double omega = System.Math.Sqrt(Gravity * k);
-
-            phaseAcc[i] = Wrap(phaseAcc[i] + omega * w.speedScale * speed * dt);
-            double spatial = Wrap((double)k * ((double)d.x * ship.East + (double)d.y * ship.North));
-
-            dirX[i]   = d.x;
-            dirZ[i]   = d.y;
-            kVec[i]   = k;
-            amp[i]    = k * Mathf.Max(0f, w.amplitude) * ampScale;   // k·a — безразмерная крутизна
-            exps[i]   = Mathf.Max(0.01f, w.intensityExponent);
-            phases[i] = (float)Wrap(spatial - phaseAcc[i]);
+            dirX[i]   = f.DirEast[i];
+            dirZ[i]   = f.DirNorth[i];
+            kVec[i]   = f.K[i];
+            amp[i]    = f.Steepness[i];          // k·a — безразмерная крутизна
+            exps[i]   = f.Exponent[i];
+            phases[i] = (float)f.ShaderPhase(i, ship.East, ship.North, timeOffset);
         }
-
         Shader.SetGlobalVector(dirXId, dirX);
         Shader.SetGlobalVector(dirZId, dirZ);
         Shader.SetGlobalVector(kId, kVec);

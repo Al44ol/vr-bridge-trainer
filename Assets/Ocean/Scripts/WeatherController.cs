@@ -122,6 +122,15 @@ public class WeatherController : MonoBehaviour
         }
     }
 
+    /// <summary>Пресет по имени (calm / moderate / storm / night) — для стенда мореходности.</summary>
+    public bool TryGetPreset(string presetName, out WeatherPreset preset)
+    {
+        foreach (WeatherPreset p in new[] { calm, moderate, storm, night })
+            if (p.name == presetName) { preset = p; return true; }
+        preset = default;
+        return false;
+    }
+
     public void SetCalm() { TransitionTo(calm); }
     public void SetModerate() { TransitionTo(moderate); }
     public void SetStorm() { TransitionTo(storm); }

@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="480" viewBox="0 0 680 480" font-family="Times New Roman, serif" font-size="14">
+<rect width="100%" height="100%" fill="white"/>
+<line x1="80" y1="40" x2="80" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="80" y="438" text-anchor="middle">0</text>
+<line x1="144.44" y1="40" x2="144.44" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="144.44" y="438" text-anchor="middle">20</text>
+<line x1="208.89" y1="40" x2="208.89" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="208.89" y="438" text-anchor="middle">40</text>
+<line x1="273.33" y1="40" x2="273.33" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="273.33" y="438" text-anchor="middle">60</text>
+<line x1="337.78" y1="40" x2="337.78" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="337.78" y="438" text-anchor="middle">80</text>
+<line x1="402.22" y1="40" x2="402.22" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="402.22" y="438" text-anchor="middle">100</text>
+<line x1="466.67" y1="40" x2="466.67" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="466.67" y="438" text-anchor="middle">120</text>
+<line x1="531.11" y1="40" x2="531.11" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="531.11" y="438" text-anchor="middle">140</text>
+<line x1="595.56" y1="40" x2="595.56" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="595.56" y="438" text-anchor="middle">160</text>
+<line x1="660" y1="40" x2="660" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="660" y="438" text-anchor="middle">180</text>
+<line x1="80" y1="420" x2="660" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="425" text-anchor="end">0</text>
+<line x1="80" y1="377.78" x2="660" y2="377.78" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="382.78" text-anchor="end">2</text>
+<line x1="80" y1="335.56" x2="660" y2="335.56" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="340.56" text-anchor="end">4</text>
+<line x1="80" y1="293.33" x2="660" y2="293.33" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="298.33" text-anchor="end">6</text>
+<line x1="80" y1="251.11" x2="660" y2="251.11" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="256.11" text-anchor="end">8</text>
+<line x1="80" y1="208.89" x2="660" y2="208.89" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="213.89" text-anchor="end">10</text>
+<line x1="80" y1="166.67" x2="660" y2="166.67" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="171.67" text-anchor="end">12</text>
+<line x1="80" y1="124.44" x2="660" y2="124.44" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="129.44" text-anchor="end">14</text>
+<line x1="80" y1="82.22" x2="660" y2="82.22" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="87.22" text-anchor="end">16</text>
+<line x1="80" y1="40" x2="660" y2="40" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="45" text-anchor="end">18</text>
+<rect x="80" y="40" width="580" height="380" fill="none" stroke="black" stroke-width="1"/>
+<text x="370" y="466" text-anchor="middle">Курсовой угол волны q, ° (0 — носом на волну, 90 — лагом)</text>
+<text x="18" y="230" text-anchor="middle" transform="rotate(-90 18 230)">СКО, °</text>
+<text x="370" y="24" text-anchor="middle" font-size="15">СКО крена и дифферента (шторм)</text>
+<clipPath id="plot"><rect x="80" y="40" width="580" height="380"/></clipPath>
+<polyline clip-path="url(#plot)" fill="none" stroke="black" stroke-width="1.6" points="80,404.23 128.33,398.66 176.67,379.56 225,352.1 273.33,327.49 321.67,309.71 370,304.89 418.33,314.87 466.67,326.61 515,333.08 563.33,370.14 611.67,402.62 660,404.23 "/>
+<polyline clip-path="url(#plot)" fill="none" stroke="black" stroke-width="1.6" stroke-dasharray="8,4" points="80,274.5 128.33,269.64 176.67,270.57 225,289.47 273.33,328.12 321.67,360.44 370,353.38 418.33,333.32 466.67,313.8 515,296.64 563.33,285.49 611.67,279.21 660,274.5 "/>
+<polyline clip-path="url(#plot)" fill="none" stroke="black" stroke-width="1.6" stroke-dasharray="2,3" points="80,404.16 128.33,372.01 176.67,388.01 225,385.93 273.33,367.33 321.67,334.21 370,305.55 418.33,209.89 466.67,62.29 515,180.59 563.33,326.6 611.67,383.3 660,332 "/>
+<polyline clip-path="url(#plot)" fill="none" stroke="black" stroke-width="1.6" stroke-dasharray="8,3,2,3" points="80,292.93 128.33,289.99 176.67,284.26 225,285.06 273.33,312.83 321.67,353.56 370,357.02 418.33,349.37 466.67,339.44 515,331.76 563.33,328.18 611.67,326.85 660,335.87 "/>
+<rect x="404" y="43" width="254" height="20" fill="white" fill-opacity="0.85"/>
+<line x1="410" y1="52" x2="450" y2="52" stroke="black" stroke-width="1.6"/>
+<text x="458" y="56">крен, стоп</text>
+<rect x="404" y="63" width="254" height="20" fill="white" fill-opacity="0.85"/>
+<line x1="410" y1="72" x2="450" y2="72" stroke="black" stroke-width="1.6" stroke-dasharray="8,4"/>
+<text x="458" y="76">дифферент, стоп</text>
+<rect x="404" y="83" width="254" height="20" fill="white" fill-opacity="0.85"/>
+<line x1="410" y1="92" x2="450" y2="92" stroke="black" stroke-width="1.6" stroke-dasharray="2,3"/>
+<text x="458" y="96">крен, 15,0 уз</text>
+<rect x="404" y="103" width="254" height="20" fill="white" fill-opacity="0.85"/>
+<line x1="410" y1="112" x2="450" y2="112" stroke="black" stroke-width="1.6" stroke-dasharray="8,3,2,3"/>
+<text x="458" y="116">дифферент, 15,0 уз</text>
+</svg>

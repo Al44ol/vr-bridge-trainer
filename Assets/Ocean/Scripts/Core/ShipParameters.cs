@@ -17,6 +17,12 @@
 // (yawModel = Nomoto, α' = 0, C_r' = 0 → прежняя модель бит в бит):
 //   Норрбин: T·dr/dt + r + α·r³ = K·δ, α = α'·(L/U)²;
 //   потеря скорости на циркуляции: du/dt = (u_зад − u)/τ − C_r'·L·r².
+//
+// Запрос 4 (качка на волнах, SeakeepingModel): ширина и осадка, остойчивость,
+// собственные периоды и затухания бортовой, вертикальной и килевой качки.
+// Периоды можно оценить по формулам (контекстное меню «Оценить периоды качки»):
+//   T_φ = 2·C·B/√GM, C = 0.373 + 0.023·B/d − 0.043·L/100 (IS Code 2008, ч. A, 2.3.4);
+//   T_z = 2π·√(2·C_B·d/(C_WP·g)) (a₃₃ ≈ m),  T_θ ≈ T_z.
 // ============================================================
 using UnityEngine;
 
@@ -66,6 +72,32 @@ public class ShipParameters : ScriptableObject
     [Tooltip("Скорость перекладки ω_δ, °/с. По СОЛАС: (35+30)/28 ≈ 2.32")]
     public float rudderRate = 65f / 28f;
 
+    [Header("Мореходность: размерения и остойчивость (запрос 4)")]
+    [Tooltip("Ширина B, м (сетка точек качки поперёк корпуса)")]
+    public float beam = 20f;
+    [Tooltip("Осадка d, м")]
+    public float draft = 8f;
+    [Tooltip("Поперечная метацентрическая высота GM, м")]
+    public float metacentricHeight = 1f;
+    [Tooltip("Коэффициент общей полноты C_B")]
+    public float blockCoefficient = 0.7f;
+    [Tooltip("Коэффициент полноты ватерлинии C_WP")]
+    public float waterplaneCoefficient = 0.8f;
+
+    [Header("Мореходность: собственные периоды и затухание")]
+    [Tooltip("Период бортовой качки T_φ, с")]
+    public float rollPeriod = 12f;
+    [Tooltip("Период вертикальной качки T_z, с")]
+    public float heavePeriod = 7f;
+    [Tooltip("Период килевой качки T_θ, с")]
+    public float pitchPeriod = 7f;
+    [Tooltip("Относительное затухание бортовой качки ζ_φ (эквивалентное линейное)")]
+    [Range(0f, 0.95f)] public float rollDamping = 0.1f;
+    [Tooltip("Относительное затухание вертикальной качки ζ_z")]
+    [Range(0f, 0.95f)] public float heaveDamping = 0.25f;
+    [Tooltip("Относительное затухание килевой качки ζ_θ")]
+    [Range(0f, 0.95f)] public float pitchDamping = 0.25f;
+
     public const float KnotsToMs = 0.514444f;
     public float ServiceSpeedMs => serviceSpeedKnots * KnotsToMs;
 
@@ -94,6 +126,29 @@ public class ShipParameters : ScriptableObject
         turnSpeedLossCoeff = o.turnSpeedLossCoeff;
         maxRudderAngle = o.maxRudderAngle;
         rudderRate = o.rudderRate;
+        beam = o.beam;
+        draft = o.draft;
+        metacentricHeight = o.metacentricHeight;
+        blockCoefficient = o.blockCoefficient;
+        waterplaneCoefficient = o.waterplaneCoefficient;
+        rollPeriod = o.rollPeriod;
+        heavePeriod = o.heavePeriod;
+        pitchPeriod = o.pitchPeriod;
+        rollDamping = o.rollDamping;
+        heaveDamping = o.heaveDamping;
+        pitchDamping = o.pitchDamping;
+    }
+
+    /// <summary>Оценить собственные периоды качки по размерениям (формулы — в шапке файла).</summary>
+    [ContextMenu("Оценить периоды качки по формулам")]
+    public void EstimateMotionPeriods()
+    {
+        rollPeriod = (float)SeakeepingModel.RollPeriodIsCode(length, beam, draft, metacentricHeight);
+        heavePeriod = (float)SeakeepingModel.HeavePeriod(draft, blockCoefficient, waterplaneCoefficient);
+        pitchPeriod = heavePeriod;
+#if UNITY_EDITOR
+        UnityEditor.EditorUtility.SetDirty(this);
+#endif
     }
 
     /// <summary>Теоретический диаметр установившейся циркуляции линейной модели Номото, м: D = 2L/(K'·δ).</summary>

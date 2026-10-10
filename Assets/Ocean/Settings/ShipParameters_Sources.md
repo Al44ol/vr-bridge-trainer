@@ -50,6 +50,32 @@
 Справочно: B = 32,2 м, T = 10,8 м, ∇ = 52 057 м³ [7, табл. I]; Cb = 0,651 [8, табл. 1];
 масштаб модели 1:37,89.
 
+## Мореходность (запрос 4): ширина, осадка, остойчивость, периоды качки
+
+Поля `beam`, `draft`, `metacentricHeight`, `blockCoefficient`, `waterplaneCoefficient`,
+`rollPeriod`, `heavePeriod`, `pitchPeriod`, `rollDamping`, `heaveDamping`, `pitchDamping`.
+Используются только моделью качки (`SeakeepingModel`), на манёвренность не влияют.
+
+### ShipParameters_Model45m (судно сцены) — заполняет `Tools/VR Bridge/Setup Seakeeping`
+
+| Поле | Значение | Тип | Источник / формула |
+|---|---|---|---|
+| `beam` | 8,71 м | В | Ширина корпуса сцены (примитивы Hull и BowTip, повёрнутый на 45°) |
+| `draft` | 3,00 м | В | Уровень воды (OceanRadial, y = −5) минус днище Hull (Setup A1.1) |
+| `metacentricHeight` | 0,8 м | **З** | Допущение: GM ≈ 0,09·B — типично для небольших судов; нормативный минимум 0,15 м (IS Code 2008, ч. A, 2.2.4) |
+| `blockCoefficient` | 0,6 | **З** | Допущение |
+| `waterplaneCoefficient` | 0,75 | **З** | Допущение |
+| `rollPeriod` | 8,19 с | В | T_φ = 2·C·B/√GM, C = 0,373 + 0,023·B/d − 0,043·L/100 (IS Code 2008, ч. A, 2.3.4) |
+| `heavePeriod` | 4,40 с | В | T_z = 2π·√(2·C_B·d/(C_WP·g)), a₃₃ ≈ m (Journée & Massie, 2001) |
+| `pitchPeriod` | 4,40 с | В | T_θ ≈ T_z (Lloyd, 1989) |
+| `rollDamping` | 0,10 | **З** | Эквивалентное линейное затухание судна с боковыми килями (порядок величины — Himeno, 1981) |
+| `heaveDamping`, `pitchDamping` | 0,25 | **З** | Порядок величины для вертикальной и килевой качки |
+
+### ShipParameters_Mariner, ShipParameters_KCS — не заполнены (значения по умолчанию = заглушки)
+
+Сцена использует Model45m. Если понадобятся: KCS — B = 32,2 м, d = 10,8 м, GM = 0,6 м [7, табл. I],
+C_B = 0,651 [8, табл. 1], C_WP — нет данных; Mariner — B = 23,16 м [6], осадка не найдена.
+
 ## Литература
 
 1. Fossen T.I. Marine Systems Simulator (MSS), `CRAFT/SHIP/models/mariner.m` (авт. T. Lauvdal, 1994; ред. 2001–2024). https://github.com/cybergalactic/MSS

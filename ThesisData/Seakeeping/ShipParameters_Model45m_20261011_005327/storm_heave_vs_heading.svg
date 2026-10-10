@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="480" viewBox="0 0 680 480" font-family="Times New Roman, serif" font-size="14">
+<rect width="100%" height="100%" fill="white"/>
+<line x1="80" y1="40" x2="80" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="80" y="438" text-anchor="middle">0</text>
+<line x1="144.44" y1="40" x2="144.44" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="144.44" y="438" text-anchor="middle">20</text>
+<line x1="208.89" y1="40" x2="208.89" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="208.89" y="438" text-anchor="middle">40</text>
+<line x1="273.33" y1="40" x2="273.33" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="273.33" y="438" text-anchor="middle">60</text>
+<line x1="337.78" y1="40" x2="337.78" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="337.78" y="438" text-anchor="middle">80</text>
+<line x1="402.22" y1="40" x2="402.22" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="402.22" y="438" text-anchor="middle">100</text>
+<line x1="466.67" y1="40" x2="466.67" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="466.67" y="438" text-anchor="middle">120</text>
+<line x1="531.11" y1="40" x2="531.11" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="531.11" y="438" text-anchor="middle">140</text>
+<line x1="595.56" y1="40" x2="595.56" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="595.56" y="438" text-anchor="middle">160</text>
+<line x1="660" y1="40" x2="660" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="660" y="438" text-anchor="middle">180</text>
+<line x1="80" y1="420" x2="660" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="425" text-anchor="end">0,5</text>
+<line x1="80" y1="344" x2="660" y2="344" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="349" text-anchor="end">1,0</text>
+<line x1="80" y1="268" x2="660" y2="268" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="273" text-anchor="end">1,5</text>
+<line x1="80" y1="192" x2="660" y2="192" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="197" text-anchor="end">2,0</text>
+<line x1="80" y1="116" x2="660" y2="116" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="121" text-anchor="end">2,5</text>
+<line x1="80" y1="40" x2="660" y2="40" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="45" text-anchor="end">3,0</text>
+<rect x="80" y="40" width="580" height="380" fill="none" stroke="black" stroke-width="1"/>
+<text x="370" y="466" text-anchor="middle">Курсовой угол волны q, °</text>
+<text x="18" y="230" text-anchor="middle" transform="rotate(-90 18 230)">СКО, м</text>
+<text x="370" y="24" text-anchor="middle" font-size="15">СКО вертикальной качки (шторм)</text>
+<clipPath id="plot"><rect x="80" y="40" width="580" height="380"/></clipPath>
+<polyline clip-path="url(#plot)" fill="none" stroke="black" stroke-width="1.6" points="80,319.39 128.33,310.41 176.67,271.63 225,207.24 273.33,146.99 321.67,119.73 370,127.78 418.33,155.81 466.67,194.6 515,238.82 563.33,278.95 611.67,307.32 660,319.39 "/>
+<polyline clip-path="url(#plot)" fill="none" stroke="black" stroke-width="1.6" stroke-dasharray="8,4" points="80,335.33 128.33,320.98 176.67,276.45 225,198.6 273.33,109.78 321.67,66.5 370,157.55 418.33,198.12 466.67,260.14 515,310.87 563.33,348.94 611.67,371.74 660,370.15 "/>
+<polyline clip-path="url(#plot)" fill="none" stroke="black" stroke-width="1.6" stroke-dasharray="8,3,2,3" points="80,393.48 128.33,388.2 176.67,366.7 225,331.16 273.33,297.37 321.67,281.18 370,285.03 418.33,299.62 466.67,321.93 515,347.71 563.33,370.79 611.67,386.92 660,393.48 "/>
+<rect x="404" y="43" width="254" height="20" fill="white" fill-opacity="0.85"/>
+<line x1="410" y1="52" x2="450" y2="52" stroke="black" stroke-width="1.6"/>
+<text x="458" y="56">судно, стоп</text>
+<rect x="404" y="63" width="254" height="20" fill="white" fill-opacity="0.85"/>
+<line x1="410" y1="72" x2="450" y2="72" stroke="black" stroke-width="1.6" stroke-dasharray="8,4"/>
+<text x="458" y="76">судно, 15,0 уз</text>
+<rect x="404" y="83" width="254" height="20" fill="white" fill-opacity="0.85"/>
+<line x1="410" y1="92" x2="450" y2="92" stroke="black" stroke-width="1.6" stroke-dasharray="8,3,2,3"/>
+<text x="458" y="96">возмущение (плоскость МНК)</text>
+</svg>

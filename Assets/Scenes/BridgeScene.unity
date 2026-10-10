@@ -3571,6 +3571,7 @@ MonoBehaviour:
   streakVelocityScale: 0.035
   brightness: 1.8
   alpha: 0.35
+  logState: 1
 --- !u!4 &806489819
 Transform:
   m_ObjectHideFlags: 0
@@ -7545,6 +7546,22 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ShipMotion
   seaState: 0.3
+  mode: 0
+  ocean: {fileID: 1840327445}
+  navigation: {fileID: 440562507}
+  parametersOverride: {fileID: 0}
+  pivotLocal: {x: 2.7234, y: -5, z: -5.399832}
+  samplesAlong: 5
+  samplesAcross: 3
+  comfortScale: 1
+  maxRollDeg: 20
+  maxPitchDeg: 8
+  drawGizmos: 1
+  stepTimeUs: 0
+  stepTimeMaxUs: 0
+  rollDeg: 0
+  pitchDeg: 0
+  heaveM: 0
   rollAmplitude: 12
   rollPeriod: 7
   pitchAmplitude: 5

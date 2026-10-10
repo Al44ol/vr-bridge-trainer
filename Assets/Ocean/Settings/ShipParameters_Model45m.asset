@@ -20,5 +20,19 @@ MonoBehaviour:
   nomotoKPrime: 0.8
   nomotoTPrime: 2
   minCalcSpeed: 0.05
+  yawModel: 0
+  norrbinAlphaPrime: 0
+  turnSpeedLossCoeff: 0
   maxRudderAngle: 35
   rudderRate: 2.3214285
+  beam: 8.71
+  draft: 3
+  metacentricHeight: 0.8
+  blockCoefficient: 0.6
+  waterplaneCoefficient: 0.75
+  rollPeriod: 8.188293
+  heavePeriod: 4.395072
+  pitchPeriod: 4.395072
+  rollDamping: 0.1
+  heaveDamping: 0.25
+  pitchDamping: 0.25
