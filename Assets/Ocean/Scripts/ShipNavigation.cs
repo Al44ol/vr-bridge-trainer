@@ -1,6 +1,10 @@
 // ============================================================
 // ShipNavigation.cs — Модуль навигационного моделирования судна (A2)
 //
+// С A3 математика модели вынесена в чистый класс ShipDynamicsModel
+// (Scripts/Core, сборка VRBridge.Core); здесь — органы управления → модель
+// в FixedUpdate и отображение результата в сцене.
+//
 // Берёт команды со штурвала (SteeringWheel) и машинного телеграфа
 // (EngineTelegraph), интегрирует курс, скорость и позицию судна и отдаёт:
 //   • курс — поворотом объекта ShipRoot вокруг вертикали (yaw);
@@ -29,12 +33,12 @@
 //
 // 3. Поворот — модель Номото 1-го порядка:
 //        T · dr/dt + r = K · δ,
-//        K = K' · U / L   [1/с],    T = T' · L / U   [с],
-//        U = max(|u|, U_min),  знак K совпадает со знаком u
-//        (на заднем ходу руль поворачивает судно в обратную сторону).
-//    Установившаяся угловая скорость r_уст = K·δ = K'·U·δ / L ∝ U:
-//    на стопе (U → U_min) руль практически не поворачивает судно — это следует
-//    из самой модели; U_min — только защита от деления на ноль в T.
+//        K = K' · u / L   [1/с],    T = T' · L / U   [с],    U = max(|u|, U_min);
+//        знак K совпадает со знаком u (на заднем ходу руль поворачивает судно
+//        в обратную сторону).
+//    Установившаяся угловая скорость r_уст = K·δ = K'·u·δ / L ∝ u:
+//    на стопе (u = 0) руль не поворачивает судно; U_min — только защита
+//    от деления на ноль в T (A3: раньше U_min входил и в K — исправлено).
 //    Радиус установившейся циркуляции R = U / r_уст = L / (K'·δ) от скорости
 //    не зависит; диаметр D = 2L / (K'·δ_рад) (K' = 0.8, δ = 35° → D ≈ 4.1·L).
 //    Дискретизация точная при постоянном δ на шаге (устойчива при любом T):
@@ -83,13 +87,9 @@ public class ShipNavigation : MonoBehaviour
     [Tooltip("Клавиша F5 запускает/останавливает тест")]
     public bool testHotkey = true;
 
-    // ── Состояние модели ──
-    private double psi;        // курс, рад
-    private double r;          // угловая скорость, рад/с
-    private double u;          // скорость, м/с
-    private double delta;      // фактический угол руля, градусы (> 0 — ПБ)
-    private double ordered;    // заданный угол руля, градусы
-    private double east, north;
+    // ── Модель (A3: вынесена в чистый класс ShipDynamicsModel) ──
+    private ShipDynamicsModel model;
+    public ShipDynamicsModel Model => model;
 
     // Предыдущий шаг — для интерполяции отображения
     private double psiPrev, eastPrev, northPrev;
@@ -106,21 +106,23 @@ public class ShipNavigation : MonoBehaviour
 
     // ── Публичные свойства для будущих модулей (логирование, сценарии, CPA/TCPA) ──
     /// <summary>Курс, градусы 0..360 (0 = N, по часовой).</summary>
-    public float Heading => (float)(psi * Mathf.Rad2Deg);
+    public float Heading => model != null ? (float)(model.Psi * Mathf.Rad2Deg) : 0f;
     /// <summary>Скорость хода, м/с (< 0 — задний ход).</summary>
-    public float SpeedMs => (float)u;
+    public float SpeedMs => model != null ? (float)model.U : 0f;
     /// <summary>Скорость хода, узлы.</summary>
-    public float SpeedKnots => (float)u / ShipParameters.KnotsToMs;
+    public float SpeedKnots => SpeedMs / ShipParameters.KnotsToMs;
     /// <summary>Угловая скорость поворота, °/мин (> 0 — вправо).</summary>
-    public float RateOfTurn => (float)(r * Mathf.Rad2Deg * 60.0);
+    public float RateOfTurn => model != null ? (float)(model.R * Mathf.Rad2Deg * 60.0) : 0f;
     /// <summary>Заданный угол руля, градусы (> 0 — правый борт).</summary>
-    public float RudderOrdered => (float)ordered;
+    public float RudderOrdered => model != null ? (float)model.Ordered : 0f;
     /// <summary>Фактический угол руля, градусы (> 0 — правый борт).</summary>
-    public float RudderActual => (float)delta;
+    public float RudderActual => model != null ? (float)model.Delta : 0f;
     /// <summary>Истинная позиция судна (восток, север), м.</summary>
-    public WorldPosition PositionEastNorth => new WorldPosition(east, north);
+    public WorldPosition PositionEastNorth => model != null ? new WorldPosition(model.East, model.North) : default;
     /// <summary>Вектор скорости относительно воды (x — восток, y — север), м/с.</summary>
-    public Vector2 Velocity => new Vector2((float)(u * Math.Sin(psi)), (float)(u * Math.Cos(psi)));
+    public Vector2 Velocity => model != null
+        ? new Vector2((float)(model.U * Math.Sin(model.Psi)), (float)(model.U * Math.Cos(model.Psi)))
+        : Vector2.zero;
     /// <summary>Название положения телеграфа.</summary>
     public string TelegraphPosition => telegraph != null ? telegraph.PositionName : "—";
     public bool CirculationTestActive => testActive;
@@ -153,14 +155,15 @@ public class ShipNavigation : MonoBehaviour
             bowAxis = ship.localRotation * bowAxis;
         bowYawOffset = Mathf.Atan2(bowAxis.x, bowAxis.z) * Mathf.Rad2Deg;
 
-        psi = Wrap2Pi((transform.eulerAngles.y + bowYawOffset) * Mathf.Deg2Rad);
+        model = new ShipDynamicsModel(parameters);
+        model.Psi = ShipDynamicsModel.Wrap2Pi((transform.eulerAngles.y + bowYawOffset) * Mathf.Deg2Rad);
         if (worldOrigin != null)
         {
-            east = worldOrigin.ShipPosition.East;
-            north = worldOrigin.ShipPosition.North;
+            model.East = worldOrigin.ShipPosition.East;
+            model.North = worldOrigin.ShipPosition.North;
             worldOrigin.ExternalControl = true;
         }
-        psiPrev = psi; eastPrev = east; northPrev = north;
+        psiPrev = model.Psi; eastPrev = model.East; northPrev = model.North;
         initialized = true;
     }
 
@@ -169,7 +172,7 @@ public class ShipNavigation : MonoBehaviour
         if (!initialized) return;
         ResolveWheelSign();
 
-        psiPrev = psi; eastPrev = east; northPrev = north;
+        psiPrev = model.Psi; eastPrev = model.East; northPrev = model.North;
 
         int steps = testActive ? Mathf.Max(1, testSpeedup) : 1;
         double dt = Time.fixedDeltaTime;
@@ -192,56 +195,27 @@ public class ShipNavigation : MonoBehaviour
 
         // Интерполяция между шагами физики (против дёрганья в VR)
         double alpha = Time.fixedDeltaTime > 0f ? Math.Min(1.0, Math.Max(0.0, (Time.time - Time.fixedTime) / Time.fixedDeltaTime)) : 1.0;
-        double dPsi = Math.IEEERemainder(psi - psiPrev, 2.0 * Math.PI);
+        double dPsi = Math.IEEERemainder(model.Psi - psiPrev, 2.0 * Math.PI);
         double psiShown = psiPrev + dPsi * alpha;
-        double eShown = eastPrev + (east - eastPrev) * alpha;
-        double nShown = northPrev + (north - northPrev) * alpha;
+        double eShown = eastPrev + (model.East - eastPrev) * alpha;
+        double nShown = northPrev + (model.North - northPrev) * alpha;
 
         transform.rotation = Quaternion.Euler(0f, (float)(psiShown * Mathf.Rad2Deg) - bowYawOffset, 0f);
         if (worldOrigin != null)
         {
             worldOrigin.SetShipPosition(eShown, nShown);
-            worldOrigin.ShipSpeed = (float)u;
+            worldOrigin.ShipSpeed = (float)model.U;
         }
     }
 
-    // ─────────── Один шаг интегрирования ───────────
+    // ─────────── Один шаг: органы управления → модель ───────────
     private void Step(double dt)
     {
-        ShipParameters p = parameters;
-
-        // 1. Рулевая машина
-        double maxRudder = p.maxRudderAngle;
-        double cmd = testActive ? testRudderDeg : (wheel != null ? wheelSignValue * wheel.RudderAngle : 0.0);
-        ordered = Clamp(cmd, -maxRudder, maxRudder);
-        double maxStep = p.rudderRate * dt;
-        delta += Clamp(ordered - delta, -maxStep, maxStep);
-
-        // 2. Скорость
-        double vService = p.ServiceSpeedMs;
-        double sf = telegraph != null ? telegraph.SpeedFactor : 0.0;
-        double uSet = sf >= 0.0 ? sf * vService : sf * vService * p.asternFactor;
-        if (testActive)
-        {
-            uSet = vService;
-            u = vService;   // испытание на циркуляцию — при неизменной скорости
-        }
-        bool accelerating = Math.Abs(uSet) > Math.Abs(u) && u * uSet >= 0.0;
-        double tau = Math.Max(0.1, accelerating ? p.accelerationTimeConstant : p.decelerationTimeConstant);
-        u = uSet + (u - uSet) * Math.Exp(-dt / tau);
-
-        // 3. Поворот — модель Номото 1-го порядка
-        double L = Math.Max(1.0, p.length);
-        double U = Math.Max(Math.Abs(u), Math.Max(1e-4, p.minCalcSpeed));
-        double K = p.nomotoKPrime * (u >= 0.0 ? U : -U) / L;
-        double T = p.nomotoTPrime * L / U;
-        double rSteady = K * delta * Mathf.Deg2Rad;
-        r = rSteady + (r - rSteady) * Math.Exp(-dt / T);
-
-        // 4. Кинематика
-        psi = Wrap2Pi(psi + r * dt);
-        east += u * Math.Sin(psi) * dt;
-        north += u * Math.Cos(psi) * dt;
+        model.Parameters = parameters;   // ассет можно сменить в инспекторе на ходу
+        model.RudderCommandDeg = testActive ? testRudderDeg : (wheel != null ? wheelSignValue * wheel.RudderAngle : 0.0);
+        model.SpeedFactor = telegraph != null ? telegraph.SpeedFactor : 0.0;
+        model.HoldServiceSpeed = testActive;   // испытание на циркуляцию — при неизменной скорости
+        model.Step(dt);
     }
 
     // Знак штурвала: поворот по часовой стрелке с места оператора → руль на правый борт.
@@ -272,7 +246,7 @@ public class ShipNavigation : MonoBehaviour
         }
         testActive = true;
         testTime = 0; testTurned = 0; testNextLog = 30;
-        testPsi0 = psi; testE0 = east; testN0 = north;
+        testPsi0 = model.Psi; testE0 = model.East; testN0 = model.North;
         float dTheory = parameters.TheoreticalCircleDiameter(testRudderDeg);
         Debug.Log($"[Циркуляция] Старт: курс {Heading:F1}°, V = {parameters.serviceSpeedKnots:F1} уз, руль {testRudderDeg:F0}° ПБ, " +
                   $"L = {parameters.length:F0} м. Теоретический D = 2L/(K'·δ) = {dTheory:F0} м = {dTheory / parameters.length:F2} L. " +
@@ -292,17 +266,17 @@ public class ShipNavigation : MonoBehaviour
     private void TrackCirculationTest(double dt)
     {
         testTime += dt;
-        testTurned += r * dt * Mathf.Rad2Deg;   // изменение курса с начала теста, градусы
+        testTurned += model.R * dt * Mathf.Rad2Deg;   // изменение курса с начала теста, градусы
 
         // Смещение относительно начальной точки: вдоль начального курса и вправо от него
-        double dE = east - testE0, dN = north - testN0;
+        double dE = model.East - testE0, dN = model.North - testN0;
         double along = dE * Math.Sin(testPsi0) + dN * Math.Cos(testPsi0);
         double across = dE * Math.Cos(testPsi0) - dN * Math.Sin(testPsi0);
 
         while (testTurned >= testNextLog)
         {
             Debug.Log($"[Циркуляция] t = {testTime:F0} с, Δψ = {testNextLog:F0}°, курс {Heading:F1}°, " +
-                      $"E = {east:F1} м, N = {north:F1} м, вдоль = {along:F0} м, вправо = {across:F0} м");
+                      $"E = {model.East:F1} м, N = {model.North:F1} м, вдоль = {along:F0} м, вправо = {across:F0} м");
 
             if (Math.Abs(testNextLog - 90) < 0.5)
                 Debug.Log($"[Циркуляция] Выдвиг (advance) = {along:F0} м = {along / parameters.length:F2} L, прямое смещение (transfer) = {across:F0} м");
@@ -310,11 +284,11 @@ public class ShipNavigation : MonoBehaviour
                 Debug.Log($"[Циркуляция] Тактический диаметр = {across:F0} м = {across / parameters.length:F2} L");
             if (Math.Abs(testNextLog - 360) < 0.5)
             {
-                testE360 = east; testN360 = north;
+                testE360 = model.East; testN360 = model.North;
             }
             if (Math.Abs(testNextLog - 540) < 0.5)
             {
-                double d = Math.Sqrt((east - testE360) * (east - testE360) + (north - testN360) * (north - testN360));
+                double d = Math.Sqrt((model.East - testE360) * (model.East - testE360) + (model.North - testN360) * (model.North - testN360));
                 float dTheory = parameters.TheoreticalCircleDiameter(testRudderDeg);
                 Debug.Log($"[Циркуляция] ИТОГ: диаметр установившейся циркуляции D = {d:F0} м = {d / parameters.length:F2} L " +
                           $"(теория {dTheory:F0} м = {dTheory / parameters.length:F2} L), время 540° = {testTime:F0} с.");
@@ -329,13 +303,5 @@ public class ShipNavigation : MonoBehaviour
             Debug.LogWarning("[Циркуляция] За 3600 с судно не развернулось на 540° — проверьте K', руль и скорость.");
             StopCirculationTest("прерван по времени");
         }
-    }
-
-    private static double Clamp(double v, double min, double max) => v < min ? min : (v > max ? max : v);
-
-    private static double Wrap2Pi(double a)
-    {
-        a %= 2.0 * Math.PI;
-        return a < 0 ? a + 2.0 * Math.PI : a;
     }
 }

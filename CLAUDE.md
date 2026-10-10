@@ -58,10 +58,14 @@ XR Origin — дочерний объект Ship, игрок качается в
 ## Навигация (A2)
 - `ShipNavigation` (на ShipRoot), параметры — `ShipParameters_Model45m.asset` (под модель на сцене: L 45 м, τ 30/60 с); `ShipParameters_Default.asset` — среднее торговое судно (заглушка, калибровка в A3): L 150 м, 15 уз, K' 0.8, T' 2.0, τ 90/150 с, k_зх 0.6, δ_max 35°, 2.32 °/с.
 - Модель: рулевая машина (ограничение скорости перекладки, СОЛАС II-1/29), du/dt = (u_зад − u)/τ, Номото 1-го порядка T·ṙ + r = K·δ с K = K'·U/L, T = T'·L/U, интегрирование в FixedUpdate (точная экспонента), отображение интерполируется в Update. Формулы — в шапке ShipNavigation.cs.
+- **A3.1**: математика — в чистом классе `ShipDynamicsModel` (`Assets/Ocean/Scripts/Core/`, сборка `VRBridge.Core.asmdef`, туда же перенесён `ShipParameters`). ShipNavigation только передаёт штурвал/телеграф в модель и показывает результат. K = K'·u/L по фактической скорости (U_min — только в T): на стопе руль не поворачивает судно.
+- Стенд испытаний: `Tools/VR Bridge/Manoeuvring Trials` (без Play Mode, dt = 0.02 с, `ManoeuvringTrials` в Core) — циркуляции, начальная поворотливость, зигзаги, торможение, разгон, критерии IMO MSC.137(76); вывод в `ThesisData/Trials/` (CSV, summary.csv/.md, SVG). Скорость испытаний по умолчанию 0.9·V_эксп.
+- EditMode-тесты: `Assets/Ocean/Tests/Editor` (`VRBridge.Core.Tests.asmdef`), Test Runner → EditMode.
 - Знак штурвала: Auto — по часовой с места оператора = ПБ. Курс ψ: 0 = N, по часовой; δ > 0 — ПБ.
 - Пока ShipNavigation включён, `WorldOrigin.ExternalControl = true` (ход от телеграфа A1 и стрелки отключены).
 - Тест циркуляции: F5 или контекстное меню ShipNavigation; лог — выдвиг, тактический диаметр, D (теория при умолчаниях: 614 м = 4.1 L).
-- Пункты меню: Setup A1 Ocean → Setup A1.1 Hull Water → Setup Telegraph Model → Setup A2 Navigation → Setup Console and Sky → Setup A2.2 Controls → Setup Rain, Setup Frame Timing (запрос 1).
+- Пункты меню: Setup A1 Ocean → Setup A1.1 Hull Water → Setup Telegraph Model → Setup A2 Navigation → Setup Console and Sky → Setup A2.2 Controls → Setup Rain, Setup Frame Timing (запрос 1). Окно: Manoeuvring Trials (запрос 2).
+- Дождь (запрос 1) **отложен**: частицы есть (~3900), но в шлеме не видны. После исправления текстуры/очереди Setup Rain ещё не перезапускался — начинать с этого.
 
 ## Ключевые скрипты (`Assets/Ocean/Scripts`)
 - `ShipMotion` — кинематическая качка (сумма синусоид roll/pitch/yaw/heave × seaState), каждый кадр пишет `_WaveIntensity` в материал. Хода/курса нет.
