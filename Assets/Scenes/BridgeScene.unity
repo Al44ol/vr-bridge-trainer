@@ -1464,6 +1464,7 @@ Transform:
   - {fileID: 1626565075}
   - {fileID: 1052942712}
   - {fileID: 1782302072}
+  - {fileID: 1922673903}
   m_Father: {fileID: 1663476065}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &355707124
@@ -1614,7 +1615,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4c6f61a3ee02fe744a29bd7177b40872, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ShipNavigation
-  parameters: {fileID: 11400000, guid: 3b416e109bfca7449a1c238a016027d4, type: 2}
+  parameters: {fileID: 11400000, guid: bfe9cbd8e43f5c34eb5c8969288c3bf6, type: 2}
   wheel: {fileID: 655155207}
   telegraph: {fileID: 1922673907}
   wheelSign: 0
@@ -2209,6 +2210,7 @@ GameObject:
   - component: {fileID: 655155208}
   - component: {fileID: 655155207}
   - component: {fileID: 655155206}
+  - component: {fileID: 655155209}
   m_Layer: 0
   m_Name: Wheel
   m_TagString: Untagged
@@ -2373,6 +2375,30 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 0.35, y: 0.1, z: 0.35}
   m_Center: {x: 0.000000059604645, y: 0, z: 0.0000003874302}
+--- !u!114 &655155209
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 655155204}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a9df7c6ee4c5eb34d8cab42eb969229f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GrabHighlight
+  interactable: {fileID: 655155206}
+  renderers:
+  - {fileID: 867074709}
+  - {fileID: 1236394551}
+  - {fileID: 676912040}
+  - {fileID: 1903245275}
+  - {fileID: 1367698462}
+  - {fileID: 254657726}
+  - {fileID: 1235356229}
+  - {fileID: 2029721058}
+  hoverColor: {r: 1, g: 0.8, b: 0.25, a: 1}
+  selectColor: {r: 0.35, g: 0.9, b: 1, a: 1}
 --- !u!1 &660588861
 GameObject:
   m_ObjectHideFlags: 0
@@ -3716,9 +3742,9 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 858814859}
-  m_LocalRotation: {x: 0, y: 0.9914449, z: -0.1305262, w: 0}
-  m_LocalPosition: {x: 0, y: 0, z: -2.3705149}
-  m_LocalScale: {x: 0.001, y: 0.001, z: 0.001}
+  m_LocalRotation: {x: -0.0011095873, y: 0.92093515, z: -0.3897056, w: 0.0026221294}
+  m_LocalPosition: {x: 0, y: 0, z: -2.301519}
+  m_LocalScale: {x: 0.0010861085, y: 0.0010861085, z: 0.0010861085}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1966085355}
@@ -3728,7 +3754,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 2.5893, y: 1.2096051}
+  m_AnchoredPosition: {x: 2.5906715, y: 1.0695889}
   m_SizeDelta: {x: 420, y: 300}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &858814861
@@ -5865,7 +5891,7 @@ SphereCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Radius: 1.6
+  m_Radius: 2
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!33 &1352223539
 MeshFilter:
@@ -7378,7 +7404,6 @@ Transform:
   - {fileID: 2068643255}
   - {fileID: 701463994}
   - {fileID: 655155205}
-  - {fileID: 1922673903}
   - {fileID: 1931015432}
   - {fileID: 1964496660}
   - {fileID: 325178211}
@@ -8735,6 +8760,7 @@ GameObject:
   - component: {fileID: 1922673904}
   - component: {fileID: 1922673908}
   - component: {fileID: 1922673907}
+  - component: {fileID: 1922673909}
   m_Layer: 0
   m_Name: Telegraph
   m_TagString: Untagged
@@ -8750,13 +8776,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1922673902}
   serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 2.425, y: 0.817, z: -2.169}
-  m_LocalScale: {x: 0.04, y: 0.25, z: 0.04}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 0.08, y: 0.49999994, z: 0.08}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 971992659}
-  m_Father: {fileID: 1663476065}
+  m_Father: {fileID: 325178211}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!65 &1922673904
 BoxCollider:
@@ -8901,6 +8927,23 @@ MonoBehaviour:
   m_StartingInteractionStrengthFilters: []
   m_AutoFindParentInteractableInHierarchy: 0
   m_ParentInteractableObject: {fileID: 0}
+--- !u!114 &1922673909
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1922673902}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a9df7c6ee4c5eb34d8cab42eb969229f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GrabHighlight
+  interactable: {fileID: 1922673908}
+  renderers:
+  - {fileID: 1352223537}
+  hoverColor: {r: 1, g: 0.8, b: 0.25, a: 1}
+  selectColor: {r: 0.35, g: 0.9, b: 1, a: 1}
 --- !u!1 &1931015431
 GameObject:
   m_ObjectHideFlags: 0
