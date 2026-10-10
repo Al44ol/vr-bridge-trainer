@@ -39,11 +39,14 @@ VR-тренажёр судоводительского мостика. Прот�
   - `TelegraphHead` — модель телеграфа (масштаб 0.5, стоит на пульте справа от кнопки «Шторм») (Setup Telegraph Model): корпус, барабан со шкалой, `LeverPivot` (= EngineTelegraph.leverVisual, ось X, шаг 15°) с рукояткой `Knob` — единственный коллайдер взаимодействия. Рычаг следует за рукой (`angleTracking`).
   - `HornButton` — XRSimpleInteractable + **ShipHorn** + AudioSource; selectEntered → ShipHorn.PlayHorn
   - `WeatherPanel` — Canvas + **PanelToggle** (кнопка B / Tab); кнопки сеткой 2×2: Штиль | Шторм / Волнение | Ночь → WeatherController.SetCalm/SetModerate/SetStorm/SetNight
-  - `XR Origin Hands (XR Rig)` — префаб `VRTemplateAssets/Prefabs/Setup/Complete XR Origin Set Up Hands Variant` + добавлен **HeightAdjust** (кнопка Y / H)
+  - `XR Origin Hands (XR Rig)` — префаб `VRTemplateAssets/Prefabs/Setup/Complete XR Origin Set Up Hands Variant` + добавлен **HeightAdjust** (кнопка **X** левого контроллера — `{LeftHand}/primaryButton`, комментарий в коде говорит «Y» — неверно / H). С B1: **JumpProvider отключён** (прыжок был на A), на `Camera Offset` — **GroundingCameraShake**
+  - `BridgeMenu` — **BridgeMenu** (B1): VR-меню команд на кнопке **A** правого контроллера; модули регистрируют команды сами (`BridgeMenu.Register`)
   - `Hull`, `BowTip`, `Cube` — примитивы корпуса/палубы. Hull/BowTip удлинены вниз: осадка 3 м под воду (Setup A1.1)
 - `Lighting` — Directional Light (Sun), Light Probe Group, Reflection Probe, Post Process Volume (выключен)
 - `Rain` — **RainEffect** (Setup Rain): частицы `RainParticles` создаются в рантайме, излучатель над камерой; интенсивность задаёт WeatherController (только storm)
 - `ShipRoot/Ship/RainShelter` — BoxCollider-триггер (слой Ignore Raycast) = объём рубки, капли внутри уничтожаются. Размер подгоняется вручную в Scene View, Setup Rain его не перезаписывает
+- `WaterArea` — **WaterAreaView** (B1): буи/суша из ассета `WaterArea_Demo`, отладочный слой мелей; редактирование — выделить объект, ручки в Scene View
+- `ShipRoot` также несёт **GroundingMonitor** (B1): контроль глубины, посадка на мель, сигнализация
 - `PerfCapture` — **FrameTimingCapture** (Setup Frame Timing): F8 — замер времени кадра CPU/GPU 30 с → `ThesisData/Performance/`
 - `Hands Permissions Manager` — префаб шаблона
 
@@ -66,11 +69,22 @@ XR Origin — дочерний объект Ship, игрок качается в
 - Знак штурвала: Auto — по часовой с места оператора = ПБ. Курс ψ: 0 = N, по часовой; δ > 0 — ПБ.
 - Пока ShipNavigation включён, `WorldOrigin.ExternalControl = true` (ход от телеграфа A1 и стрелки отключены).
 - Тест циркуляции: F5 или контекстное меню ShipNavigation; лог — выдвиг, тактический диаметр, D (теория при умолчаниях: 614 м = 4.1 L).
-- Пункты меню: Setup A1 Ocean → Setup A1.1 Hull Water → Setup Telegraph Model → Setup A2 Navigation → Setup Console and Sky → Setup A2.2 Controls → Setup Rain, Setup Frame Timing (запрос 1), Setup Seakeeping (запрос 4). Окна: Manoeuvring Trials (запрос 2), Model Calibration (запрос 3), Seakeeping Trials (запрос 4) → `ThesisData/Seakeeping/`.
+- Пункты меню: Setup A1 Ocean → Setup A1.1 Hull Water → Setup Telegraph Model → Setup A2 Navigation → Setup Console and Sky → Setup A2.2 Controls → Setup Rain, Setup Frame Timing (запрос 1), Setup Seakeeping (запрос 4), Setup B1 Water Area + Rebuild Demo Water Area + Ship To Demo Start (запрос 5). Окна: Manoeuvring Trials (запрос 2), Model Calibration (запрос 3), Seakeeping Trials (запрос 4) → `ThesisData/Seakeeping/`.
+
+## Учебная акватория (запрос 5, B1)
+- Данные — ScriptableObject `WaterArea` (`Core/WaterArea/`): знаки МАМС регион A (`AidType`, внешний вид — `IalaMarks`), мели (многоугольник + наименьшая глубина), суша, фарватеры (ось + ширина), границы, глубина по умолчанию. `WorldPosition` перенесён в Core (`Core/WorldPosition.cs`).
+- Демо — `Assets/Ocean/Settings/WaterArea_Demo.asset` (`DemoWaterArea.Fill`): фарватер 2 кбт, колено 000° → поворот вправо 60° у (0, 3200) → 060°; старт сценария (0, −2500), курс 000°.
+- Сцена: `WaterAreaView` (порядок −60) — модели (`WaterAreaMeshes`, процедурные), позиция через `WorldToScene` каждый кадр, высота/наклон — `OceanWaves.SampleHeight` (3 точки); > 3,5 км — раз в 10 кадров.
+- Посадка: `GroundingDetector` (Core) — контур L×B по курсу, опасно h < d + Δ (Δ 0,5 м) и суша; приближение D_пред 1 кбт с гистерезисом 10 %. `GroundingMonitor` (ShipRoot, порядок −85): `ShipDynamicsModel.SetGrounded` — наползание τ_ост 1 с, руль не действует, съём ходом от мели (k_снят 0,3); удар/скрежет (`GroundingSounds`, заглушки), тряска камеры; события C# + UnityEvent; снятие инструктором (меню) — на позицию ≈30 с назад, `ShipNavigation.TeleportTo`, `EngineTelegraph.SetStop`.
+- Индикация: полоса над NavDisplay (глубина / «ОПАСНО: МЕЛЬ x кбт» / «НА МЕЛИ»), тоны; квитирование — меню.
+- Клавиатура в B1 не используется (решение пользователя): всё — через меню A. Отладочные команды меню: показать мели, переставить судно (старт демо / вход в фарватер / 800 м до поворота).
+- Туман погоды пересчитан (d ≈ 1,73/ρ, ExponentialSquared): штиль 0,0003 (≈5,8 км), умеренное 0,0004 (≈4,3 км), шторм 0,0015 (≈1,2 км), ночь 0,0004 (≈4,3 км) — край океана 10 км скрыт, буи видны. Было 1,7 км / 0,6 км / 70 м. Рябь: `Tools/VR Bridge/Weaker Ripple` (detailStrength 0,12; запасное значение 0,35).
+- Трекинг рук не нужен (решение пользователя).
+- Тесты: `WaterAreaTests` (18); всего в Test Runner 67 (тесты калибровки — файл `CalibrationTests.cs`, переименован в B1: под старым именем Unity его не компилировал).
 
 ## Качка на волнах (запрос 4)
 - Поле волн — чистый класс `Core/Seakeeping/OceanWaveField` (единый источник для шейдера и C#). `OceanWaves` заполняет его (`ConfigureField`) и шлёт те же значения в шейдер. Фазы θ продвигаются в **FixedUpdate**; в кадре — перенос на время отображения `OceanWaves.RenderTimeOffset` = −(1 − α)·Δt (та же α, что в ShipNavigation).
-- Порядок выполнения: WorldOrigin −100 → ShipNavigation −90 → OceanWaves −80 → ShipMotion −70.
+- Порядок выполнения: WorldOrigin −100 → ShipNavigation −90 → GroundingMonitor −85 (B1) → OceanWaves −80 → ShipMotion −70 → WaterAreaView −60 (B1).
 - Высота воды для других объектов (буи B1, суда B3): `OceanWaves.Instance.SampleHeight(WorldPosition)` / `SampleWaterLevel(Vector3 сцены)` — обратная задача Герстнера, 3 итерации.
 - Мореходные поля ShipParameters (B, d, GM, C_B, C_WP, T_φ/T_z/T_θ, ζ) заполнены только у `Model45m` (Setup Seakeeping, допущения помечены в `ShipParameters_Sources.md`).
 - Шейдер у борта по-прежнему гасит волны к нулю (`_HullDampMin`): если в шлеме корпус «отрывается» от воды — правка «вода у борта → плоскость ватерлинии судна» (отложена до проверки).
@@ -90,7 +104,7 @@ XR Origin — дочерний объект Ship, игрок качается в
 ## Вода
 - Шейдер `Assets/Ocean/Shaders/OceanSurface.shader` (`VRBridgeTrainer/OceanSurface`): 4 волны Герстнера. Параметры волн — в `OceanWaves` (C#), передаются глобалами `_OceanWave*`; фазы (смещение судна + время) считаются в C# в double mod 2π. Затухание `_WaveFadeStart`/`_WaveFadeEnd` (1.5→6 км) + подавление волн мельче шага сетки/пикселя. Нормали попиксельно. Туман URP поддерживается.
 - Ветер: `OceanWaves.windFromDeg` (морской пеленг «откуда», по умолчанию 160°), волны веером вокруг него. Влияние `_WaveSpeed` ограничено `speedInfluence` = 0.25 (физическая дисперсия).
-- Рябь: 4 волны λ 4.1…0.75 м только в нормалях. Сила — `detailStrength` (0.6). Барашки: шум 240 м, привязан к воде, только на гребнях; два слоя попеременно гаснут/появляются (`whitecapLifetime` 7 с), покрытие растёт с волнением (`_FoamAmount`).
+- Рябь: 4 волны λ 4.1…0.75 м только в нормалях. Сила — `detailStrength` (0.6 в коде; в сцене 0.12 после `Weaker Ripple`, B1). Барашки: шум 240 м, привязан к воде, только на гребнях; два слоя попеременно гаснут/появляются (`whitecapLifetime` 7 с), покрытие растёт с волнением (`_FoamAmount`).
 - Корпус: ShipWaterInteraction передаёт контуры Hull/BowTip — внутри вода не рисуется (clip), у борта волны гасятся (`_HullDampMin`/`_HullDampWidth`); след за кормой (полоса + усы Кельвина 19.47°) и бурун ∝ `WorldOrigin.ShipSpeed` (`_ShipFoam`).
 - Волны (OceanWaves): λ 90/45/20/9 м, амплитуда = amplitude · _WaveIntensity^exponent (зыбь растёт только в сильное волнение). Пена — по крутизне гребня Σ k·a·sin f.
 - `_WaveSpeed` в шейдере не используется напрямую — его читает OceanWaves.

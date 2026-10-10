@@ -33,6 +33,15 @@
 //     Шаг: экспонента с «замороженным» множителем g = 1 + α·r̄²
 //     (T_эфф = T/g, r_уст = K·δ/g), r̄ — середина шага (предиктор-корректор).
 //     Устойчиво при любом dt; в установившемся режиме r + α·r³ = K·δ точно.
+//
+// Посадка на мель (B1; при Grounded = false шаг прежний бит в бит):
+//   s = sign(u) в момент касания (GroundedDirection).
+//   • Ход в сторону s («наползание» на грунт) гаснет: u(t+dt) = u·e^(−dt/τ_ост),
+//     путь наползания ≈ u₀·τ_ост; работа машиной в сторону s судно не двигает.
+//   • Ход от мели (−s) разрешён с повышенным сопротивлением:
+//     u_цель = k_снят·u_зад (если u_зад·s < 0, иначе 0), du/dt = (u_цель − u)/τ_разг.
+//   • Поворот: r(t+dt) = r·e^(−dt/τ_ост) — корпус лежит на грунте, руль не действует.
+//   Снятие (Grounded = false) решает детектор: контур корпуса вышел из мели.
 // ============================================================
 using System;
 using UnityEngine;
@@ -63,6 +72,16 @@ public sealed class ShipDynamicsModel : IVesselModel
     /// <summary>Удерживать скорость = V_эксп (тест циркуляции F5 в ShipNavigation).</summary>
     public bool HoldServiceSpeed;
 
+    // ── Посадка на мель (B1) ──
+    /// <summary>Судно на мели (ставит GroundingMonitor через SetGrounded).</summary>
+    public bool Grounded { get; private set; }
+    /// <summary>Знак хода в момент касания: +1 — шло вперёд, −1 — назад.</summary>
+    public int GroundedDirection { get; private set; } = 1;
+    /// <summary>Постоянная остановки на грунте τ_ост, с.</summary>
+    public double GroundingStopTime = 1.0;
+    /// <summary>Доля скорости при съёме с мели k_снят (от u_зад телеграфа).</summary>
+    public double RefloatSpeedFactor = 0.3;
+
     public ShipDynamicsModel(ShipParameters parameters)
     {
         Parameters = parameters;
@@ -78,6 +97,12 @@ public sealed class ShipDynamicsModel : IVesselModel
         Ordered = Clamp(RudderCommandDeg, -maxRudder, maxRudder);
         double maxStep = p.rudderRate * dt;
         Delta += Clamp(Ordered - Delta, -maxStep, maxStep);
+
+        if (Grounded)
+        {
+            StepGrounded(dt);
+            return;
+        }
 
         // 2. Скорость
         double vService = p.ServiceSpeedMs;
@@ -131,6 +156,54 @@ public sealed class ShipDynamicsModel : IVesselModel
         Psi = Wrap2Pi(Psi + R * dt);
         East += U * Math.Sin(Psi) * dt;
         North += U * Math.Cos(Psi) * dt;
+    }
+
+    /// <summary>Посадить на мель / снять с мели. При посадке запоминается направление хода.</summary>
+    public void SetGrounded(bool grounded)
+    {
+        if (grounded && !Grounded)
+            GroundedDirection = U >= 0.0 ? 1 : -1;
+        Grounded = grounded;
+    }
+
+    // Шаг на мели: скорость и поворот (рулевая машина уже отработала)
+    private void StepGrounded(double dt)
+    {
+        ShipParameters p = Parameters;
+        double s = GroundedDirection;
+        double decay = Math.Exp(-dt / Math.Max(0.05, GroundingStopTime));
+
+        if (U * s > 0.0)
+        {
+            // Наползание на грунт: ход в сторону мели гаснет независимо от машины
+            U *= decay;
+            if (Math.Abs(U) < 1e-3) U = 0.0;
+        }
+        else
+        {
+            // Съём: только от мели, с повышенным сопротивлением грунта
+            double vService = p.ServiceSpeedMs;
+            double sf = SpeedFactor;
+            double uSet = sf >= 0.0 ? sf * vService : sf * vService * p.asternFactor;
+            double uTarget = uSet * s < 0.0 ? uSet * RefloatSpeedFactor : 0.0;
+            double tau = Math.Max(0.1, p.accelerationTimeConstant);
+            U = uTarget + (U - uTarget) * Math.Exp(-dt / tau);
+        }
+
+        R *= decay;
+        if (Math.Abs(R) < 1e-7) R = 0.0;
+
+        Psi = Wrap2Pi(Psi + R * dt);
+        East += U * Math.Sin(Psi) * dt;
+        North += U * Math.Cos(Psi) * dt;
+    }
+
+    /// <summary>Мгновенно переставить судно (снятие с мели инструктором): стоп, без поворота.</summary>
+    public void Teleport(double east, double north, double psi)
+    {
+        East = east; North = north; Psi = Wrap2Pi(psi);
+        U = 0.0; R = 0.0;
+        Grounded = false;
     }
 
     // ── IVesselModel (стенд испытаний) ──

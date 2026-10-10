@@ -1,5 +1,6 @@
 // ============================================================
-// ShipCalibrationTests.cs — EditMode-тесты калибровки (A3.2)
+// CalibrationTests.cs — EditMode-тесты калибровки (A3.2), класс ShipCalibrationTests
+// (B1: файл переименован из ShipCalibrationTests.cs — Unity не включал его в сборку тестов)
 // Window → General → Test Runner → EditMode → Run All.
 //
 // Расширения модели (Норрбин, потеря скорости), перенос эталона Mariner,

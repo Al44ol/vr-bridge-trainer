@@ -6,6 +6,9 @@
 // заданный угол (белая) и фактический (зелёная ПБ / красная ЛБ):
 // видно отставание рулевой машины.
 // Панель строит Editor-скрипт Tools/VR Bridge/Setup A2 Navigation.
+// B1: полоса над панелью (Setup B1 Water Area) — глубина по карте и запас
+// под килем; при опасном приближении мигает «ОПАСНО: МЕЛЬ … кбт», на мели —
+// «НА МЕЛИ» (сигнализация глубины, как у эхолота / планшета).
 // ============================================================
 using TMPro;
 using UnityEngine;
@@ -25,9 +28,17 @@ public class BridgeNavDisplay : MonoBehaviour
     [Tooltip("Обновление текста, раз в секунду")]
     public float textRate = 10f;
 
+    [Header("Глубина и сигнализация мели (B1)")]
+    public GroundingMonitor grounding;
+    public TextMeshProUGUI alarmText;
+    public Image alarmBackground;
+
+    private static readonly Color AlarmIdle = new Color(0.05f, 0.07f, 0.09f, 0.85f);
+    private static readonly Color AlarmRed = new Color(0.75f, 0.08f, 0.06f, 0.95f);
+
     private static readonly Color StarboardColor = new Color(0.2f, 0.85f, 0.35f);
     private static readonly Color PortColor = new Color(0.9f, 0.25f, 0.25f);
-    private float nextTextTime;
+    private float nextTextTime, nextAlarmTime;
 
     void Update()
     {
@@ -57,6 +68,52 @@ public class BridgeNavDisplay : MonoBehaviour
                 $"ТЕЛЕГРАФ    {TelegraphName(navigation.TelegraphPosition)}" +
                 (navigation.CirculationTestActive ? "\n<color=#FFD54F>ТЕСТ ЦИРКУЛЯЦИИ</color>" : "");
         }
+
+        UpdateAlarm();
+    }
+
+    private void UpdateAlarm()
+    {
+        if (alarmText == null || grounding == null || Time.unscaledTime < nextAlarmTime) return;
+        nextAlarmTime = Time.unscaledTime + 1f / Mathf.Max(1f, textRate);
+        bool blinkOn = Mathf.Repeat(Time.unscaledTime, 1f) < 0.6f;
+        string ack = grounding.AlarmAcknowledged ? "  <size=70%>КВИТ.</size>" : "";
+        switch (grounding.State)
+        {
+            case GroundingState.Grounded:
+            {
+                HazardInfo h = grounding.GroundedOn;
+                alarmText.text = $"<b>НА МЕЛИ</b>{ack}\n<size=70%>{Hazard(h)}</size>";
+                alarmText.color = Color.white;
+                if (alarmBackground != null) alarmBackground.color = AlarmRed;
+                break;
+            }
+            case GroundingState.Warning:
+            {
+                HazardInfo h = grounding.Nearest;
+                double cables = h.Valid ? h.Distance / WaterArea.CableMeters : 0.0;
+                alarmText.text = $"<b>ОПАСНО: МЕЛЬ {cables:F1} кбт</b>{ack}\n<size=70%>{Hazard(h)}</size>";
+                alarmText.color = Color.white;
+                if (alarmBackground != null) alarmBackground.color = blinkOn || grounding.AlarmAcknowledged ? AlarmRed : AlarmIdle;
+                break;
+            }
+            default:
+            {
+                float depth = grounding.DepthUnderShip;
+                alarmText.text = float.IsNaN(depth)
+                    ? "ГЛУБИНА —"
+                    : $"ГЛУБИНА {depth:F0} м\n<size=70%>под килем {depth - grounding.Draft:F1} м</size>";
+                alarmText.color = new Color(0.75f, 0.85f, 0.95f);
+                if (alarmBackground != null) alarmBackground.color = AlarmIdle;
+                break;
+            }
+        }
+    }
+
+    private static string Hazard(HazardInfo h)
+    {
+        if (!h.Valid) return "";
+        return h.IsLand ? $"«{h.Name}» — берег" : $"«{h.Name}», глубина {h.Depth:F1} м";
     }
 
     private static void SetMarker(RectTransform marker, float x)

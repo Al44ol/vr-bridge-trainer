@@ -1,5 +1,11 @@
 // ============================================================
 // WeatherController.cs — Управление погодой (улучшенные пресеты)
+//
+// Туман — ExponentialSquared: доля видимого f = exp(−(ρ·d)²). Дальность
+// видимости (метеорологическая, порог контраста 5 %): d = √(−ln 0,05)/ρ ≈ 1,73/ρ.
+// B1: плотности пересчитаны под морскую видимость (буи фарватера видны
+// на несколько кабельтовых и дальше, край океана 10 км скрыт): штиль ≈ 5,8 км,
+// умеренное ≈ 4,3 км, шторм ≈ 1,2 км, ночь ≈ 4,3 км. Видимость как условие сценария — C4.
 // ============================================================
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -42,7 +48,7 @@ public class WeatherController : MonoBehaviour
         ambientSky = new Color(0.53f, 0.71f, 0.85f),
         ambientGround = new Color(0.25f, 0.22f, 0.18f),
         fogColor = new Color(0.7f, 0.8f, 0.9f),
-        fogDensity = 0.001f,
+        fogDensity = 0.0003f,    // видимость ≈ 5,8 км (B1; было 0,001 ≈ 1,7 км)
         sunAngle = 50f,
         windSpeed = 0.5f
     };
@@ -56,7 +62,7 @@ public class WeatherController : MonoBehaviour
         ambientSky = new Color(0.45f, 0.58f, 0.7f),
         ambientGround = new Color(0.2f, 0.2f, 0.18f),
         fogColor = new Color(0.6f, 0.68f, 0.76f),
-        fogDensity = 0.003f,
+        fogDensity = 0.0004f,    // ≈ 4,3 км, 2,3 мили (было 0,003 ≈ 0,6 км)
         sunAngle = 45f,
         windSpeed = 1.0f
     };
@@ -70,7 +76,7 @@ public class WeatherController : MonoBehaviour
         ambientSky = new Color(0.08f, 0.09f, 0.11f),
         ambientGround = new Color(0.05f, 0.05f, 0.05f),
         fogColor = new Color(0.25f, 0.27f, 0.3f),
-        fogDensity = 0.025f,
+        fogDensity = 0.0015f,    // ≈ 1,2 км (было 0,025 ≈ 70 м)
         sunAngle = 25f,
         windSpeed = 2.2f,
         rain = 1f
@@ -85,7 +91,7 @@ public class WeatherController : MonoBehaviour
         ambientSky = new Color(0.01f, 0.01f, 0.03f),
         ambientGround = new Color(0.01f, 0.01f, 0.02f),
         fogColor = new Color(0.02f, 0.03f, 0.06f),
-        fogDensity = 0.008f,
+        fogDensity = 0.0004f,    // ≈ 4,3 км (было 0,008 ≈ 0,2 км)
         sunAngle = -15f,
         windSpeed = 0.6f
     };

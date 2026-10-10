@@ -16,26 +16,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-/// <summary>
-/// Позиция в мировой системе координат тренажёра (метры, double).
-/// </summary>
-[System.Serializable]
-public struct WorldPosition
-{
-    public double East;
-    public double North;
-
-    public WorldPosition(double east, double north)
-    {
-        East = east;
-        North = north;
-    }
-
-    public static WorldPosition operator +(WorldPosition a, WorldPosition b) => new WorldPosition(a.East + b.East, a.North + b.North);
-    public static WorldPosition operator -(WorldPosition a, WorldPosition b) => new WorldPosition(a.East - b.East, a.North - b.North);
-
-    public override string ToString() => $"E {East:F1} м, N {North:F1} м";
-}
+// WorldPosition (позиция в мире, double) с B1 лежит в Core/WorldPosition.cs.
 
 [DefaultExecutionOrder(-100)]
 public class WorldOrigin : MonoBehaviour

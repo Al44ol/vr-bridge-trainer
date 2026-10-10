@@ -175,6 +175,23 @@ public class EngineTelegraph : MonoBehaviour
         }
     }
 
+    /// <summary>Перевести телеграф на «Стоп» (команда инструктора, B1). Рычаг доворачивается сам.</summary>
+    public void SetStop()
+    {
+        int stop = currentIndex;
+        float best = float.MaxValue;
+        for (int i = 0; i < positions.Length; i++)
+        {
+            float a = Mathf.Abs(positions[i].speedFactor);
+            if (a < best) { best = a; stop = i; }
+        }
+        tracking = false;
+        if (stop == currentIndex) return;
+        currentIndex = stop;
+        ApplyPosition(currentIndex);
+        if (audioSource != null && clickClip != null) audioSource.PlayOneShot(clickClip);
+    }
+
     private void ApplyPosition(int index)
     {
         currentPosition = positions[index].name;

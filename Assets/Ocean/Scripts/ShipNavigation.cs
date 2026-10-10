@@ -208,6 +208,23 @@ public class ShipNavigation : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Переставить судно (снятие с мели инструктором, B1; начальные условия сценария, B2):
+    /// позиция, курс (градусы), стоп; без интерполяции от прежнего положения.
+    /// </summary>
+    public void TeleportTo(double east, double north, double headingDeg)
+    {
+        if (!initialized) return;
+        model.Teleport(east, north, headingDeg * Math.PI / 180.0);
+        psiPrev = model.Psi; eastPrev = model.East; northPrev = model.North;
+        transform.rotation = Quaternion.Euler(0f, (float)(model.Psi * Mathf.Rad2Deg) - bowYawOffset, 0f);
+        if (worldOrigin != null)
+        {
+            worldOrigin.SetShipPosition(model.East, model.North);
+            worldOrigin.ShipSpeed = 0f;
+        }
+    }
+
     // ─────────── Один шаг: органы управления → модель ───────────
     private void Step(double dt)
     {
