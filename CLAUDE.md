@@ -1,0 +1,85 @@
+# VR_BridgeTrainer — контекст для Claude
+
+VR-тренажёр судоводительского мостика. Прототип сделан в бакалаврской ВКР, сейчас развивается в магистерской:
+«Разработка модуля навигационного моделирования и сценарной оценки действий обучающегося для VR-тренажёра судоводительского мостика».
+
+## Стек
+- Unity 6000.4.6f1, URP 17.4 (Render Graph), Linear color space
+- OpenXR 1.16.1 (+ Meta OpenXR 2.5.0), XR Interaction Toolkit 3.4.1, XR Hands 1.7.3
+- Новый Input System 1.19.0
+- Целевое железо: Meta Quest 3, PC-VR через Virtual Desktop, 90 Гц; 14 станций с RTX 5070 Ti
+- OpenXR Standalone: render mode = Multi-pass (не Single Pass Instanced)
+- Контроль версий: в папке есть `.plastic` (Unity Version Control, репозиторий `VR_BridgeTrainer_1`)
+
+## Сцены
+- Рабочая сцена: `Assets/Scenes/BridgeScene.unity` (в Build Settings включена только она)
+- `SampleScene` / `BasicScene` — от VR Template; `Assets/_Recovery/0.unity` — аварийная копия сцены
+
+## Иерархия BridgeScene (корень)
+- `EventSystem` — XRUIInputModule
+- `WeatherSystem` — **WeatherController** → shipMotion = Ship, sunLight = Directional Light, oceanMaterial = OceanMaterial
+  + **SkyWeather**: затемнение неба по интенсивности солнца, тучи при seaState > 0.45 (глобалы `_Sky*`)
+- `WorldOrigin` — **WorldOrigin** (плавающее начало координат, A1)
+- `OceanRadial` (y = −5, в корне, не дочерний к Ship) — **OceanRadialMesh** (радиальный меш R = 10 км, ~98 тыс. вершин) + **OceanWaves** (→ OceanMaterial, WorldOrigin) + **ShipWaterInteraction** (→ Hull, BowTip, WorldOrigin)
+- `Ocean` — старый океан, **отключён** (OceanSetup, плоскость 500×500 м)
+- `ShipRoot` (0,0,0) — **ShipNavigation** (A2): поворачивает ShipRoot по курсу (yaw = ψ − 180°), позицию отдаёт в WorldOrigin
+- `ShipRoot/Ship` — **ShipMotion** (seaState, качка), **AmbientSounds** (→ ShipMotion)
+  - `Ship_Bridge_3D_Model`, `МОСТИКИ` (`Assets/Models/Bridge/bridge2/МОСТИКИ.fbx`) — модели мостика
+  - `Wheel` — XRSimpleInteractable + **SteeringWheel** (крутится сам объект, масштаб 0.3×0.1×0.3). Хват — только `WheelGrip` (16 сфер по ободу, не вращается), штурвал идёт за рукой (`rimTracking`), автовозврат выкл. Свой BoxCollider выключен.
+  - `Telegraph` — XRSimpleInteractable + **EngineTelegraph** (масштаб 0.04×0.25×0.04 — не класть детей!). Свой BoxCollider выключен, старый `LeverVisual` скрыт.
+  - `NavDisplay` — временная панель A2 (BridgeNavDisplay), лежит на пульте на месте панели погоды (погода — кнопка B): курс, скорость, ROT, руль заданный/фактический, телеграф, шкала руля ±35°
+  - `TelegraphHead` содержит и сам `Telegraph` (A2.2) — двигать только TelegraphHead. Рукоятка и обод штурвала подсвечиваются (GrabHighlight); штурвал и рычаг следят за точкой хвата интерактора (при хвате лучом — точка попадания)
+  - `TelegraphHead` — модель телеграфа (масштаб 0.5, стоит на пульте справа от кнопки «Шторм») (Setup Telegraph Model): корпус, барабан со шкалой, `LeverPivot` (= EngineTelegraph.leverVisual, ось X, шаг 15°) с рукояткой `Knob` — единственный коллайдер взаимодействия. Рычаг следует за рукой (`angleTracking`).
+  - `HornButton` — XRSimpleInteractable + **ShipHorn** + AudioSource; selectEntered → ShipHorn.PlayHorn
+  - `WeatherPanel` — Canvas + **PanelToggle** (кнопка B / Tab); кнопки сеткой 2×2: Штиль | Шторм / Волнение | Ночь → WeatherController.SetCalm/SetModerate/SetStorm/SetNight
+  - `XR Origin Hands (XR Rig)` — префаб `VRTemplateAssets/Prefabs/Setup/Complete XR Origin Set Up Hands Variant` + добавлен **HeightAdjust** (кнопка Y / H)
+  - `Hull`, `BowTip`, `Cube` — примитивы корпуса/палубы. Hull/BowTip удлинены вниз: осадка 3 м под воду (Setup A1.1)
+- `Lighting` — Directional Light (Sun), Light Probe Group, Reflection Probe, Post Process Volume (выключен)
+- `Hands Permissions Manager` — префаб шаблона
+
+XR Origin — дочерний объект Ship, игрок качается вместе с судном.
+
+## Плавающее начало координат (A1)
+- Судно и XR Origin всегда около (0,0,0). Истинная позиция судна — `WorldOrigin.ShipPosition` (`WorldPosition { double East, North }`, метры).
+- Система координат: **+X = восток, +Z = север**. Нос модели судна смотрит в **−Z** (`WorldOrigin.bowLocalAxis`).
+- На A2 позицию задаёт навигация через `ShipPosition` / `SetShipPosition`; объекты мира ставить через `WorldToScene()`.
+- Временный ход (до A2): `WorldOrigin.telegraph` → скорость = SpeedFactor · maxSpeedKnots (15 уз) · testSpeedMultiplier, по носу, с плавным разгоном. Курс не меняется (ShipMotion перезаписывает поворот Ship).
+- Отладка: `debugKeyboard` — стрелки ↑↓ вдоль носа, ←→ поперёк, Shift — 100 м/с.
+
+## Навигация (A2)
+- `ShipNavigation` (на ShipRoot), параметры — `ShipParameters_Model45m.asset` (под модель на сцене: L 45 м, τ 30/60 с); `ShipParameters_Default.asset` — среднее торговое судно (заглушка, калибровка в A3): L 150 м, 15 уз, K' 0.8, T' 2.0, τ 90/150 с, k_зх 0.6, δ_max 35°, 2.32 °/с.
+- Модель: рулевая машина (ограничение скорости перекладки, СОЛАС II-1/29), du/dt = (u_зад − u)/τ, Номото 1-го порядка T·ṙ + r = K·δ с K = K'·U/L, T = T'·L/U, интегрирование в FixedUpdate (точная экспонента), отображение интерполируется в Update. Формулы — в шапке ShipNavigation.cs.
+- Знак штурвала: Auto — по часовой с места оператора = ПБ. Курс ψ: 0 = N, по часовой; δ > 0 — ПБ.
+- Пока ShipNavigation включён, `WorldOrigin.ExternalControl = true` (ход от телеграфа A1 и стрелки отключены).
+- Тест циркуляции: F5 или контекстное меню ShipNavigation; лог — выдвиг, тактический диаметр, D (теория при умолчаниях: 614 м = 4.1 L).
+- Пункты меню: Setup A1 Ocean → Setup A1.1 Hull Water → Setup Telegraph Model → Setup A2 Navigation → Setup Console and Sky → Setup A2.2 Controls.
+
+## Ключевые скрипты (`Assets/Ocean/Scripts`)
+- `ShipMotion` — кинематическая качка (сумма синусоид roll/pitch/yaw/heave × seaState), каждый кадр пишет `_WaveIntensity` в материал. Хода/курса нет.
+- `SteeringWheel` — угол руля ±35° (`RudderAngle`), пока никем не читается.
+- `EngineTelegraph` — 9 положений, `SpeedFactor` −1..1, пока никем не читается.
+- `WeatherController` — пресеты calm/moderate/storm/night (клавиши 1–4), плавный переход; меняет свет, туман, `_WaveIntensity`, `_WaveSpeed`.
+- `WorldOrigin`, `OceanWaves`, `OceanRadialMesh` — см. разделы выше/ниже.
+- `ShipHorn`, `AmbientSounds`, `PanelToggle`, `HeightAdjust` — окружение и UI.
+- `RainEffect` — есть в проекте, но в BridgeScene не подключён.
+
+## Вода
+- Шейдер `Assets/Ocean/Shaders/OceanSurface.shader` (`VRBridgeTrainer/OceanSurface`): 4 волны Герстнера. Параметры волн — в `OceanWaves` (C#), передаются глобалами `_OceanWave*`; фазы (смещение судна + время) считаются в C# в double mod 2π. Затухание `_WaveFadeStart`/`_WaveFadeEnd` (1.5→6 км) + подавление волн мельче шага сетки/пикселя. Нормали попиксельно. Туман URP поддерживается.
+- Ветер: `OceanWaves.windFromDeg` (морской пеленг «откуда», по умолчанию 160°), волны веером вокруг него. Влияние `_WaveSpeed` ограничено `speedInfluence` = 0.25 (физическая дисперсия).
+- Рябь: 4 волны λ 4.1…0.75 м только в нормалях. Сила — `detailStrength` (0.6). Барашки: шум 240 м, привязан к воде, только на гребнях; два слоя попеременно гаснут/появляются (`whitecapLifetime` 7 с), покрытие растёт с волнением (`_FoamAmount`).
+- Корпус: ShipWaterInteraction передаёт контуры Hull/BowTip — внутри вода не рисуется (clip), у борта волны гасятся (`_HullDampMin`/`_HullDampWidth`); след за кормой (полоса + усы Кельвина 19.47°) и бурун ∝ `WorldOrigin.ShipSpeed` (`_ShipFoam`).
+- Волны (OceanWaves): λ 90/45/20/9 м, амплитуда = amplitude · _WaveIntensity^exponent (зыбь растёт только в сильное волнение). Пена — по крутизне гребня Σ k·a·sin f.
+- `_WaveSpeed` в шейдере не используется напрямую — его читает OceanWaves.
+- Скайбокс `Assets/Ocean/SkyboxHorizonFog.mat` (`VRBridgeTrainer/SkyboxHorizonFog`): кубмап + смешивание с fogColor у горизонта. Старый `skybox01_openGL` не удалён. Тучи (процедурный fbm) и затемнение — от SkyWeather.
+- Материал `Assets/Ocean/OceanMaterial.mat` — общий ассет, его меняют ShipMotion и WeatherController в рантайме.
+
+## Камера
+- Камера из `Samples/XR Interaction Toolkit/3.4.1/Starter Assets/Prefabs/XR Origin (XR Rig).prefab`: near 0.01; far = 12 000 м — override в сцене (Setup A1).
+
+## Правила работы
+- Unity всегда открыт — **batchmode не запускать**.
+- Сцены и префабы **не править вручную в YAML**. Изменения сцены — через Editor-скрипты с пунктом меню `Tools/VR Bridge/...` (в `Assets/.../Editor/`), пользователь запускает их сам.
+- Старые компоненты **не удалять, а отключать**.
+- Скрипты Unity VR Template / XRI Samples (AnchorVisuals, XRKnob и т.п.) не трогать.
+- Комментарии в коде — на русском.
+- После каждой задачи: список изменённых файлов и что проверить в шлеме.
