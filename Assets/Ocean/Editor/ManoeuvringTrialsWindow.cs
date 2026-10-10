@@ -45,7 +45,7 @@ public class ManoeuvringTrialsWindow : EditorWindow
         if (parameters == null)
         {
             // По умолчанию — параметры ShipNavigation открытой сцены
-            var nav = FindFirstObjectByType<ShipNavigation>();
+            var nav = FindAnyObjectByType<ShipNavigation>();
             if (nav != null) parameters = nav.parameters;
         }
     }
