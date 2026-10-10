@@ -11,6 +11,8 @@ public class WeatherController : MonoBehaviour
     public ShipMotion shipMotion;
     public Light sunLight;
     public Material oceanMaterial;
+    [Tooltip("Дождь (Setup Rain). Интенсивность меняется вместе с погодой.")]
+    public RainEffect rainEffect;
 
     [Header("Текущее состояние")]
     [SerializeField] private string currentPreset = "moderate";
@@ -28,6 +30,7 @@ public class WeatherController : MonoBehaviour
         public float fogDensity;
         public float sunAngle;
         public float windSpeed;
+        public float rain;          // интенсивность дождя 0..1 (только storm = 1)
     }
 
     private WeatherPreset calm = new WeatherPreset
@@ -69,7 +72,8 @@ public class WeatherController : MonoBehaviour
         fogColor = new Color(0.25f, 0.27f, 0.3f),
         fogDensity = 0.025f,
         sunAngle = 25f,
-        windSpeed = 2.2f
+        windSpeed = 2.2f,
+        rain = 1f
     };
 
     private WeatherPreset night = new WeatherPreset
@@ -143,6 +147,7 @@ public class WeatherController : MonoBehaviour
         s.fogDensity = RenderSettings.fogDensity;
         s.sunAngle = sunLight != null ? sunLight.transform.eulerAngles.x : 45f;
         s.windSpeed = oceanMaterial != null ? oceanMaterial.GetFloat("_WaveSpeed") : 1f;
+        s.rain = rainEffect != null ? rainEffect.Intensity : 0f;
         return s;
     }
 
@@ -174,6 +179,10 @@ public class WeatherController : MonoBehaviour
             oceanMaterial.SetFloat("_WaveIntensity", Mathf.Lerp(from.seaState, to.seaState, smooth));
             oceanMaterial.SetFloat("_WaveSpeed", Mathf.Lerp(from.windSpeed, to.windSpeed, smooth));
         }
+
+        // Дождь — только в шторм, появляется/исчезает вместе с переходом погоды
+        if (rainEffect != null)
+            rainEffect.Intensity = Mathf.Lerp(from.rain, to.rain, smooth);
         RenderSettings.ambientIntensity = Mathf.Lerp(from.sunIntensity, to.sunIntensity, smooth);
     }
 

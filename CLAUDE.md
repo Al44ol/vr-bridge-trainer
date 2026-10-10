@@ -5,14 +5,16 @@ VR-тренажёр судоводительского мостика. Прот�
 
 ## План работ
 - `Docs/Plan.md` — 14 запросов (этап 2: A3, B1–B4, C1–C4, D1–D3). По одному: план → «ок» → код → проверка в шлеме → коммит.
-- Журнал для текста ВКР — `Docs/ThesisNotes.md` (вводится запросом 1).
+- Журнал для текста ВКР — `Docs/ThesisNotes.md` (см. «Правила работы»).
 
 ## Стек
 - Unity 6000.4.6f1, URP 17.4 (Render Graph), Linear color space
 - OpenXR 1.16.1 (+ Meta OpenXR 2.5.0), XR Interaction Toolkit 3.4.1, XR Hands 1.7.3
 - Новый Input System 1.19.0
 - Целевое железо: Meta Quest 3, PC-VR через Virtual Desktop, 90 Гц; 14 станций с RTX 5070 Ti
-- OpenXR Standalone: render mode = Multi-pass (не Single Pass Instanced)
+- OpenXR Standalone: render mode = **Single Pass Instanced** (с запроса 1; было Multi-pass). Переключатель — `Tools/VR Bridge/OpenXR Render Mode`. Play Mode в редакторе берёт настройки **Standalone**, даже если активная платформа — Android (OpenXRSettings.cs: GetInstance). Android — SPI.
+- Самописные шейдеры обязаны поддерживать SPI: `multi_compile_instancing`, `UNITY_VERTEX_INPUT_INSTANCE_ID`, `UNITY_VERTEX_OUTPUT_STEREO`, `UNITY_SETUP_INSTANCE_ID` / `UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO` в vert, `UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX` в frag. Камеру брать через `GetWorldSpaceNormalizeViewDir` / `_WorldSpaceCameraPos` (в SPI — свои для каждого глаза).
+- Проверка в шлеме — Play Mode через Virtual Desktop (сборку не делаем). Python на ПК нет (только заглушка Microsoft Store).
 - Контроль версий: в папке есть `.plastic` (Unity Version Control, репозиторий `VR_BridgeTrainer_1`)
 
 ## Сцены
@@ -39,6 +41,9 @@ VR-тренажёр судоводительского мостика. Прот�
   - `XR Origin Hands (XR Rig)` — префаб `VRTemplateAssets/Prefabs/Setup/Complete XR Origin Set Up Hands Variant` + добавлен **HeightAdjust** (кнопка Y / H)
   - `Hull`, `BowTip`, `Cube` — примитивы корпуса/палубы. Hull/BowTip удлинены вниз: осадка 3 м под воду (Setup A1.1)
 - `Lighting` — Directional Light (Sun), Light Probe Group, Reflection Probe, Post Process Volume (выключен)
+- `Rain` — **RainEffect** (Setup Rain): частицы `RainParticles` создаются в рантайме, излучатель над камерой; интенсивность задаёт WeatherController (только storm)
+- `ShipRoot/Ship/RainShelter` — BoxCollider-триггер (слой Ignore Raycast) = объём рубки, капли внутри уничтожаются. Размер подгоняется вручную в Scene View, Setup Rain его не перезаписывает
+- `PerfCapture` — **FrameTimingCapture** (Setup Frame Timing): F8 — замер времени кадра CPU/GPU 30 с → `ThesisData/Performance/`
 - `Hands Permissions Manager` — префаб шаблона
 
 XR Origin — дочерний объект Ship, игрок качается вместе с судном.
@@ -56,7 +61,7 @@ XR Origin — дочерний объект Ship, игрок качается в
 - Знак штурвала: Auto — по часовой с места оператора = ПБ. Курс ψ: 0 = N, по часовой; δ > 0 — ПБ.
 - Пока ShipNavigation включён, `WorldOrigin.ExternalControl = true` (ход от телеграфа A1 и стрелки отключены).
 - Тест циркуляции: F5 или контекстное меню ShipNavigation; лог — выдвиг, тактический диаметр, D (теория при умолчаниях: 614 м = 4.1 L).
-- Пункты меню: Setup A1 Ocean → Setup A1.1 Hull Water → Setup Telegraph Model → Setup A2 Navigation → Setup Console and Sky → Setup A2.2 Controls.
+- Пункты меню: Setup A1 Ocean → Setup A1.1 Hull Water → Setup Telegraph Model → Setup A2 Navigation → Setup Console and Sky → Setup A2.2 Controls → Setup Rain, Setup Frame Timing (запрос 1).
 
 ## Ключевые скрипты (`Assets/Ocean/Scripts`)
 - `ShipMotion` — кинематическая качка (сумма синусоид roll/pitch/yaw/heave × seaState), каждый кадр пишет `_WaveIntensity` в материал. Хода/курса нет.
@@ -65,7 +70,9 @@ XR Origin — дочерний объект Ship, игрок качается в
 - `WeatherController` — пресеты calm/moderate/storm/night (клавиши 1–4), плавный переход; меняет свет, туман, `_WaveIntensity`, `_WaveSpeed`.
 - `WorldOrigin`, `OceanWaves`, `OceanRadialMesh` — см. разделы выше/ниже.
 - `ShipHorn`, `AmbientSounds`, `PanelToggle`, `HeightAdjust` — окружение и UI.
-- `RainEffect` — есть в проекте, но в BridgeScene не подключён.
+- `WeatherController` также ведёт `rain` (0..1) в пресетах: storm = 1, остальные 0 → `RainEffect.Intensity`, тем же SmoothStep, что и погода.
+- `RainEffect` — дождь: мировое пространство, излучатель над камерой, скорость капли = ветер (OceanWaves.WindDirection · 15 м/с) − ход судна + падение 6.5 м/с; материал `Assets/Ocean/Materials/Rain.mat` (очередь 3100 — после воды).
+- `FrameTimingCapture` — замер производительности (FrameTimingManager + ProfilerRecorder).
 
 ## Вода
 - Шейдер `Assets/Ocean/Shaders/OceanSurface.shader` (`VRBridgeTrainer/OceanSurface`): 4 волны Герстнера. Параметры волн — в `OceanWaves` (C#), передаются глобалами `_OceanWave*`; фазы (смещение судна + время) считаются в C# в double mod 2π. Затухание `_WaveFadeStart`/`_WaveFadeEnd` (1.5→6 км) + подавление волн мельче шага сетки/пикселя. Нормали попиксельно. Туман URP поддерживается.
@@ -86,4 +93,9 @@ XR Origin — дочерний объект Ship, игрок качается в
 - Старые компоненты **не удалять, а отключать**.
 - Скрипты Unity VR Template / XRI Samples (AnchorVisuals, XRKnob и т.п.) не трогать.
 - Комментарии в коде — на русском.
-- После каждой задачи: список изменённых файлов и что проверить в шлеме.
+- **Перед каждой задачей — план, код только после подтверждения пользователя («ок»).**
+- После каждой задачи: список изменённых файлов, ручные шаги в Unity, что проверить в шлеме, коммит.
+- **Журнал ВКР** — `Docs/ThesisNotes.md` (в корне проекта, не в Assets). После каждой задачи — новый раздел: что сделано; принятые решения и почему; формулы; параметры со значениями и единицами; результаты испытаний; ограничения модели. Стиль — чтобы почти напрямую переработать в главу 3 ВКР.
+- **Данные для таблиц и графиков ВКР** (CSV) — в `ThesisData/` в корне проекта, не в Assets.
+- **Формат CSV**: числа — `CultureInfo.InvariantCulture` (точка), разделитель `;`, кодировка UTF-8 с BOM, первая строка — заголовки с единицами (`heading_deg`, `speed_kn`, `t_s`…).
+- **Время в симуляции — симуляционное** (FixedUpdate / Time.fixedDeltaTime), не реальное. Исключение — замеры производительности (FrameTimingCapture).
