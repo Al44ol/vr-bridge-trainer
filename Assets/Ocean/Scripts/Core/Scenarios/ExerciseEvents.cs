@@ -6,6 +6,8 @@
 // мели, B3 — столкновения, D1 — вводные) только публикуют события;
 // потребители (консоль, запись C1, оценка C2, тактильный отклик D3) только
 // подписываются. Шина — статическая, как реестр меню BridgeMenu.
+// Рассылка синхронная; событие, опубликованное подписчиком во время рассылки,
+// доставляется после текущего (порядок «причина → следствие» у всех подписчиков).
 //
 // Время события — время упражнения (симуляционное, с от «Начать»): его ведёт
 // ScenarioRunner в FixedUpdate (ExerciseEvents.Time), шина ставит его в каждое
@@ -81,7 +83,7 @@ public struct ExerciseEvent
     public override string ToString()
     {
         string head = $"t = {ScenarioText.Clock(Time)}";
-        string ship = $"{Position}, курс {HeadingDeg:F1}°, {SpeedKnots:F1} уз";
+        string ship = $"{Position}, курс {Math.Round(HeadingDeg, 1) % 360.0:F1}°, {SpeedKnots:F1} уз";
         switch (Type)
         {
             case ExerciseEventType.ScenarioLoaded: return $"{head}  Сценарий «{Subject}» загружен, брифинг. {ship}";
@@ -125,6 +127,8 @@ public static class ExerciseEvents
         Time = 0;
         Active = false;
         ScenarioId = "";
+        pending.Clear();
+        dispatching = false;
     }
 
     /// <summary>Начало упражнения: журнал очищается, время — с нуля.</summary>
@@ -139,12 +143,30 @@ public static class ExerciseEvents
     /// <summary>Конец упражнения: журнал сохраняется до следующего начала.</summary>
     public static void EndExercise() => Active = false;
 
+    // Событие, опубликованное подписчиком во время рассылки (Grounded → ScenarioRunner → ExerciseEnded),
+    // доставляется ПОСЛЕ текущего — всем подписчикам в порядке причина → следствие
+    // (найдено в шлеме: консоль получала «конец» раньше «посадки»).
+    private static readonly Queue<ExerciseEvent> pending = new Queue<ExerciseEvent>();
+    private static bool dispatching;
+
     public static void Publish(ExerciseEvent e)
     {
         e.Time = Time;
         e.InExercise = Active;
         if (Active) log.Add(e);
 
+        pending.Enqueue(e);
+        if (dispatching) return;
+        dispatching = true;
+        try
+        {
+            while (pending.Count > 0) Dispatch(pending.Dequeue());
+        }
+        finally { dispatching = false; }
+    }
+
+    private static void Dispatch(ExerciseEvent e)
+    {
         Action<ExerciseEvent> handlers = Raised;
         if (handlers == null) return;
         // Ошибка одного подписчика не должна мешать остальным

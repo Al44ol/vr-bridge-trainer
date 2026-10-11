@@ -162,6 +162,38 @@ public class ScenarioTests
         finally { ExerciseEvents.Reset(); }
     }
 
+    [Test]
+    public void Bus_NestedPublish_DeliveredAfterCurrentEvent()
+    {
+        // Как в шлеме: ScenarioRunner на Grounded публикует ExerciseEnded. Подписчик после него
+        // (консоль, запись C1) должен получить сначала посадку, затем конец.
+        ExerciseEvents.Reset();
+        var order = new List<ExerciseEventType>();
+        ExerciseEvents.Raised += e =>
+        {
+            if (e.Type == ExerciseEventType.Grounded)
+            {
+                ExerciseEvents.Publish(new ExerciseEvent(ExerciseEventType.ExerciseEnded) { EndReason = ScenarioEndReason.Grounding });
+                ExerciseEvents.EndExercise();
+            }
+        };
+        ExerciseEvents.Raised += e => order.Add(e.Type);
+        try
+        {
+            ExerciseEvents.BeginExercise("T-03");
+            ExerciseEvents.Time = 194.0;
+            ExerciseEvents.Publish(new ExerciseEvent(ExerciseEventType.Grounded));
+
+            CollectionAssert.AreEqual(new[] { ExerciseEventType.Grounded, ExerciseEventType.ExerciseEnded }, order);
+            Assert.AreEqual(2, ExerciseEvents.Log.Count);
+            Assert.AreEqual(ExerciseEventType.Grounded, ExerciseEvents.Log[0].Type);
+            Assert.AreEqual(ExerciseEventType.ExerciseEnded, ExerciseEvents.Log[1].Type);
+            Assert.AreEqual(194.0, ExerciseEvents.Log[1].Time, "одно время у причины и следствия");
+            Assert.IsTrue(ExerciseEvents.Log[1].InExercise);
+        }
+        finally { ExerciseEvents.Reset(); }
+    }
+
     // ─────────── Описание сценария ───────────
     [Test]
     public void Validate_FindsProblems_DemoIsValid()
