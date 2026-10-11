@@ -115,3 +115,7 @@ build/
 
 # Записи упражнений (C1): в git не попадают; нужную для ВКР сессию — git add -f
 /ThesisData/Sessions/
+
+# C3: прогоны Debrief Report — тяжёлые CSV траекторий не храним (report.html, session.json, events.csv, assessment.csv — в git)
+/ThesisData/Debrief/*/sessions/*/track.csv
+/ThesisData/Debrief/*/sessions/*/targets.csv

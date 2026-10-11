@@ -1,0 +1,7 @@
+﻿scenario;variant;title;end_reason;duration_s;score;passed;failed;failure;mandatory_failed;criteria_evaluated;criteria_failed
+B3-01;none;без манёвра;Collision;235.6;45.3;0;1;столкновение с «T2»;E1 E8 R4;9;4
+B3-01;correct;правильные действия;Arrived;1570.4;95.5;1;0;;;23;0
+B3-01;port;поворот влево на T2;Arrived;1363.8;64.4;0;0;;E8 R8b E4;19;6
+B3-01;late;манёвр T2 поздно (150 с);Arrived;1559.7;74.7;0;0;;E8;20;3
+B2-01;wheelover;поворот с упреждением;Arrived;1191.2;99.5;1;0;;;10;0
+B2-01;nowheelover;поворот без упреждения;Arrived;1223.7;65.1;0;0;;;10;2
