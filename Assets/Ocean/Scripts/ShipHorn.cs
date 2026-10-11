@@ -24,6 +24,9 @@ public class ShipHorn : MonoBehaviour
     private AudioSource audioSource;
     private AudioClip hornClip;
 
+    /// <summary>Гудок звучит (запись действий C1: начало/конец, длительность).</summary>
+    public bool IsSounding => audioSource != null && audioSource.isPlaying;
+
     void Awake()
     {
         audioSource = GetComponent<AudioSource>();

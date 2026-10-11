@@ -3,7 +3,7 @@
 //
 // Первый потребитель шины ExerciseEvents: подписан только на шину и ничего
 // не знает об источниках (маршрут, мели, в будущем — цели и вводные).
-// Так же будут подключены запись (C1), оценка (C2) и тактильный отклик (D3).
+// Так же подключены запись (C1, ExerciseRecorder), будут — оценка (C2) и тактильный отклик (D3).
 // ============================================================
 using UnityEngine;
 
@@ -17,6 +17,8 @@ public class ExerciseConsoleLog : MonoBehaviour
 
     private void Log(ExerciseEvent e)
     {
+        // Действия обучающегося (C1) вне упражнения не печатаются — иначе в свободном плавании каждая перекладка в консоли
+        if (!e.InExercise && e.Type >= ExerciseEventType.HelmStarted) return;
         if (!e.InExercise && !logOutsideExercise
             && e.Type != ExerciseEventType.ScenarioLoaded && e.Type != ExerciseEventType.ExerciseEnded) return;
 

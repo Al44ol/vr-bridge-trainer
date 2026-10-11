@@ -14,13 +14,20 @@
 // событие сама — у всех источников одни часы. События вне упражнения
 // (свободное плавание) рассылаются, но в журнал упражнения не попадают.
 //
-// Одна запись на все типы событий — строка будущего events.csv (C1).
+// Одна запись на все типы событий — строка events.csv (C1, SessionFormat).
 // Значения Index / Value / Value2 по типам:
 //   WaypointPassed       Index — номер точки,  Value — XTE при прохождении, м;  Value2 — XTE доп., м
 //   CorridorExit         Index — номер участка, Value — XTE, м;                 Value2 — XTE доп., м
 //   CorridorReturn       Index — номер участка, Value — max |XTE| за выход, м;   Value2 — длительность выхода, с
 //   ShoalWarning*/Grounded/Refloated  Index — номер опасности, Value — расстояние до неё, м; Value2 — глубина, м
 //   ExerciseEnded        EndReason — причина, Value — пройдено точек, Value2 — всего точек
+// Действия обучающегося (C1, источник — BridgeActionMonitor, ControlActionDetector):
+//   HelmStarted          Value — исходный заданный руль, ° (> 0 — ПБ)
+//   HelmEnded            Value — итоговый заданный руль, °;  Value2 — длительность перекладки, с
+//   TelegraphChanged     Index — положение (TelegraphOrder), Value — новый SF; Value2 — прежний SF;
+//                        ByInstructor — положение поставлено кодом (не рукой)
+//   HornStarted / HornEnded   Value (у HornEnded) — длительность звучания, с
+//   WeatherChanged       Index — новый пресет (WeatherPresetId), Value — прежний пресет
 // XTE > 0 — судно правее линии пути.
 // ============================================================
 using System;
@@ -39,7 +46,14 @@ public enum ExerciseEventType
     Grounded,
     Refloated,
     Collision,          // B3
-    ExerciseEnded
+    ExerciseEnded,
+    // Действия обучающегося (C1) — новые типы только в конец
+    HelmStarted,
+    HelmEnded,
+    TelegraphChanged,
+    HornStarted,
+    HornEnded,
+    WeatherChanged
 }
 
 public enum ScenarioEndReason
@@ -84,21 +98,33 @@ public struct ExerciseEvent
     {
         string head = $"t = {ScenarioText.Clock(Time)}";
         string ship = $"{Position}, курс {Math.Round(HeadingDeg, 1) % 360.0:F1}°, {SpeedKnots:F1} уз";
+        return $"{head}  {Describe()}. {ship}";
+    }
+
+    /// <summary>Описание события на русском, без времени и состояния судна (консоль, столбец description).</summary>
+    public string Describe()
+    {
         switch (Type)
         {
-            case ExerciseEventType.ScenarioLoaded: return $"{head}  Сценарий «{Subject}» загружен, брифинг. {ship}";
-            case ExerciseEventType.ExerciseStarted: return $"{head}  НАЧАЛО упражнения «{Subject}». {ship}";
-            case ExerciseEventType.WaypointPassed: return $"{head}  Пройдена точка {Index} «{Subject}», XTE {Value:+0;−0;0} м (доп. {Value2:F0} м). {ship}";
-            case ExerciseEventType.CorridorExit: return $"{head}  ВЫХОД ИЗ КОРИДОРА на участке {Index}, XTE {Value:+0;−0;0} м (доп. {Value2:F0} м). {ship}";
-            case ExerciseEventType.CorridorReturn: return $"{head}  Возврат в коридор на участке {Index}: max |XTE| {Value:F0} м, вне коридора {Value2:F0} с. {ship}";
-            case ExerciseEventType.ShoalWarningStarted: return $"{head}  Опасное приближение к «{Subject}» ({Value2:F1} м), D = {Value:F0} м. {ship}";
-            case ExerciseEventType.ShoalWarningCleared: return $"{head}  Опасность миновала, D = {Value:F0} м. {ship}";
-            case ExerciseEventType.Grounded: return $"{head}  ПОСАДКА НА МЕЛЬ «{Subject}» ({Value2:F1} м). {ship}";
-            case ExerciseEventType.Refloated: return $"{head}  Снятие с мели «{Subject}»{(ByInstructor ? " (инструктор)" : " своим ходом")}. {ship}";
-            case ExerciseEventType.Collision: return $"{head}  СТОЛКНОВЕНИЕ с «{Subject}». {ship}";
-            case ExerciseEventType.ExerciseEnded: return $"{head}  КОНЕЦ упражнения: {ScenarioText.EndReason(EndReason)}{(ByInstructor ? " (инструктор)" : "")}, точек {Value:F0}/{Value2:F0}. {ship}";
+            case ExerciseEventType.ScenarioLoaded: return $"Сценарий «{Subject}» загружен, брифинг";
+            case ExerciseEventType.ExerciseStarted: return $"НАЧАЛО упражнения «{Subject}»";
+            case ExerciseEventType.WaypointPassed: return $"Пройдена точка {Index} «{Subject}», XTE {Value:+0;−0;0} м (доп. {Value2:F0} м)";
+            case ExerciseEventType.CorridorExit: return $"ВЫХОД ИЗ КОРИДОРА на участке {Index}, XTE {Value:+0;−0;0} м (доп. {Value2:F0} м)";
+            case ExerciseEventType.CorridorReturn: return $"Возврат в коридор на участке {Index}: max |XTE| {Value:F0} м, вне коридора {Value2:F0} с";
+            case ExerciseEventType.ShoalWarningStarted: return $"Опасное приближение к «{Subject}» ({Value2:F1} м), D = {Value:F0} м";
+            case ExerciseEventType.ShoalWarningCleared: return $"Опасность миновала, D = {Value:F0} м";
+            case ExerciseEventType.Grounded: return $"ПОСАДКА НА МЕЛЬ «{Subject}» ({Value2:F1} м)";
+            case ExerciseEventType.Refloated: return $"Снятие с мели «{Subject}»{(ByInstructor ? " (инструктор)" : " своим ходом")}";
+            case ExerciseEventType.Collision: return $"СТОЛКНОВЕНИЕ с «{Subject}»";
+            case ExerciseEventType.ExerciseEnded: return $"КОНЕЦ упражнения: {ScenarioText.EndReason(EndReason)}{(ByInstructor ? " (инструктор)" : "")}, точек {Value:F0}/{Value2:F0}";
+            case ExerciseEventType.HelmStarted: return $"Перекладка руля начата (было {ScenarioText.Rudder(Value)})";
+            case ExerciseEventType.HelmEnded: return $"Руль переложен на {ScenarioText.Rudder(Value)} за {ScenarioText.Num(Value2, 1)} с";
+            case ExerciseEventType.TelegraphChanged: return $"Телеграф: «{Subject}»{(ByInstructor ? " (инструктор)" : "")}";
+            case ExerciseEventType.HornStarted: return "Гудок";
+            case ExerciseEventType.HornEnded: return $"Гудок окончен, {ScenarioText.Num(Value, 1)} с";
+            case ExerciseEventType.WeatherChanged: return $"Погода: {Subject}";
         }
-        return $"{head}  {Type} {Subject}";
+        return $"{Type} {Subject}";
     }
 }
 

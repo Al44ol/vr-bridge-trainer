@@ -64,6 +64,10 @@ public class EngineTelegraph : MonoBehaviour
 
     public float SpeedFactor => currentSpeedFactor;
     public string PositionName => currentPosition;
+    /// <summary>Рычаг держат рукой (запись действий C1).</summary>
+    public bool IsGrabbed => isGrabbed;
+    /// <summary>Последнее положение поставлено кодом (SetSpeedFactor / SetStop), а не рукой.</summary>
+    public bool LastChangeFromCode { get; private set; }
 
     void Start()
     {
@@ -194,14 +198,15 @@ public class EngineTelegraph : MonoBehaviour
         tracking = false;
         if (target == currentIndex) return;
         currentIndex = target;
-        ApplyPosition(currentIndex);
+        ApplyPosition(currentIndex, fromCode: true);
         if (audioSource != null && clickClip != null) audioSource.PlayOneShot(clickClip);
     }
 
-    private void ApplyPosition(int index)
+    private void ApplyPosition(int index, bool fromCode = false)
     {
         currentPosition = positions[index].name;
         currentSpeedFactor = positions[index].speedFactor;
+        LastChangeFromCode = fromCode;
     }
 
     private void GenerateClickSound()

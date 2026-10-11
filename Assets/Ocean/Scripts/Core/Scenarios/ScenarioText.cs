@@ -50,6 +50,39 @@ public static class ScenarioText
         }
     }
 
+    /// <summary>Короткое название пресета погоды (события, журнал).</summary>
+    public static string WeatherTitle(WeatherPresetId w)
+    {
+        switch (w)
+        {
+            case WeatherPresetId.Calm: return "штиль";
+            case WeatherPresetId.Storm: return "шторм";
+            case WeatherPresetId.Night: return "ночь";
+            default: return "умеренное волнение";
+        }
+    }
+
+    /// <summary>Положение телеграфа по SF — ближайшее из TelegraphOrder (C1: столбец telegraph).</summary>
+    public static TelegraphOrder OrderFromSpeedFactor(double sf)
+    {
+        TelegraphOrder best = TelegraphOrder.Stop;
+        double bestDiff = double.MaxValue;
+        foreach (TelegraphOrder o in (TelegraphOrder[])Enum.GetValues(typeof(TelegraphOrder)))
+        {
+            double d = Math.Abs(SpeedFactor(o) - sf);
+            if (d < bestDiff) { bestDiff = d; best = o; }
+        }
+        return best;
+    }
+
+    /// <summary>Угол руля словами: «10,0° ПБ», «5,5° ЛБ», «0°».</summary>
+    public static string Rudder(double deg)
+    {
+        if (double.IsNaN(deg)) return "—";
+        if (Math.Abs(deg) < 0.05) return "0°";
+        return $"{Num(Math.Abs(deg), 1)}° {(deg > 0 ? "ПБ" : "ЛБ")}";
+    }
+
     public static string TimeOfDayTitle(TimeOfDay t)
     {
         switch (t)

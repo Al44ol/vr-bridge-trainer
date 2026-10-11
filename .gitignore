@@ -112,3 +112,6 @@ InitTestScene*.unity*
 .plastic/
 build/
 *.slnx
+
+# Записи упражнений (C1): в git не попадают; нужную для ВКР сессию — git add -f
+/ThesisData/Sessions/

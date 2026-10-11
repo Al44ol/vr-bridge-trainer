@@ -4,25 +4,27 @@
 
 > Перечитай CLAUDE.md, Docs/Handoff.md и Docs/ThesisNotes.md. Двигаемся по Docs/Plan.md: запрос N. Сначала план, код — после моего «ок».
 
-### Запрос для следующего чата (запрос 7, C1) — скопировать целиком
+### Запрос 7 (C1) — состояние
 
-B2 проверен в шлеме, замечаний нет.
+Код C1 готов, тесты вне Unity 22/22, коммит сделан. **Не сделано:** Setup C1 в сцене, Unity Test Runner (ожидается 89/89), проверка в шлеме (см. «Итоги запроса 7»). Если в новом чате продолжаем C1 — начать с этой проверки.
+
+### Запрос для следующего чата (запрос 8, B3) — скопировать целиком, когда C1 проверен
 
 ```
-Перечитай CLAUDE.md, Docs/Handoff.md и Docs/ThesisNotes.md. Двигаемся по Docs/Plan.md: запрос 7 (C1, запись упражнения). Сначала план и формат файлов, код — после моего «ок».
+Перечитай CLAUDE.md, Docs/Handoff.md и Docs/ThesisNotes.md. Двигаемся по Docs/Plan.md: запрос 8 (B3, другие суда и навигационные огни). Сначала план, код — после моего «ок».
 
-Берём текст запроса 7 из Plan.md со следующими уточнениями по итогам B2:
-- Источник событий — шина ExerciseEvents (Core): подписка на ExerciseEvents.Raised, журнал ExerciseEvents.Log, время — ExerciseEvent.Time (время упражнения, симуляционное). Одна запись ExerciseEvent = одна строка events.csv; смысл Index/Value/Value2 по типам — в шапке ExerciseEvents.cs и в ThesisNotes, табл. 6.2. Действия обучающегося (штурвал, телеграф, гудок, погода) — новые типы событий в той же шине.
-- Сессия = упражнение ScenarioRunner: от ExerciseStarted до ExerciseEnded (причина — EndReason). XTE и номер участка для track.csv — ScenarioRunner.Route (RouteTracker).
-- Без клавиатуры в шлеме: ID обучающегося — предложи способ (VR-цифровая клавиатура на панели ScenarioPanel перед «Начать» или поле в инспекторе до окна инструктора D1).
-- Replay — в редакторе (окно Tools/VR Bridge/...), окно инструктора будет в D1.
+Берём текст запроса 8 из Plan.md со следующими уточнениями по итогам B2 и C1:
+- Цели задаются в ScenarioDefinition.traffic (сейчас заготовка TrafficShipDefinition) — расширить, не ломая ассет B2-01.
+- Запись целей: каждая цель реализует ITrackedTarget и регистрируется в ExerciseTargets (Core) — ExerciseRecorder сам пишет targets.csv.
+- Столкновение — событие ExerciseEventType.Collision в шину (Subject — id цели), ScenarioRunner уже завершает по нему упражнение.
+- Модель движения целей — тот же ShipDynamicsModel (Core), авторулевой и расчёт «точки встречи» — чистые классы Core с EditMode-тестами.
+- Видимость огней в шлеме проверяем через Virtual Desktop (Play Mode), 90 Гц.
 
-В конце: список файлов, ручные шаги, что проверить, запись в ThesisNotes.md, коммит и push.
+В конце: список файлов, ручные шаги, что проверить в шлеме, запись в ThesisNotes.md, коммит и push.
 ```
 
 ---
-
-## Состояние на 11.10.2026 (после запросов 1–6)
+## Состояние на 11.10.2026 (после запросов 1–7)
 
 | Запрос | Статус |
 |---|---|
@@ -32,8 +34,18 @@ B2 проверен в шлеме, замечаний нет.
 | 4. Качка от реальных волн | Готово: проверено в шлеме, стенд запущен в редакторе (`ThesisData/Seakeeping/`) |
 | 5. B1 Учебная акватория | Готово: проверено в шлеме, **Test Runner 67/67** (все тесты проекта), коммит |
 | 6. B2 Движок сценариев | Готово: проверено в шлеме, **Test Runner 78/78**, коммит |
-| 7. C1 Запись упражнения | Следующий |
+| 7. C1 Запись упражнения | Код готов, тесты вне Unity 22/22, коммит; **ждёт Setup C1, Test Runner (89) и проверки в шлеме** |
+| 8. B3 Другие суда и огни | Следующий |
 
+### Итоги запроса 7 (подробно — ThesisNotes, раздел 7; формат файлов — 7.4)
+- Core `Core/Recording/`: `CsvFormat`, `SessionFormat` (+ `SessionMeta` для session.json), `SessionFileWriter` (фоновый поток), `SessionRecorder` + `TrackSampler`, `SessionStorage` (ротация, `keep`), `SessionReader` (`RecordedSession`, `StateAt`), `ControlActionDetector`, `ExerciseTargets`. Сцена `Scripts/Recording/`: `ExerciseRecorder` (объект Scenario, −84), `BridgeActionMonitor` (ShipRoot, −87). Editor: `SetupRecording` (`Tools/VR Bridge/Setup C1 Recording`), `SessionReplayWindow` (`Tools/VR Bridge/Session Replay`). Тесты `RecordingTests` (11).
+- Правки: `ExerciseEvents` — 6 новых типов действий (в конец enum) и `Describe()` (`ToString` через него, вывод в консоль прежний); `ExerciseSummary` — число действий (строка на панели результатов); `ScenarioText` — `WeatherTitle`, `OrderFromSpeedFactor`, `Rudder`; `EngineTelegraph.IsGrabbed/LastChangeFromCode`; `ShipHorn.IsSounding`; `WeatherController.CurrentPresetId`; `ExerciseConsoleLog` — действия вне упражнения не печатает; `ScenarioPanel` — строка ID + VR-клавиатура на брифинге, папка записи на результатах; `.gitignore` — `/ThesisData/Sessions/`.
+- Решения пользователя: VR-клавиатура ID (если будут проблемы — переделать; запасной путь — поле `traineeId` в инспекторе); сессии в git не коммитим; ротация последних 10 (метка «Сохранить» и `maxSessions = 0` — защита данных эксперимента); дополнительные столбцы `xte_limit_m` и `grounded` в track.csv оставлены.
+- Вне задачи (обсуждено): графики записанной сессии в шлеме возможны и в автономном режиме — рисовать по данным (`SessionReader` в Core, без редактора) на VR-панели один раз после упражнения, не SVG; место — дебрифинг C3 / планшет D2.
+- Замер вне Unity (.NET 10): строка траектории 1,3 мкс, событие 0,7 мкс, передача фоновому потоку 2,1 мкс, запись на диск до 1,7 мс (фон). Сессия B2-01 (1191,7 с) — 5960 строк, 462 КБ.
+- .meta новых файлов созданы вручную (Unity был в фоне) — Unity их примет.
+- **Ручные шаги:** дать Unity скомпилировать → `Tools/VR Bridge/Setup C1 Recording` → Ctrl+S → Test Runner EditMode (89/89).
+- **Проверить в шлеме:** брифинг — строка «Обучающийся», «Ввести ID обучающегося» → клавиатура (цифры, Стереть, Очистить, Готово/Отмена), ID отображается; «Начать» → в консоли `[Запись] Сессия … → …`; поработать штурвалом, телеграфом (провести рычаг через несколько положений), гудком, сменить погоду — в консоли события действий (одна команда телеграфа на перевод рычага); завершить (прибытие / посадка / «Завершить досрочно») — на результатах строка «Запись: …» и «Действия: …»; в `ThesisData/Sessions/<папка>` 4 файла, track.csv открывается в Excel (через «Из текста/CSV», разделитель — точка); выход из Play Mode во время упражнения → session.json с `completed: false`, `Interrupted`; `Tools/VR Bridge/Session Replay` — траектория, перемотка, события, «Сохранить»; замер F8 с `ExerciseRecorder.record` вкл/выкл — частота одинаковая (цифры — в ThesisNotes 7.6).
 ### Итоги запроса 6 (подробно — ThesisNotes, раздел 6)
 - Core `Core/Scenarios/`: `ScenarioDefinition`, `RouteTracker`, `ExerciseEvents` (шина), `ExerciseSummary`, `ScenarioText`, `DemoScenario`, `AssessmentCriteria` (заготовка). Сцена `Scripts/Scenarios/`: `ScenarioRunner`, `ScenarioPanel`, `ExerciseConsoleLog`. Editor: `SetupScenarios` (+ `ScenarioLibrarySync`), `ScenarioDefinitionEditor`, `ScenarioRunnerEditor` (гизмо и ручки маршрута).
 - Правки: `ShipDynamicsModel.Teleport(..., u, δ?)` (без новых аргументов — как раньше), `ShipNavigation.TeleportTo(..., уз, руль)`, `Paused`, `SetRudderOrder`; `EngineTelegraph.SetSpeedFactor` (`SetStop` через него); `SteeringWheel.SetRudderAngle`; `WeatherController.SetPreset(id, instant)`; `GroundingMonitor.Raise` → шина; `BridgeMenu.SetGroupOrder` + `hideWhenUnavailable`.
@@ -101,3 +113,5 @@ B2 проверен в шлеме, замечаний нет.
 10. **B1 — источники** раздела 5 (IALA MBS, российские правила ограждения) не сверены; значения Δ = 0,5 м и D_пред = 1 кбт — предварительные (обосновать в главе 2).
 11. **B2 — тонкая настройка по желанию** (в шлеме проверено): размер и положение панели (`ScenarioPanel.canvasScale/distanceFromHead/downOffset`), задержка показа при старте (`startDelay`).
 12. **B2 — обоснование допусков** XTE доп. (250/150 м) и лимита времени — глава 2 (раздел 6.11 ThesisNotes).
+13. **C1 — пороги действий** (ε_δ 0,5°, ε_ст 0,2°, T_уст 1 с, T_тел 0,5 с) — предварительные, обосновать в главе 2 (ThesisNotes, табл. 7.5); результаты замера F8 с записью и без — дописать в 7.6.
+14. **C1 — VR-клавиатура ID**: если неудобна в шлеме — заменить (поле в инспекторе остаётся; в D1 — ввод в окне инструктора).

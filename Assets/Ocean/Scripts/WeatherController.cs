@@ -96,6 +96,21 @@ public class WeatherController : MonoBehaviour
         windSpeed = 0.6f
     };
 
+    /// <summary>Текущий (целевой) пресет — запись смены погоды (C1).</summary>
+    public WeatherPresetId CurrentPresetId
+    {
+        get
+        {
+            switch (currentPreset)
+            {
+                case "calm": return WeatherPresetId.Calm;
+                case "storm": return WeatherPresetId.Storm;
+                case "night": return WeatherPresetId.Night;
+                default: return WeatherPresetId.Moderate;
+            }
+        }
+    }
+
     private WeatherPreset currentState;
     private WeatherPreset targetState;
     private float transitionProgress = 1f;

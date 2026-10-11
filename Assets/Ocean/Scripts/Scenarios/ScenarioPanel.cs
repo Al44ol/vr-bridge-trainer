@@ -9,6 +9,9 @@
 //     условия завершения), кнопки «Начать» / «К выбору» / «Закрыть»;
 //   • результаты — предварительный итог (ExerciseSummary; полноценно — C3),
 //     «Перезапустить» / «К выбору» / «Закрыть».
+// C1: на брифинге — ID обучающегося (обезличенный код) и цифровая
+// VR-клавиатура «Ввести ID» → ExerciseRecorder.TraineeId; на результатах —
+// папка записанной сессии.
 // Панель появляется перед игроком и закреплена в системе судна (объект —
 // дочерний к Ship), как BridgeMenu. Строится в коде, сцену не правит.
 // Команды меню: «Выбор сценария…», «Начать упражнение», «Брифинг»/«Результаты»,
@@ -26,9 +29,13 @@ using UnityEngine.UI;
 
 public class ScenarioPanel : MonoBehaviour
 {
-    private enum Mode { Hidden, Selection, Briefing, Results }
+    private enum Mode { Hidden, Selection, Briefing, Results, Keypad }
 
     public ScenarioRunner runner;
+    [Tooltip("Запись упражнения (C1): ID обучающегося, папка сессии. Пусто — найти")]
+    public ExerciseRecorder recorder;
+    [Tooltip("Наибольшая длина ID обучающегося, цифр")]
+    public int traineeIdMaxLength = 8;
 
     [Header("Запуск")]
     [Tooltip("При входе в Play Mode показать выбор сценария")]
@@ -50,6 +57,7 @@ public class ScenarioPanel : MonoBehaviour
     private static readonly Color NeutralColor = new Color(0.33f, 0.35f, 0.4f);
     private static readonly Color TitleColor = new Color(0.85f, 0.92f, 1f);
     private static readonly Color MutedColor = new Color(0.62f, 0.68f, 0.75f);
+    private static readonly Color WarnColor = new Color(1f, 0.78f, 0.35f);
 
     private Mode mode = Mode.Hidden;
     private GameObject panel;
@@ -57,6 +65,7 @@ public class ScenarioPanel : MonoBehaviour
     private RectTransform background;
     private readonly List<BridgeMenuCommand> menuCommands = new List<BridgeMenuCommand>();
     private ScenarioRunner subscribed;
+    private string keypadBuffer = "";
 
     public bool IsOpen => canvas != null && canvas.enabled;
 
@@ -93,6 +102,7 @@ public class ScenarioPanel : MonoBehaviour
     void Start()
     {
         if (runner == null) runner = ScenarioRunner.Instance != null ? ScenarioRunner.Instance : FindAnyObjectByType<ScenarioRunner>();
+        if (recorder == null) recorder = ExerciseRecorder.Instance != null ? ExerciseRecorder.Instance : FindAnyObjectByType<ExerciseRecorder>();
         Subscribe();
         BuildCanvas();
         if (showSelectionOnStart) StartCoroutine(ShowSelectionDelayed());
@@ -164,6 +174,7 @@ public class ScenarioPanel : MonoBehaviour
 
         if (Phase == ScenarioRunner.Phase.Briefing)
         {
+            TraineeRow(ref y);
             Text("Судно стоит, пока не нажата «Начать». Начальные условия будут поставлены заново.", 15f, MutedColor, ref y);
             ButtonRow(ref y, ButtonHeight + 6f,
                 ("Начать", StartColor, () => runner.StartExercise()),
@@ -185,12 +196,77 @@ public class ScenarioPanel : MonoBehaviour
         Text(r.Title, 17f, MutedColor, ref y);
         y -= Gap;
         Text(r.ToPanelText(), 19f, Color.white, ref y);
+        if (recorder != null && !string.IsNullOrEmpty(recorder.LastSessionFolder))
+            Text($"Запись: {System.IO.Path.GetFileName(recorder.LastSessionFolder)}", 15f, MutedColor, ref y);
         y -= Gap;
         ButtonRow(ref y, ButtonHeight,
             ("Перезапустить", StartColor, () => runner.Restart()),
             ("К выбору", NeutralColor, ShowSelection),
             ("Закрыть", NeutralColor, Hide));
         EndContent(y);
+    }
+
+    // ─────────── ID обучающегося (C1) ───────────
+    private void TraineeRow(ref float y)
+    {
+        if (recorder == null || !recorder.isActiveAndEnabled || !recorder.record)
+        {
+            Text("Запись упражнения выключена.", 16f, MutedColor, ref y);
+            return;
+        }
+        string id = recorder.TraineeId;
+        Text(string.IsNullOrEmpty(id)
+                ? "<b>Обучающийся:</b> ID не введён — запись как «noid»"
+                : $"<b>Обучающийся:</b> {id}", 18f, string.IsNullOrEmpty(id) ? WarnColor : Color.white, ref y);
+        ButtonRow(ref y, ButtonHeight, ("Ввести ID обучающегося", ButtonColor, ShowKeypad));
+    }
+
+    /// <summary>Цифровая VR-клавиатура ID обучающегося (вводит инструктор, без ФИО).</summary>
+    public void ShowKeypad()
+    {
+        if (recorder == null) return;
+        if (mode != Mode.Keypad) keypadBuffer = DigitsOnly(recorder.TraineeId);
+        BeginContent(Mode.Keypad);
+        float y = Top;
+        Title("ID обучающегося", ref y);
+        Text("Обезличенный код из цифр — без фамилии. Попадает в имя папки записи и в session.json.", 16f, MutedColor, ref y);
+        Text(string.IsNullOrEmpty(keypadBuffer) ? "—" : keypadBuffer, 40f, Color.white, ref y, FontStyles.Bold);
+        y -= Gap;
+        for (int row = 0; row < 3; row++)
+            ButtonRow(ref y, 58f, Key(row * 3 + 1), Key(row * 3 + 2), Key(row * 3 + 3));
+        ButtonRow(ref y, 58f,
+            ("← Стереть", NeutralColor, () => { if (keypadBuffer.Length > 0) keypadBuffer = keypadBuffer.Substring(0, keypadBuffer.Length - 1); ShowKeypad(); }),
+            Key(0),
+            ("Очистить", NeutralColor, () => { keypadBuffer = ""; ShowKeypad(); }));
+        y -= Gap;
+        ButtonRow(ref y, ButtonHeight,
+            ("Готово", StartColor, () => { recorder.TraineeId = keypadBuffer; AfterKeypad(); }),
+            ("Отмена", NeutralColor, AfterKeypad));
+        EndContent(y);
+    }
+
+    private (string, Color, UnityAction) Key(int digit)
+    {
+        string d = digit.ToString();
+        return (d, ButtonColor, () =>
+        {
+            if (keypadBuffer.Length < Mathf.Max(1, traineeIdMaxLength)) keypadBuffer += d;
+            ShowKeypad();
+        });
+    }
+
+    private void AfterKeypad()
+    {
+        if (Phase == ScenarioRunner.Phase.Briefing) ShowBriefing();
+        else ShowSelection();
+    }
+
+    private static string DigitsOnly(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        var b = new StringBuilder();
+        foreach (char c in s) if (c >= '0' && c <= '9') b.Append(c);
+        return b.ToString();
     }
 
     public void Hide()

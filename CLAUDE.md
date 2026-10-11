@@ -47,8 +47,8 @@ VR-тренажёр судоводительского мостика. Прот�
 - `Rain` — **RainEffect** (Setup Rain): частицы `RainParticles` создаются в рантайме, излучатель над камерой; интенсивность задаёт WeatherController (только storm)
 - `ShipRoot/Ship/RainShelter` — BoxCollider-триггер (слой Ignore Raycast) = объём рубки, капли внутри уничтожаются. Размер подгоняется вручную в Scene View, Setup Rain его не перезаписывает
 - `WaterArea` — **WaterAreaView** (B1): буи/суша из ассета `WaterArea_Demo`, отладочный слой мелей; редактирование — выделить объект, ручки в Scene View
-- `ShipRoot` также несёт **GroundingMonitor** (B1): контроль глубины, посадка на мель, сигнализация
-- `Scenario` — **ScenarioRunner** (B2, порядок −88) + **ExerciseConsoleLog**: сценарий, маршрут, шина событий → консоль
+- `ShipRoot` также несёт **GroundingMonitor** (B1): контроль глубины, посадка на мель, сигнализация; с C1 — **BridgeActionMonitor** (−87): действия обучающегося → шина
+- `Scenario` — **ScenarioRunner** (B2, порядок −88) + **ExerciseConsoleLog**: сценарий, маршрут, шина событий → консоль; с C1 — **ExerciseRecorder** (−84): запись упражнения в файлы
 - `PerfCapture` — **FrameTimingCapture** (Setup Frame Timing): F8 — замер времени кадра CPU/GPU 30 с → `ThesisData/Performance/`
 - `Hands Permissions Manager` — префаб шаблона
 
@@ -71,7 +71,7 @@ XR Origin — дочерний объект Ship, игрок качается в
 - Знак штурвала: Auto — по часовой с места оператора = ПБ. Курс ψ: 0 = N, по часовой; δ > 0 — ПБ.
 - Пока ShipNavigation включён, `WorldOrigin.ExternalControl = true` (ход от телеграфа A1 и стрелки отключены).
 - Тест циркуляции: F5 или контекстное меню ShipNavigation; лог — выдвиг, тактический диаметр, D (теория при умолчаниях: 614 м = 4.1 L).
-- Пункты меню: Setup A1 Ocean → Setup A1.1 Hull Water → Setup Telegraph Model → Setup A2 Navigation → Setup Console and Sky → Setup A2.2 Controls → Setup Rain, Setup Frame Timing (запрос 1), Setup Seakeeping (запрос 4), Setup B1 Water Area + Rebuild Demo Water Area + Ship To Demo Start (запрос 5), Setup B2 Scenarios + Rebuild Demo Scenario (запрос 6). Окна: Manoeuvring Trials (запрос 2), Model Calibration (запрос 3), Seakeeping Trials (запрос 4) → `ThesisData/Seakeeping/`.
+- Пункты меню: Setup A1 Ocean → Setup A1.1 Hull Water → Setup Telegraph Model → Setup A2 Navigation → Setup Console and Sky → Setup A2.2 Controls → Setup Rain, Setup Frame Timing (запрос 1), Setup Seakeeping (запрос 4), Setup B1 Water Area + Rebuild Demo Water Area + Ship To Demo Start (запрос 5), Setup B2 Scenarios + Rebuild Demo Scenario (запрос 6), Setup C1 Recording (запрос 7). Окна: Session Replay (запрос 7), Manoeuvring Trials (запрос 2), Model Calibration (запрос 3), Seakeeping Trials (запрос 4) → `ThesisData/Seakeeping/`.
 
 ## Учебная акватория (запрос 5, B1)
 - Данные — ScriptableObject `WaterArea` (`Core/WaterArea/`): знаки МАМС регион A (`AidType`, внешний вид — `IalaMarks`), мели (многоугольник + наименьшая глубина), суша, фарватеры (ось + ширина), границы, глубина по умолчанию. `WorldPosition` перенесён в Core (`Core/WorldPosition.cs`).
@@ -93,9 +93,17 @@ XR Origin — дочерний объект Ship, игрок качается в
 - Время суток (B4), видимость (C4), другие суда (B3), критерии (C2) — пока только поля.
 - Тесты: `ScenarioTests` (11); всего 78 (Unity Test Runner 78/78). Шина: публикация во время рассылки — в очередь, доставка после текущего события.
 
+## Запись упражнения (запрос 7, C1)
+- Core `Core/Recording/`: `CsvFormat`, `SessionFormat` (столбцы, `session.json` = `SessionMeta`, имя папки), `SessionFileWriter` (фоновый поток), `SessionRecorder` + `TrackSampler`, `SessionStorage` (список, ротация, метка `keep`), `SessionReader` (→ `RecordedSession`, события обратно в `ExerciseEvent`, `StateAt(t)`) — офлайн-вход для C2/C3, `ControlActionDetector`, `ExerciseTargets` (реестр целей для B3 → targets.csv).
+- Сессия = упражнение (ExerciseStarted → ExerciseEnded). Папка `<yyyyMMdd_HHmmss>_<сценарий>_<ID>`: track.csv (5 Гц по времени упражнения), targets.csv, events.csv (вся шина + `description`), session.json (сценарий с маршрутом, судно, приложение, итог). Формат — ThesisNotes, раздел 7.4.
+- Где: редактор — `ThesisData/Sessions/` (**в .gitignore**; нужную сессию — `git add -f`), сборка — Документы/VRBridgeTrainer/Sessions, Quest — persistentDataPath/Sessions. Ротация `maxSessions` = 10 (0 — без ротации, для эксперимента); метка «Сохранить» в Replay (файл `keep`) защищает сессию.
+- Действия обучающегося — новые типы шины (в конец enum): HelmStarted/HelmEnded, TelegraphChanged, HornStarted/HornEnded, WeatherChanged; источник — `BridgeActionMonitor` (ShipRoot), пороги в инспекторе (0,5° / 0,2° / 1 с / 0,5 с, предварительные). Органам управления добавлены только свойства: `EngineTelegraph.IsGrabbed/LastChangeFromCode`, `ShipHorn.IsSounding`, `WeatherController.CurrentPresetId`. Гудок пока фиксированные 3 с (C4).
+- ID обучающегося — цифры, без ФИО: VR-клавиатура на брифинге («Ввести ID обучающегося», ScenarioPanel) или `ExerciseRecorder.traineeId`; без ID — `noid`.
+- Replay: `Tools/VR Bridge/Session Replay` (без Play Mode): карта, шкала времени ×1…×60, состояние в момент t, события.
+- Тесты: `RecordingTests` (11); всего 89 (вне Unity 22/22 — Recording + Scenario).
 ## Качка на волнах (запрос 4)
 - Поле волн — чистый класс `Core/Seakeeping/OceanWaveField` (единый источник для шейдера и C#). `OceanWaves` заполняет его (`ConfigureField`) и шлёт те же значения в шейдер. Фазы θ продвигаются в **FixedUpdate**; в кадре — перенос на время отображения `OceanWaves.RenderTimeOffset` = −(1 − α)·Δt (та же α, что в ShipNavigation).
-- Порядок выполнения: WorldOrigin −100 → ShipNavigation −90 → ScenarioRunner −88 (B2) → GroundingMonitor −85 (B1) → OceanWaves −80 → ShipMotion −70 → WaterAreaView −60 (B1).
+- Порядок выполнения: WorldOrigin −100 → ShipNavigation −90 → ScenarioRunner −88 (B2) → BridgeActionMonitor −87 (C1) → GroundingMonitor −85 (B1) → ExerciseRecorder −84 (C1) → OceanWaves −80 → ShipMotion −70 → WaterAreaView −60 (B1).
 - Высота воды для других объектов (буи B1, суда B3): `OceanWaves.Instance.SampleHeight(WorldPosition)` / `SampleWaterLevel(Vector3 сцены)` — обратная задача Герстнера, 3 итерации.
 - Мореходные поля ShipParameters (B, d, GM, C_B, C_WP, T_φ/T_z/T_θ, ζ) заполнены только у `Model45m` (Setup Seakeeping, допущения помечены в `ShipParameters_Sources.md`).
 - Шейдер у борта по-прежнему гасит волны к нулю (`_HullDampMin`): если в шлеме корпус «отрывается» от воды — правка «вода у борта → плоскость ватерлинии судна» (отложена до проверки).

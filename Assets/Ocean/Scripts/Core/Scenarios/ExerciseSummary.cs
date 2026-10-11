@@ -21,6 +21,8 @@ public sealed class ExerciseSummary
     public double MaxAbsXte;
     public double TimeOutsideCorridor;
     public int ShoalWarnings, Groundings;
+    /// <summary>Действия обучающегося (C1): перекладки руля, команды телеграфу, гудки, смены погоды.</summary>
+    public int HelmActions, TelegraphOrders, HornSignals, WeatherChanges;
 
     public static ExerciseSummary From(ScenarioDefinition scenario, IReadOnlyList<ExerciseEvent> log, RouteTracker route)
     {
@@ -44,6 +46,10 @@ public sealed class ExerciseSummary
                 {
                     case ExerciseEventType.ShoalWarningStarted: s.ShoalWarnings++; break;
                     case ExerciseEventType.Grounded: s.Groundings++; break;
+                    case ExerciseEventType.HelmEnded: s.HelmActions++; break;
+                    case ExerciseEventType.TelegraphChanged: if (!e.ByInstructor) s.TelegraphOrders++; break;
+                    case ExerciseEventType.HornStarted: s.HornSignals++; break;
+                    case ExerciseEventType.WeatherChanged: s.WeatherChanges++; break;
                     case ExerciseEventType.ExerciseEnded:
                         s.Reason = e.EndReason; s.ByInstructor = e.ByInstructor; s.Duration = e.Time; break;
                 }
@@ -63,6 +69,7 @@ public sealed class ExerciseSummary
         b.AppendLine($"Выходов из коридора: {CorridorExits}, вне коридора {ScenarioText.Num(TimeOutsideCorridor)} с");
         b.AppendLine($"Опасных приближений к мели: {ShoalWarnings}");
         b.AppendLine($"Посадок на мель: {Groundings}");
+        b.AppendLine($"Действия: перекладок руля {HelmActions}, команд телеграфу {TelegraphOrders}, гудков {HornSignals}");
         b.AppendLine();
         b.Append("<size=80%><color=#9AA6B2>Предварительный итог. Оценка по критериям и разбор — в следующих версиях.</color></size>");
         return b.ToString();
