@@ -14,6 +14,10 @@
 // папка записанной сессии.
 // Панель появляется перед игроком и закреплена в системе судна (объект —
 // дочерний к Ship), как BridgeMenu. Строится в коде, сцену не правит.
+// B3: при запуске панель выбора встаёт в фиксированную точку startAnchor (объект
+// ScenarioPanelAnchor, дочерний к Ship; двигается мышью в Scene View), а не туда,
+// куда смотрит камера в момент загрузки; из меню — по-прежнему перед игроком.
+// На результатах провал (мель, столкновение) выделен красным (ExerciseFailureNotice).
 // Команды меню: «Выбор сценария…», «Начать упражнение», «Брифинг»/«Результаты»,
 // «Перезапустить сценарий» (инстр.), «Завершить досрочно» (инстр.); недоступные
 // по фазе — скрыты. Отладочные команды B1 остаются в группе «Отладка» (внизу).
@@ -42,6 +46,8 @@ public class ScenarioPanel : MonoBehaviour
     public bool showSelectionOnStart = true;
     [Tooltip("Задержка показа, с (трекинг шлема должен успеть встать)")]
     public float startDelay = 1.5f;
+    [Tooltip("Точка панели выбора при запуске (B3). Пусто — перед игроком")]
+    public Transform startAnchor;
 
     [Header("Положение панели")]
     public float distanceFromHead = 0.95f;
@@ -66,6 +72,7 @@ public class ScenarioPanel : MonoBehaviour
     private readonly List<BridgeMenuCommand> menuCommands = new List<BridgeMenuCommand>();
     private ScenarioRunner subscribed;
     private string keypadBuffer = "";
+    private bool placeAtAnchor;
 
     public bool IsOpen => canvas != null && canvas.enabled;
 
@@ -119,7 +126,12 @@ public class ScenarioPanel : MonoBehaviour
     private IEnumerator ShowSelectionDelayed()
     {
         yield return new WaitForSecondsRealtime(startDelay);
-        if (Phase == ScenarioRunner.Phase.Idle && !IsOpen) ShowSelection();
+        if (Phase == ScenarioRunner.Phase.Idle && !IsOpen)
+        {
+            placeAtAnchor = startAnchor != null;
+            ShowSelection();
+            placeAtAnchor = false;
+        }
     }
 
     private void OnStateChanged()
@@ -195,7 +207,7 @@ public class ScenarioPanel : MonoBehaviour
         Title($"Упражнение завершено — {r.ScenarioId}", ref y);
         Text(r.Title, 17f, MutedColor, ref y);
         y -= Gap;
-        Text(r.ToPanelText(), 19f, Color.white, ref y);
+        Text(r.ToPanelText(ExerciseFailureNotice.Enabled), 19f, Color.white, ref y);
         if (recorder != null && !string.IsNullOrEmpty(recorder.LastSessionFolder))
             Text($"Запись: {System.IO.Path.GetFileName(recorder.LastSessionFolder)}", 15f, MutedColor, ref y);
         y -= Gap;
@@ -284,6 +296,7 @@ public class ScenarioPanel : MonoBehaviour
         if (i != null)
             b.AppendLine($"Начало: курс {i.headingDeg:000}°, {ScenarioText.Num(i.speedKnots, 1)} уз, телеграф «{ScenarioText.Telegraph(i.telegraph)}», руль {ScenarioText.Num(i.rudderDeg)}°");
         b.AppendLine($"Путевых точек: {Math.Max(0, s.route.Count - 1)}, маршрут {ScenarioText.Num(s.RouteLength / 1852.0, 1)} мили");
+        if (s.traffic != null && s.traffic.Count > 0) b.AppendLine($"Другие суда в районе: {s.traffic.Count}");
         b.AppendLine(s.timeLimitSeconds > 0 ? $"Лимит времени: {ScenarioText.Clock(s.timeLimitSeconds)}" : "Без лимита времени");
         b.Append($"Завершение: {ScenarioText.EndConditions(s)}");
         return b.ToString();
@@ -322,7 +335,11 @@ public class ScenarioPanel : MonoBehaviour
             Destroy(background.GetChild(i).gameObject);
         bool wasOpen = IsOpen;
         mode = newMode;
-        if (!wasOpen) PositionInFrontOfPlayer();
+        if (!wasOpen)
+        {
+            if (placeAtAnchor && startAnchor != null) panel.transform.SetPositionAndRotation(startAnchor.position, startAnchor.rotation);
+            else PositionInFrontOfPlayer();
+        }
     }
 
     private void EndContent(float y)
@@ -400,6 +417,16 @@ public class ScenarioPanel : MonoBehaviour
         rt.sizeDelta = new Vector2(w, h);
         rt.anchoredPosition = new Vector2(0f, y);
         return rt;
+    }
+
+    // Точка панели при запуске — видна в Scene View при выделении ScenarioPanel
+    void OnDrawGizmosSelected()
+    {
+        if (startAnchor == null) return;
+        Gizmos.color = new Color(0.3f, 0.7f, 1f);
+        Gizmos.matrix = Matrix4x4.TRS(startAnchor.position, startAnchor.rotation, Vector3.one);
+        Gizmos.DrawWireCube(Vector3.zero, new Vector3(Width * canvasScale, 0.5f, 0.01f));
+        Gizmos.DrawLine(Vector3.zero, Vector3.back * 0.3f);
     }
 
     private void PositionInFrontOfPlayer()

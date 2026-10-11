@@ -4,27 +4,24 @@
 
 > Перечитай CLAUDE.md, Docs/Handoff.md и Docs/ThesisNotes.md. Двигаемся по Docs/Plan.md: запрос N. Сначала план, код — после моего «ок».
 
-C1 проверен в шлеме, замечаний нет.
+B3 (запрос 8): код готов и закоммичен, **в шлеме ещё не проверен**. Если следующий чат начинается с проверки B3 — см. «Итоги запроса 8 → Проверить», после проверки — коммит сцены и ассетов (как в B2/C1), затем запрос 9.
 
-### Запрос для следующего чата (запрос 8, B3) — скопировать целиком
+### Запрос для следующего чата (запрос 9, B4) — скопировать целиком (после проверки B3)
 
 ```
-Перечитай CLAUDE.md, Docs/Handoff.md и Docs/ThesisNotes.md. Двигаемся по Docs/Plan.md: запрос 8 (B3, другие суда и навигационные огни). Сначала план, код — после моего «ок».
+Перечитай CLAUDE.md, Docs/Handoff.md и Docs/ThesisNotes.md. Двигаемся по Docs/Plan.md: запрос 9 (B4, ночь). Сначала план, код — после моего «ок».
 
-Берём текст запроса 8 из Plan.md со следующими уточнениями по итогам B2 и C1:
-- Цели задаются в ScenarioDefinition.traffic (сейчас заготовка TrafficShipDefinition) — расширить, не ломая ассет B2-01.
-- Запись целей: каждая цель реализует ITrackedTarget и регистрируется в ExerciseTargets (Core) — ExerciseRecorder сам пишет targets.csv.
-- Столкновение — событие ExerciseEventType.Collision в шину (Subject — id цели), ScenarioRunner уже завершает по нему упражнение.
-- Модель движения целей — тот же ShipDynamicsModel (Core), авторулевой и расчёт «точки встречи» — чистые классы Core с EditMode-тестами.
-- Столкновение — пересечение контуров корпусов: использовать HullFootprint и Polygon2D из Core (как контроль мели в B1).
-- Качка целей — OceanWaves.Instance.SampleHeight(WorldPosition); позиция в сцене — WorldOrigin.WorldToScene().
-- Огни ночью пока проверяем в пресете погоды «Ночь» (настоящая ночь — B4). Видимость огней в шлеме — через Virtual Desktop (Play Mode), 90 Гц.
+Берём текст запроса 9 из Plan.md со следующими уточнениями по итогам B3:
+- Огни судов и знаков уже есть (NavLightField, шейдер VRBridgeTrainer/NavLight, закон Алларда, ThesisNotes 8.8). Ночь не должна их ломать: огни аддитивные, без тумана URP; «горят» по RenderSettings.ambientIntensity < 0,3 или видимости < 2 мили — при разделении погоды и времени суток перевести это условие на время суток (сумерки/ночь) + видимость.
+- Туман пресета «Ночь» в B3 ослаблен до 0,00015 (≈ 6,2 мили), чтобы огни были видны на несколько миль; при разделении «время суток / погода» видимость ночью должна задаваться погодой (C4 — видимость сценария).
+- Жёлтая точка на горизонте ночью в первой проверке B3 — это, вероятно, северный кардинальный буй, освещённый «дневными» рассеянным светом и отражениями (та же причина, что в тексте запроса 9) — проверить после исправления.
+- ScenarioDefinition.timeOfDay уже есть (поле B2); сценарий B3-01 — ночь.
 
 В конце: список файлов, ручные шаги, что проверить в шлеме, запись в ThesisNotes.md, коммит и push.
 ```
 
 ---
-## Состояние на 11.10.2026 (после запросов 1–7)
+## Состояние на 11.10.2026 (после запросов 1–8)
 
 | Запрос | Статус |
 |---|---|
@@ -35,7 +32,25 @@ C1 проверен в шлеме, замечаний нет.
 | 5. B1 Учебная акватория | Готово: проверено в шлеме, **Test Runner 67/67** (все тесты проекта), коммит |
 | 6. B2 Движок сценариев | Готово: проверено в шлеме, **Test Runner 78/78**, коммит |
 | 7. C1 Запись упражнения | Готово: проверено в шлеме, **Test Runner 89/89**, 90 Гц с записью, коммит |
-| 8. B3 Другие суда и огни | Следующий |
+| 8. B3 Другие суда и огни | Код готов, 125/125 вне Unity, коммит; **ждёт Setup B3, Test Runner и проверки в шлеме** |
+| 9. B4 Ночь | Следующий |
+
+### Итоги запроса 8 (подробно — ThesisNotes, раздел 8)
+- Core `Core/Traffic/`: `TrafficDefinition` (TrafficShipDefinition перенесён из ScenarioDefinition.cs, поля B2 сохранены), `TrafficPlanner`, `CpaCalculator`, `HeadingAutopilot` + `RouteFollower`, `TrafficVessel` + `HullContact`, `NavigationLights` + `HullProfile` + `LightCharacter`, `DemoTrafficScenario`. Сцена `Scripts/Traffic/`: `TrafficController`, `TrafficShipView`, `TrafficMeshes`, `NavLightField`, `AidLightsView`; `Scripts/Scenarios/ExerciseFailureNotice`. Шейдер `Shaders/NavLight.shader`. Editor: `SetupTraffic` (Setup B3 Traffic, Rebuild Demo Traffic Scenario), `TrafficReport` (Traffic Report). Тесты `TrafficTests` (36).
+- Правки: `ScenarioDefinition.Validate` (цели), `ExerciseEvents` (значения Collision, описание), `ExerciseSummary` (столкновения, `Failed`, `ToPanelText(markFailure)`), `ScenarioText` (тип судна, сторона, курсовой угол; ночь — 11,5 км), `SessionFormat` (`scenario.traffic`, `summary.collisions`), `ExerciseTargets` (комментарий), `ScenarioPanel` (`startAnchor`, провал красным, число судов на брифинге), `WaterAreaView` (`BuoyCount`, `BuoyTransform`), `WeatherController` (туман ночи 0,00015), `ScenarioDefinitionEditor`, `ScenarioRunnerEditor` (гизмо и ручки целей), `SessionReplayWindow` (траектории целей), `ShipParameters_Sources.md`.
+- Решения пользователя: ночной туман ослаблен; танкер — только вид (параметры Mariner); ширина Mariner/KCS из источников; мостики **не трогаем** (оба остаются); после столкновения цель — «Стоп», оповещение «Упражнение провалено» (общее для мели и столкновения, переключатель в меню «Сценарий»); панель выбора при запуске — в фиксированной точке; огни знаков МАМС — сразу в B3.
+- Вне Unity: 125/125 тестов (`scratchpad/coretest` этого чата: Stub.cs + Runner.cs, без UnityEngine), сборки Assembly-CSharp и Editor компилируются (`scratchpad/unitybuild` — копии .csproj с абсолютными путями + новые файлы).
+- .meta новых файлов созданы вручную (Unity был в фоне).
+- **Проверить в шлеме (Play Mode, Virtual Desktop):**
+  1. Tools/VR Bridge/Setup B3 Traffic → Ctrl+S; в консоли — материалы, Traffic, NavLights, AidLightsView, ScenarioPanelAnchor, B3-01, Mariner/KCS B. Test Runner → EditMode → 125/125. Tools/VR Bridge/Traffic Report → папка `ThesisData/Traffic/<дата>/`.
+  2. При запуске панель выбора — в фиксированной точке перед игроком, читается; из меню A — перед камерой. Если точка неудобна — выделить `Ship/ScenarioPanelAnchor` и подвинуть в Scene View.
+  3. B3-01: брифинг (ночь, «Другие суда в районе: 3»), «Начать» → в консоли `[Суда] … T1 … T2 … T3`. Ночью видны огни: T1 почти прямо по носу ≈ 3,6 мили — два топовых и красный (идёт 240°, к нам левым бортом), после её поворота в фарватере на юг — два топовых и оба бортовых; T2 справа ≈ 1,2 мили — топовые и красный (идёт на запад, к нам левым бортом); T3 впереди ≈ 2 мили — кормовой огонь (дальность 2 мили, ночью ≈ 1,7 — появится через 1–2 мин); огни буёв мигают по характеристикам.
+  4. Не маневрировать: через ≈ 4 мин столкновение с T2 — удар, тряска, красная надпись «УПРАЖНЕНИЕ ПРОВАЛЕНО: столкновение с «T2»», результаты с красной строкой. Перезапустить и уступить дорогу T2 (вправо / сбавить ход) — без столкновения.
+  5. Меню A → «Отладка» → «Проверка огней: облёт цели»: каждые 3 с — новый курсовой угол, в консоли — какие огни должны быть видны; сверить глазами (нос — оба бортовых, траверз ПБ — зелёный, корма — только кормовой). «Цель на 1 / 3 / 6 миль» — огни видны на 1 и 3 милях, на 6 — нет (ночь, V ≈ 6,2 мили: топовый ≈ 4,2).
+  6. Огни не видны сквозь стены и крышу рубки; видны через окна. Днём (умеренное) огней нет («Огни: авто»), цели видны корпусами, качаются на волне; в шторм огни включаются.
+  7. Край океана ночью (туман 0,00015) не виден; если виден — плотность ночи 0,0002 (WeatherController, пресет night).
+  8. F8 во время B3-01 ночью — 90 Гц (сравнить с табл. 7.7). `TrafficController.stepTimeUs` в инспекторе.
+- Тонкая настройка по желанию: `NavLightField.angularDiameterDeg` (0,15°) и `brightness` (1,5) — размер и яркость огней; `AidLightsView.nominalRangeNm` (3 мили); `ExerciseFailureNotice.showSeconds/upOffset`.
 
 ### Итоги запроса 7 (подробно — ThesisNotes, раздел 7; формат файлов — 7.4)
 - Core `Core/Recording/`: `CsvFormat`, `SessionFormat` (+ `SessionMeta` для session.json), `SessionFileWriter` (фоновый поток), `SessionRecorder` + `TrackSampler`, `SessionStorage` (ротация, `keep`), `SessionReader` (`RecordedSession`, `StateAt`), `ControlActionDetector`, `ExerciseTargets`. Сцена `Scripts/Recording/`: `ExerciseRecorder` (объект Scenario, −84), `BridgeActionMonitor` (ShipRoot, −87). Editor: `SetupRecording` (`Tools/VR Bridge/Setup C1 Recording`), `SessionReplayWindow` (`Tools/VR Bridge/Session Replay`). Тесты `RecordingTests` (11).

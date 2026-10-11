@@ -94,6 +94,10 @@ public class WaterAreaView : MonoBehaviour
     private BridgeMenuCommand debugCommand;
     private readonly System.Diagnostics.Stopwatch watch = new System.Diagnostics.Stopwatch();
 
+    /// <summary>Модели знаков (B3: огни знаков — AidLightsView); номер = номер в WaterArea.aids.</summary>
+    public int BuoyCount => buoys.Count;
+    public Transform BuoyTransform(int i) => i >= 0 && i < buoys.Count ? buoys[i].transform : null;
+
     public WorldOrigin Origin => worldOrigin != null ? worldOrigin : WorldOrigin.Instance;
     public OceanWaves Ocean => ocean != null ? ocean : OceanWaves.Instance;
     /// <summary>Средний уровень воды в сцене (y океана), м.</summary>

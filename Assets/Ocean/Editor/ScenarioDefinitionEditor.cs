@@ -6,7 +6,8 @@
 //   • подсказка по начальной скорости: установившаяся скорость при выбранном
 //     положении телеграфа (судно будет разгоняться или тормозить к ней);
 //   • «Маршрут по оси фарватера» — старт + точки оси выбранного фарватера акватории;
-//   • «Старт — в первую точку маршрута» и «Курс — на вторую точку».
+//   • «Старт — в первую точку маршрута» и «Курс — на вторую точку»;
+//   • B3: для других судов — рассчитанный старт, пеленг, дистанция, CPA/TCPA.
 // Маршрут и старт двигаются мышью в Scene View: выделить объект Scenario
 // (ScenarioRunner) — редактируется загруженный / выбранный для предпросмотра сценарий.
 // ============================================================
@@ -81,6 +82,33 @@ public class ScenarioDefinitionEditor : Editor
         GUI.enabled = true;
         EditorGUILayout.EndHorizontal();
         EditorGUILayout.HelpBox("Ручки маршрута в Scene View — выделите объект Scenario в сцене (поле Preview Index выбирает сценарий).", MessageType.None);
+
+        TrafficInfo(s);
+    }
+
+    // Другие суда (B3): рассчитанный старт, дистанция и пеленг со старта своего судна,
+    // CPA/TCPA при начальных курсах и скоростях (как увидит обучающийся в начале)
+    private static void TrafficInfo(ScenarioDefinition s)
+    {
+        if (s.traffic == null || s.traffic.Count == 0 || s.initial == null) return;
+        EditorGUILayout.Space(6);
+        EditorGUILayout.LabelField("Другие суда (B3)", EditorStyles.boldLabel);
+        for (int i = 0; i < s.traffic.Count; i++)
+        {
+            TrafficShipDefinition d = s.traffic[i];
+            if (d == null) continue;
+            TrafficStart st = TrafficPlanner.Resolve(d, s.initial);
+            CpaResult c = CpaCalculator.FromCourses(s.initial.position, s.initial.headingDeg, s.initial.speedKnots,
+                                                    st.Position, st.HeadingDeg, st.SpeedKnots);
+            string tcpa = c.Tcpa >= 0 ? $"{c.Tcpa / 60.0:F1} мин" : "уже прошли";
+            EditorGUILayout.HelpBox(
+                $"{d.TargetId(i)} «{d.name}» — {ScenarioText.VesselType(d.type)}, {(d.parameters != null ? d.parameters.name : "параметры по умолчанию для типа")}\n" +
+                $"Старт: E {st.Position.East:F0}, N {st.Position.North:F0} м; курс {st.HeadingDeg:000}°, {st.SpeedKnots:F1} уз" +
+                $"{(st.Path != null && st.Path.Count > 0 ? $"; путь — {st.Path.Count} т." : "")}\n" +
+                $"Со старта своего судна: пеленг {c.BearingDeg:000}°, дистанция {c.Range / 1852.0:F2} мили; " +
+                $"CPA {c.Cpa / 1852.0:F2} мили, TCPA {tcpa} (при начальных курсах и скоростях)",
+                MessageType.None);
+        }
     }
 
     private static void RouteFromFairway(ScenarioDefinition s, FairwayLine f)

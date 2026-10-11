@@ -321,6 +321,7 @@ public class SessionReplayWindow : EditorWindow
         if (area != null) DrawArea();
         DrawRoute();
         DrawTrack();
+        DrawTargets();
         DrawEventMarkers();
         DrawShip(now);
         DrawScaleAndLegend(rect);
@@ -432,6 +433,57 @@ public class SessionReplayWindow : EditorWindow
             AddDecimated(run, p, ref last);
         }
         Flush(run, runColor);
+    }
+
+    // Другие суда (B3, targets.csv): весь путь — бледно, пройденный — ярче, судно в момент t
+    private static readonly Color TargetColor = new Color(1f, 0.62f, 0.2f);
+
+    private void DrawTargets()
+    {
+        if (session.Targets.Count == 0) return;
+        var byId = new Dictionary<string, List<TargetSample>>();
+        foreach (TargetSample s in session.Targets)
+        {
+            if (!byId.TryGetValue(s.Id ?? "", out List<TargetSample> list)) { list = new List<TargetSample>(); byId[s.Id ?? ""] = list; }
+            list.Add(s);
+        }
+        foreach (KeyValuePair<string, List<TargetSample>> kv in byId)
+        {
+            List<TargetSample> tr = kv.Value;
+            var all = new List<Vector3>();
+            var done = new List<Vector3>();
+            Vector3 last = new Vector3(float.NaN, 0, 0), lastDone = new Vector3(float.NaN, 0, 0);
+            int k = -1;
+            for (int i = 0; i < tr.Count; i++)
+            {
+                Vector3 p = P(tr[i].East, tr[i].North);
+                AddDecimated(all, p, ref last);
+                if (tr[i].Time <= t) { AddDecimated(done, p, ref lastDone); k = i; }
+            }
+            Handles.color = new Color(TargetColor.r, TargetColor.g, TargetColor.b, 0.3f);
+            if (all.Count > 1) Handles.DrawAAPolyLine(1.5f, all.ToArray());
+            if (k < 0) continue;
+
+            // Состояние в момент t — интерполяция между строками
+            TargetSample a = tr[k];
+            double e = a.East, n = a.North, h = a.HeadingDeg;
+            if (k + 1 < tr.Count && tr[k + 1].Time > a.Time)
+            {
+                TargetSample b = tr[k + 1];
+                double f = Math.Max(0.0, Math.Min(1.0, (t - a.Time) / (b.Time - a.Time)));
+                e += (b.East - a.East) * f; n += (b.North - a.North) * f;
+                h = RecordedSession.LerpAngle(a.HeadingDeg, b.HeadingDeg, f);
+            }
+            done.Add(P(e, n));
+            Handles.color = TargetColor;
+            if (done.Count > 1) Handles.DrawAAPolyLine(2.5f, done.ToArray());
+            Vector3 c = P(e, n);
+            float psi = (float)(h * Math.PI / 180.0);
+            var fw = new Vector3(Mathf.Sin(psi), -Mathf.Cos(psi), 0f);
+            var rt = new Vector3(Mathf.Cos(psi), Mathf.Sin(psi), 0f);
+            Handles.DrawAAConvexPolygon(c + fw * 9f, c - fw * 6f + rt * 4f, c - fw * 6f - rt * 4f);
+            GUI.Label(new Rect(c.x + 8f, c.y - 8f, 120f, 16f), kv.Key, Centered(mapLabel, TargetColor));
+        }
     }
 
     private static void AddDecimated(List<Vector3> list, Vector3 p, ref Vector3 last)

@@ -45,7 +45,7 @@ public static class ScenarioText
         {
             case WeatherPresetId.Calm: return "штиль, видимость ≈ 5,8 км";
             case WeatherPresetId.Storm: return "шторм, видимость ≈ 1,2 км";
-            case WeatherPresetId.Night: return "ночь, видимость ≈ 4,3 км";
+            case WeatherPresetId.Night: return "ночь, видимость ≈ 11,5 км (6,2 мили)";
             default: return "умеренное волнение, видимость ≈ 4,3 км";
         }
     }
@@ -104,6 +104,37 @@ public static class ScenarioText
             case ScenarioEndReason.Aborted: return "завершено досрочно";
             default: return "—";
         }
+    }
+
+    // ─────────── Другие суда (B3) ───────────
+    public static string VesselType(TrafficVesselType t)
+    {
+        switch (t)
+        {
+            case TrafficVesselType.Tanker: return "танкер";
+            case TrafficVesselType.Small: return "малое судно";
+            default: return "сухогруз";
+        }
+    }
+
+    public static string Side(MeetingSide s)
+    {
+        switch (s)
+        {
+            case MeetingSide.Port: return "по левому борту";
+            case MeetingSide.Ahead: return "по носу";
+            case MeetingSide.Astern: return "по корме";
+            default: return "по правому борту";
+        }
+    }
+
+    /// <summary>Курсовой угол словами: «35° ПБ», «120° ЛБ», «прямо по носу», «прямо по корме».</summary>
+    public static string RelativeBearing(double q)
+    {
+        q = (q % 360.0 + 360.0) % 360.0;
+        if (q < 0.5 || q > 359.5) return "прямо по носу";
+        if (Math.Abs(q - 180.0) < 0.5) return "прямо по корме";
+        return q < 180.0 ? $"{Num(q)}° ПБ" : $"{Num(360.0 - q)}° ЛБ";
     }
 
     /// <summary>Время «мм:сс» (или «ч:мм:сс»).</summary>

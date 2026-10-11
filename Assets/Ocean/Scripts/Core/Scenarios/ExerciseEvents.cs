@@ -20,6 +20,9 @@
 //   CorridorExit         Index — номер участка, Value — XTE, м;                 Value2 — XTE доп., м
 //   CorridorReturn       Index — номер участка, Value — max |XTE| за выход, м;   Value2 — длительность выхода, с
 //   ShoalWarning*/Grounded/Refloated  Index — номер опасности, Value — расстояние до неё, м; Value2 — глубина, м
+//   Collision (B3)       Subject — id цели, Index — номер цели в сценарии,
+//                        Value — относительная скорость в момент контакта, уз;
+//                        Value2 — курсовой угол цели со своего судна, ° (0…360, по часовой от носа)
 //   ExerciseEnded        EndReason — причина, Value — пройдено точек, Value2 — всего точек
 // Действия обучающегося (C1, источник — BridgeActionMonitor, ControlActionDetector):
 //   HelmStarted          Value — исходный заданный руль, ° (> 0 — ПБ)
@@ -115,7 +118,10 @@ public struct ExerciseEvent
             case ExerciseEventType.ShoalWarningCleared: return $"Опасность миновала, D = {Value:F0} м";
             case ExerciseEventType.Grounded: return $"ПОСАДКА НА МЕЛЬ «{Subject}» ({Value2:F1} м)";
             case ExerciseEventType.Refloated: return $"Снятие с мели «{Subject}»{(ByInstructor ? " (инструктор)" : " своим ходом")}";
-            case ExerciseEventType.Collision: return $"СТОЛКНОВЕНИЕ с «{Subject}»";
+            case ExerciseEventType.Collision:
+                return double.IsNaN(Value)
+                    ? $"СТОЛКНОВЕНИЕ с «{Subject}»"
+                    : $"СТОЛКНОВЕНИЕ с «{Subject}»: относительная скорость {ScenarioText.Num(Value, 1)} уз, цель {ScenarioText.RelativeBearing(Value2)}";
             case ExerciseEventType.ExerciseEnded: return $"КОНЕЦ упражнения: {ScenarioText.EndReason(EndReason)}{(ByInstructor ? " (инструктор)" : "")}, точек {Value:F0}/{Value2:F0}";
             case ExerciseEventType.HelmStarted: return $"Перекладка руля начата (было {ScenarioText.Rudder(Value)})";
             case ExerciseEventType.HelmEnded: return $"Руль переложен на {ScenarioText.Rudder(Value)} за {ScenarioText.Num(Value2, 1)} с";

@@ -227,6 +227,8 @@ public class SessionScenario
     public string end_conditions = "";
     public SessionInitial initial = new SessionInitial();
     public List<SessionWaypoint> route = new List<SessionWaypoint>();
+    /// <summary>Другие суда (B3): описание и рассчитанное начальное состояние (TrafficPlanner).</summary>
+    public List<SessionTraffic> traffic = new List<SessionTraffic>();
 
     public static SessionScenario From(ScenarioDefinition s)
     {
@@ -250,6 +252,9 @@ public class SessionScenario
             foreach (RouteWaypoint w in s.route)
                 if (w != null)
                     r.route.Add(new SessionWaypoint { name = w.name, x_e_m = w.position.East, y_n_m = w.position.North, xte_limit_m = SessionMeta.R(w.xteLimit) });
+        if (s.traffic != null)
+            for (int i = 0; i < s.traffic.Count; i++)
+                if (s.traffic[i] != null) r.traffic.Add(SessionTraffic.From(s.traffic[i], i, s.initial));
         return r;
     }
 
@@ -260,6 +265,53 @@ public class SessionScenario
         foreach (SessionWaypoint w in route)
             list.Add(new RouteWaypoint(w.name, new WorldPosition(w.x_e_m, w.y_n_m), (float)w.xte_limit_m));
         return list;
+    }
+}
+
+[Serializable]
+public class SessionPoint
+{
+    public double x_e_m, y_n_m;
+}
+
+/// <summary>Другое судно в session.json (B3). id — как в targets.csv.</summary>
+[Serializable]
+public class SessionTraffic
+{
+    public string id = "", name = "", type = "", parameters = "", placement = "", motion = "", lights = "";
+    public double length_m, beam_m, service_speed_kn;
+    /// <summary>Начальное состояние (рассчитанное).</summary>
+    public double x_e_m, y_n_m, heading_deg, speed_kn;
+    /// <summary>Точка встречи: заданные CPA, мили, TCPA, мин, сторона; позиция цели в момент TCPA.</summary>
+    public double cpa_nm, tcpa_min;
+    public string meeting_side = "";
+    public double meeting_x_e_m, meeting_y_n_m;
+    /// <summary>Путь после старта (пусто — постоянный курс).</summary>
+    public List<SessionPoint> path = new List<SessionPoint>();
+
+    public static SessionTraffic From(TrafficShipDefinition d, int index, OwnShipInitialState own)
+    {
+        TrafficStart st = TrafficPlanner.Resolve(d, own);
+        var t = new SessionTraffic
+        {
+            id = d.TargetId(index), name = d.name ?? "", type = d.type.ToString(),
+            parameters = d.parameters != null ? d.parameters.name : "",
+            placement = d.placement.ToString(), motion = d.motion.ToString(), lights = d.lights.ToString(),
+            length_m = d.parameters != null ? SessionMeta.R(d.parameters.length) : 0.0,
+            beam_m = d.parameters != null ? SessionMeta.R(d.parameters.beam) : 0.0,
+            service_speed_kn = d.parameters != null ? SessionMeta.R(d.parameters.serviceSpeedKnots) : 0.0,
+            x_e_m = SessionMeta.R(st.Position.East), y_n_m = SessionMeta.R(st.Position.North),
+            heading_deg = SessionMeta.R(st.HeadingDeg), speed_kn = SessionMeta.R(st.SpeedKnots)
+        };
+        if (d.placement == TrafficPlacement.MeetingPoint)
+        {
+            t.cpa_nm = SessionMeta.R(d.cpaNm); t.tcpa_min = SessionMeta.R(d.tcpaMinutes);
+            t.meeting_side = d.meetingSide.ToString();
+            t.meeting_x_e_m = SessionMeta.R(st.MeetingPoint.East); t.meeting_y_n_m = SessionMeta.R(st.MeetingPoint.North);
+        }
+        if (st.Path != null)
+            foreach (WorldPosition p in st.Path) t.path.Add(new SessionPoint { x_e_m = SessionMeta.R(p.East), y_n_m = SessionMeta.R(p.North) });
+        return t;
     }
 }
 
@@ -312,6 +364,7 @@ public class SessionSummary
     public int waypoints_passed, waypoints_total;
     public double max_abs_xte_m, time_outside_corridor_s;
     public int corridor_exits, shoal_warnings, groundings;
+    public int collisions;
     public int helm_actions, telegraph_orders, horn_signals, weather_changes;
     public int track_rows, event_rows, target_rows;
 
@@ -320,6 +373,7 @@ public class SessionSummary
         waypoints_passed = s.WaypointsPassed, waypoints_total = s.WaypointsTotal,
         max_abs_xte_m = Math.Round(s.MaxAbsXte, 2), time_outside_corridor_s = Math.Round(s.TimeOutsideCorridor, 2),
         corridor_exits = s.CorridorExits, shoal_warnings = s.ShoalWarnings, groundings = s.Groundings,
+        collisions = s.Collisions,
         helm_actions = s.HelmActions, telegraph_orders = s.TelegraphOrders, horn_signals = s.HornSignals, weather_changes = s.WeatherChanges
     };
 }

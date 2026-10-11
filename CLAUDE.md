@@ -49,6 +49,9 @@ VR-тренажёр судоводительского мостика. Прот�
 - `WaterArea` — **WaterAreaView** (B1): буи/суша из ассета `WaterArea_Demo`, отладочный слой мелей; редактирование — выделить объект, ручки в Scene View
 - `ShipRoot` также несёт **GroundingMonitor** (B1): контроль глубины, посадка на мель, сигнализация; с C1 — **BridgeActionMonitor** (−87): действия обучающегося → шина
 - `Scenario` — **ScenarioRunner** (B2, порядок −88) + **ExerciseConsoleLog**: сценарий, маршрут, шина событий → консоль; с C1 — **ExerciseRecorder** (−84): запись упражнения в файлы
+- `Traffic` — **TrafficController** (B3, −86): другие суда по сценарию, столкновения, отладка огней; цели — дочерние объекты с **TrafficShipView** (−70)
+- `NavLights` — **NavLightField** (B3, −95): все навигационные огни одним мешем (шейдер `VRBridgeTrainer/NavLight`), режим огней «авто/вкл/выкл»
+- `WaterArea` также несёт **AidLightsView** (B3, −55): огни знаков МАМС; `ScenarioPanel` — **ExerciseFailureNotice** (B3); `Ship/ScenarioPanelAnchor` — точка панели выбора при запуске
 - `PerfCapture` — **FrameTimingCapture** (Setup Frame Timing): F8 — замер времени кадра CPU/GPU 30 с → `ThesisData/Performance/`
 - `Hands Permissions Manager` — префаб шаблона
 
@@ -71,7 +74,7 @@ XR Origin — дочерний объект Ship, игрок качается в
 - Знак штурвала: Auto — по часовой с места оператора = ПБ. Курс ψ: 0 = N, по часовой; δ > 0 — ПБ.
 - Пока ShipNavigation включён, `WorldOrigin.ExternalControl = true` (ход от телеграфа A1 и стрелки отключены).
 - Тест циркуляции: F5 или контекстное меню ShipNavigation; лог — выдвиг, тактический диаметр, D (теория при умолчаниях: 614 м = 4.1 L).
-- Пункты меню: Setup A1 Ocean → Setup A1.1 Hull Water → Setup Telegraph Model → Setup A2 Navigation → Setup Console and Sky → Setup A2.2 Controls → Setup Rain, Setup Frame Timing (запрос 1), Setup Seakeeping (запрос 4), Setup B1 Water Area + Rebuild Demo Water Area + Ship To Demo Start (запрос 5), Setup B2 Scenarios + Rebuild Demo Scenario (запрос 6), Setup C1 Recording (запрос 7). Окна: Session Replay (запрос 7), Manoeuvring Trials (запрос 2), Model Calibration (запрос 3), Seakeeping Trials (запрос 4) → `ThesisData/Seakeeping/`.
+- Пункты меню: Setup A1 Ocean → Setup A1.1 Hull Water → Setup Telegraph Model → Setup A2 Navigation → Setup Console and Sky → Setup A2.2 Controls → Setup Rain, Setup Frame Timing (запрос 1), Setup Seakeeping (запрос 4), Setup B1 Water Area + Rebuild Demo Water Area + Ship To Demo Start (запрос 5), Setup B2 Scenarios + Rebuild Demo Scenario (запрос 6), Setup C1 Recording (запрос 7), Setup B3 Traffic + Rebuild Demo Traffic Scenario + Traffic Report (запрос 8). Окна: Session Replay (запрос 7), Manoeuvring Trials (запрос 2), Model Calibration (запрос 3), Seakeeping Trials (запрос 4) → `ThesisData/Seakeeping/`.
 
 ## Учебная акватория (запрос 5, B1)
 - Данные — ScriptableObject `WaterArea` (`Core/WaterArea/`): знаки МАМС регион A (`AidType`, внешний вид — `IalaMarks`), мели (многоугольник + наименьшая глубина), суша, фарватеры (ось + ширина), границы, глубина по умолчанию. `WorldPosition` перенесён в Core (`Core/WorldPosition.cs`).
@@ -101,9 +104,18 @@ XR Origin — дочерний объект Ship, игрок качается в
 - ID обучающегося — цифры, без ФИО: VR-клавиатура на брифинге («Ввести ID обучающегося», ScenarioPanel) или `ExerciseRecorder.traineeId`; без ID — `noid`.
 - Replay: `Tools/VR Bridge/Session Replay` (без Play Mode): карта, шкала времени ×1…×60, состояние в момент t, события.
 - Тесты: `RecordingTests` (11); всего 89 (Unity Test Runner 89/89). Проверено в шлеме; 90 Гц с записью.
+
+## Другие суда и огни (запрос 8, B3)
+- Core `Core/Traffic/`: `TrafficShipDefinition` (поле `ScenarioDefinition.traffic`; позиция — абсолютная / пеленг+дистанция / «точка встречи» CPA+TCPA+сторона; постоянный курс или маршрут; тип — только вид), `TrafficPlanner` (старт и путь), `CpaCalculator` (CPA/TCPA, обратная задача), `HeadingAutopilot` (ПД, размещение полюсов ω_n' 0,75, ζ 0,7) + `RouteFollower` (LOS, упреждение R·tg(Δχ/2) + U·δ/ω_δ), `TrafficVessel` (`ShipDynamicsModel` + авторулевой, `ITrackedTarget`), `HullContact` (столкновение), `NavigationLights` + `HullProfile` + `LightCharacter` (правила 21–23, Приложение I, Аллард, Кошмидер, огни знаков), `DemoTrafficScenario` (B3-01).
+- Сцена `Scripts/Traffic/`: `TrafficController`, `TrafficShipView` (качка — `SeakeepingModel`), `TrafficMeshes` (сухогруз/танкер/малое), `NavLightField`, `AidLightsView`; `Scripts/Scenarios/ExerciseFailureNotice` (меню A «Сценарий» → «Оповещение о провале»). `ScenarioPanel.startAnchor` — панель выбора при запуске в фиксированной точке.
+- Огни горят (авто): `ambientIntensity` < 0,3 (ночь, шторм) или видимость < 2 мили; яркость — закон Алларда с K = 0,05^(1852/V), V = 1,73/ρ. Туман пресета «Ночь» — 0,00015 (≈ 6,2 мили; было 0,0004), запасное 0,0002.
+- Столкновение → `Collision` (Subject — id цели, Value — отн. скорость, уз, Value2 — курсовой угол), цель — «Стоп», удар и тряска. Отладка в меню A: «Огни: авто/вкл/выкл», «Проверка огней: облёт цели», «Проверка огней: цель на 1/3/6 миль».
+- Параметры целей по умолчанию: сухогруз и танкер — Mariner, малое — Model45m. Mariner B 23,16 м (осадка 8 м — заглушка), KCS B 32,2 / d 10,8 м (Setup B3).
+- Сценарий `Scenario_B3-01_Traffic.asset` (ночь; T1 встречный в фарватере, T2 пересекающий справа CPA 0 TCPA 4 мин, T3 обгоняемый). session.json → `scenario.traffic`; Replay рисует цели.
+- Тесты: `TrafficTests` (36); всего 125. Данные для ВКР — `Tools/VR Bridge/Traffic Report` → `ThesisData/Traffic/`.
 ## Качка на волнах (запрос 4)
 - Поле волн — чистый класс `Core/Seakeeping/OceanWaveField` (единый источник для шейдера и C#). `OceanWaves` заполняет его (`ConfigureField`) и шлёт те же значения в шейдер. Фазы θ продвигаются в **FixedUpdate**; в кадре — перенос на время отображения `OceanWaves.RenderTimeOffset` = −(1 − α)·Δt (та же α, что в ShipNavigation).
-- Порядок выполнения: WorldOrigin −100 → ShipNavigation −90 → ScenarioRunner −88 (B2) → BridgeActionMonitor −87 (C1) → GroundingMonitor −85 (B1) → ExerciseRecorder −84 (C1) → OceanWaves −80 → ShipMotion −70 → WaterAreaView −60 (B1).
+- Порядок выполнения: WorldOrigin −100 → NavLightField −95 (B3) → ShipNavigation −90 → ScenarioRunner −88 (B2) → BridgeActionMonitor −87 (C1) → TrafficController −86 (B3) → GroundingMonitor −85 (B1) → ExerciseRecorder −84 (C1) → OceanWaves −80 → ShipMotion −70, TrafficShipView −70 (B3) → WaterAreaView −60 (B1) → AidLightsView −55 (B3).
 - Высота воды для других объектов (буи B1, суда B3): `OceanWaves.Instance.SampleHeight(WorldPosition)` / `SampleWaterLevel(Vector3 сцены)` — обратная задача Герстнера, 3 итерации.
 - Мореходные поля ShipParameters (B, d, GM, C_B, C_WP, T_φ/T_z/T_θ, ζ) заполнены только у `Model45m` (Setup Seakeeping, допущения помечены в `ShipParameters_Sources.md`).
 - Шейдер у борта по-прежнему гасит волны к нулю (`_HullDampMin`): если в шлеме корпус «отрывается» от воды — правка «вода у борта → плоскость ватерлинии судна» (отложена до проверки).
@@ -113,7 +125,7 @@ XR Origin — дочерний объект Ship, игрок качается в
 - `ShipMotion` — качка (запрос 4). Режим `Waves` (по умолчанию): в FixedUpdate вода сэмплируется в сетке 5×3 точек корпуса, плоскость МНК → звенья 2-го порядка (`Core/Seakeeping/SeakeepingModel`, периоды и ζ — в ShipParameters), отображение интерполируется как в навигации, поворот вокруг `pivotLocal` (мидель, ватерлиния). Комфорт: `comfortScale`, мягкие пределы `maxRollDeg`/`maxPitchDeg`. Режим `Sinusoidal` — прежние синусоиды. Каждый кадр пишет `_WaveIntensity` = seaState в материал. Время шага — `stepTimeUs` в инспекторе.
 - `SteeringWheel` — угол руля ±35° (`RudderAngle`), пока никем не читается.
 - `EngineTelegraph` — 9 положений, `SpeedFactor` −1..1, пока никем не читается.
-- `WeatherController` — пресеты calm/moderate/storm/night (клавиши 1–4), плавный переход; меняет свет, туман, `_WaveIntensity`, `_WaveSpeed`.
+- `WeatherController` — пресеты calm/moderate/storm/night (клавиши 1–4), плавный переход; меняет свет, туман, `_WaveIntensity`, `_WaveSpeed`. Туман ночи с B3 — 0,00015.
 - `WorldOrigin`, `OceanWaves`, `OceanRadialMesh` — см. разделы выше/ниже.
 - `ShipHorn`, `AmbientSounds`, `PanelToggle`, `HeightAdjust` — окружение и UI.
 - `WeatherController` также ведёт `rain` (0..1) в пресетах: storm = 1, остальные 0 → `RainEffect.Intensity`, тем же SmoothStep, что и погода.

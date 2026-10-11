@@ -9,6 +9,8 @@
 // (Ctrl — сетка 10 м), «+» на участке — вставить точку, Delete — удалить
 // выделенную (не меньше двух). Правки — в ассет сценария, через Undo.
 // В инспекторе в Play Mode — кнопки жизненного цикла (для проверки без шлема).
+// B3: другие суда — старт (в т. ч. рассчитанный по «точке встречи»), курс, путь,
+// точка встречи (красный крестик); абсолютный старт и точки маршрута целей — ручками.
 // ============================================================
 using System.Collections.Generic;
 using UnityEditor;
@@ -115,6 +117,8 @@ public class ScenarioRunnerEditor : Editor
             }
             if (grabbed) { selStart = true; selWaypoint = -1; }
         }
+
+        TrafficHandles(s, origin, y);
 
         // «+» на серединах участков
         Handles.color = Color.white;
@@ -228,6 +232,8 @@ public class ScenarioRunnerEditor : Editor
                           new GUIStyle(EditorStyles.miniBoldLabel) { normal = { textColor = new Color(0.3f, 1f, 0.4f) } });
         }
 
+        DrawTraffic(s, origin, y);
+
         // Текущее XTE у судна
         if (running && runner.navigation != null && runner.navigation.Model != null)
         {
@@ -235,6 +241,82 @@ public class ScenarioRunnerEditor : Editor
             Handles.Label(ship + Vector3.up * HandleUtility.GetHandleSize(ship) * 0.5f,
                           $"XTE {runner.Route.Xte:+0;−0;0} м / ±{runner.Route.XteLimit:F0}",
                           new GUIStyle(EditorStyles.boldLabel) { normal = { textColor = runner.Route.OutsideCorridor ? Color.red : Color.white } });
+        }
+    }
+
+    // ─────────── Другие суда (B3) ───────────
+    private static readonly Color TrafficColor = new Color(1f, 0.62f, 0.2f);
+
+    // Старт (по TrafficPlanner — в т. ч. «точка встречи»), курс, путь; точка встречи — крестик
+    private static void DrawTraffic(ScenarioDefinition s, WorldOrigin origin, float y)
+    {
+        if (s.traffic == null) return;
+        var label = new GUIStyle(EditorStyles.miniBoldLabel) { normal = { textColor = TrafficColor } };
+        for (int i = 0; i < s.traffic.Count; i++)
+        {
+            TrafficShipDefinition d = s.traffic[i];
+            if (d == null) continue;
+            TrafficStart st = TrafficPlanner.Resolve(d, s.initial);
+            Vector3 p = ToScene(origin, st.Position, y);
+            float size = HandleUtility.GetHandleSize(p);
+            float h = (float)st.HeadingDeg * Mathf.Deg2Rad;
+            Handles.color = TrafficColor;
+            Handles.DrawSolidDisc(p, Vector3.up, size * 0.07f);
+            Handles.DrawAAPolyLine(4f, p, p + new Vector3(Mathf.Sin(h), 0f, Mathf.Cos(h)) * size * 1.0f);
+            Handles.Label(p + Vector3.up * size * 0.2f,
+                $"{d.TargetId(i)} {ScenarioText.VesselType(d.type)}, {st.HeadingDeg:000}° {st.SpeedKnots:F1} уз", label);
+
+            WorldPosition prev = st.Position;
+            if (st.Path != null)
+                foreach (WorldPosition w in st.Path)
+                {
+                    Handles.color = new Color(TrafficColor.r, TrafficColor.g, TrafficColor.b, 0.8f);
+                    Handles.DrawDottedLine(ToScene(origin, prev, y), ToScene(origin, w, y), 4f);
+                    prev = w;
+                }
+            if (st.HasMeetingPoint)
+            {
+                Vector3 m = ToScene(origin, st.MeetingPoint, y);
+                float ms = HandleUtility.GetHandleSize(m) * 0.08f;
+                Handles.color = Color.red;
+                Handles.DrawAAPolyLine(3f, m + new Vector3(-ms, 0, -ms), m + new Vector3(ms, 0, ms));
+                Handles.DrawAAPolyLine(3f, m + new Vector3(-ms, 0, ms), m + new Vector3(ms, 0, -ms));
+                Handles.color = new Color(TrafficColor.r, TrafficColor.g, TrafficColor.b, 0.6f);
+                if (st.Path == null || st.Path.Count == 0) Handles.DrawDottedLine(p, m, 4f);
+                Handles.Label(m + Vector3.up * HandleUtility.GetHandleSize(m) * 0.2f,
+                    $"{d.TargetId(i)}: CPA {d.cpaNm:F2} мили через {d.tcpaMinutes:F0} мин", label);
+            }
+        }
+    }
+
+    // Ручки: абсолютный старт цели и точки её маршрута
+    private static void TrafficHandles(ScenarioDefinition s, WorldOrigin origin, float y)
+    {
+        if (s.traffic == null) return;
+        foreach (TrafficShipDefinition d in s.traffic)
+        {
+            if (d == null) continue;
+            if (d.placement == TrafficPlacement.Absolute)
+            {
+                WorldPosition w = d.position;
+                Handles.color = TrafficColor;
+                if (DragPoint(s, ref w, origin, y, HandleUtility.GetHandleSize(ToScene(origin, w, y)) * 0.09f, Handles.CubeHandleCap, out _))
+                {
+                    d.position = w;
+                    EditorUtility.SetDirty(s);
+                }
+            }
+            if (d.route == null) continue;
+            for (int k = 0; k < d.route.Count; k++)
+            {
+                WorldPosition w = d.route[k];
+                Handles.color = TrafficColor;
+                if (DragPoint(s, ref w, origin, y, HandleUtility.GetHandleSize(ToScene(origin, w, y)) * 0.07f, Handles.SphereHandleCap, out _))
+                {
+                    d.route[k] = w;
+                    EditorUtility.SetDirty(s);
+                }
+            }
         }
     }
 

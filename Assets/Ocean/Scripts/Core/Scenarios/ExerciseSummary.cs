@@ -21,6 +21,12 @@ public sealed class ExerciseSummary
     public double MaxAbsXte;
     public double TimeOutsideCorridor;
     public int ShoalWarnings, Groundings;
+    /// <summary>Столкновения (B3) и с чем было первое.</summary>
+    public int Collisions;
+    public string FirstCollisionWith = "";
+    public string FirstGroundingOn = "";
+    /// <summary>Провал упражнения: посадка на мель или столкновение (C2 — независимо от остальных баллов).</summary>
+    public bool Failed => Groundings > 0 || Collisions > 0;
     /// <summary>Действия обучающегося (C1): перекладки руля, команды телеграфу, гудки, смены погоды.</summary>
     public int HelmActions, TelegraphOrders, HornSignals, WeatherChanges;
 
@@ -45,7 +51,12 @@ public sealed class ExerciseSummary
                 switch (e.Type)
                 {
                     case ExerciseEventType.ShoalWarningStarted: s.ShoalWarnings++; break;
-                    case ExerciseEventType.Grounded: s.Groundings++; break;
+                    case ExerciseEventType.Grounded:
+                        if (s.Groundings++ == 0) s.FirstGroundingOn = e.Subject ?? "";
+                        break;
+                    case ExerciseEventType.Collision:
+                        if (s.Collisions++ == 0) s.FirstCollisionWith = e.Subject ?? "";
+                        break;
                     case ExerciseEventType.HelmEnded: s.HelmActions++; break;
                     case ExerciseEventType.TelegraphChanged: if (!e.ByInstructor) s.TelegraphOrders++; break;
                     case ExerciseEventType.HornStarted: s.HornSignals++; break;
@@ -57,10 +68,20 @@ public sealed class ExerciseSummary
         return s;
     }
 
-    /// <summary>Текст для VR-панели (TextMeshPro, rich text).</summary>
-    public string ToPanelText()
+    /// <summary>Причина провала словами (пусто — не провал).</summary>
+    public string FailureText()
+    {
+        if (Collisions > 0) return $"столкновение с «{FirstCollisionWith}»";
+        if (Groundings > 0) return $"посадка на мель «{FirstGroundingOn}»";
+        return "";
+    }
+
+    /// <summary>Текст для VR-панели (TextMeshPro, rich text). markFailure — выделить провал красным.</summary>
+    public string ToPanelText(bool markFailure = false)
     {
         var b = new StringBuilder();
+        if (markFailure && Failed)
+            b.AppendLine($"<color=#FF5A4A><b>УПРАЖНЕНИЕ ПРОВАЛЕНО:</b> {FailureText()}</color>");
         b.AppendLine($"<b>{ScenarioText.EndReason(Reason)}</b>{(ByInstructor ? " (инструктор)" : "")}");
         b.AppendLine();
         b.AppendLine($"Время упражнения: {ScenarioText.Clock(Duration)}");
@@ -69,6 +90,7 @@ public sealed class ExerciseSummary
         b.AppendLine($"Выходов из коридора: {CorridorExits}, вне коридора {ScenarioText.Num(TimeOutsideCorridor)} с");
         b.AppendLine($"Опасных приближений к мели: {ShoalWarnings}");
         b.AppendLine($"Посадок на мель: {Groundings}");
+        b.AppendLine($"Столкновений: {Collisions}");
         b.AppendLine($"Действия: перекладок руля {HelmActions}, команд телеграфу {TelegraphOrders}, гудков {HornSignals}");
         b.AppendLine();
         b.Append("<size=80%><color=#9AA6B2>Предварительный итог. Оценка по критериям и разбор — в следующих версиях.</color></size>");

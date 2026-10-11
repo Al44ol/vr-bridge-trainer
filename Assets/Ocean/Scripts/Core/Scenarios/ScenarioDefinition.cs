@@ -12,7 +12,8 @@
 //   • погода (пресет WeatherController), время суток (B4) и видимость (C4) — пока поля;
 //   • маршрут: путевые точки, у каждой — допустимое боковое отклонение (XTE)
 //     на участке, ведущем К этой точке (у первой точки не используется);
-//   • другие суда — заготовка для B3;
+//   • другие суда (B3): тип, параметры, начальная позиция (абсолютная, от своего
+//     судна или «точка встречи» по CPA/TCPA), курс и скорость или маршрут;
 //   • лимит времени и условия завершения;
 //   • набор критериев оценки — заготовка для C2.
 // Досрочное завершение инструктором доступно всегда и в условиях не задаётся.
@@ -98,16 +99,7 @@ public class RouteWaypoint
     }
 }
 
-/// <summary>Другое судно (заготовка для B3).</summary>
-[Serializable]
-public class TrafficShipDefinition
-{
-    public string name = "Судно";
-    public ShipParameters parameters;
-    public WorldPosition position;
-    public float headingDeg;
-    public float speedKnots;
-}
+// Другое судно — TrafficShipDefinition (Core/Traffic/TrafficDefinition.cs, B3).
 
 [CreateAssetMenu(menuName = "VR Bridge/Scenario", fileName = "Scenario", order = 10)]
 public class ScenarioDefinition : ScriptableObject
@@ -196,6 +188,55 @@ public class ScenarioDefinition : ScriptableObject
         if (timeLimitSeconds == 0f && Ends(ScenarioEndConditions.TimeLimit))
             problems.Add("Условие «истечение времени» включено, но лимит = 0 (без лимита).");
         if (visibilityMeters < 0f) problems.Add("Видимость отрицательная.");
+        ValidateTraffic(problems);
         return problems;
+    }
+
+    // Другие суда (B3)
+    private void ValidateTraffic(List<string> problems)
+    {
+        if (traffic == null) return;
+        var ids = new HashSet<string>();
+        for (int i = 0; i < traffic.Count; i++)
+        {
+            TrafficShipDefinition d = traffic[i];
+            if (d == null) { problems.Add($"Судно {i + 1}: пустая запись."); continue; }
+            string tag = $"Судно {d.TargetId(i)} «{d.name}»";
+            if (!ids.Add(d.TargetId(i))) problems.Add($"{tag}: идентификатор повторяется.");
+            if (d.speedKnots < 0f) problems.Add($"{tag}: скорость отрицательная.");
+            if (d.parameters != null && d.speedKnots > d.parameters.serviceSpeedKnots + 0.01f)
+                problems.Add($"{tag}: скорость {d.speedKnots:F1} уз больше эксплуатационной {d.parameters.serviceSpeedKnots:F1} уз — будет ограничена.");
+            if (d.motion == TrafficMotion.Route && (d.route == null || d.route.Count == 0))
+                problems.Add($"{tag}: движение «по маршруту», но точек нет — пойдёт постоянным курсом.");
+
+            TrafficStart st = TrafficPlanner.Resolve(d, initial);
+            if (!string.IsNullOrEmpty(st.Problem)) problems.Add($"{tag}: {st.Problem}.");
+            if (d.placement == TrafficPlacement.MeetingPoint)
+            {
+                if (d.tcpaMinutes <= 0f) problems.Add($"{tag}: TCPA должно быть больше 0.");
+                if (d.cpaNm < 0f) problems.Add($"{tag}: CPA отрицательная.");
+                if (st.SideAmbiguous && d.cpaNm > 0f)
+                    problems.Add($"{tag}: сторона «{ScenarioText.Side(d.meetingSide)}» при таких курсах не определяется — выберите борт.");
+                if (shipParameters != null && initial != null)
+                {
+                    double steady = ShipDynamicsModel.SteadySpeed(shipParameters, ScenarioText.SpeedFactor(initial.telegraph)) / ShipParameters.KnotsToMs;
+                    if (Math.Abs(steady - initial.speedKnots) > 0.5)
+                        problems.Add($"{tag}: точка встречи считается по начальной скорости своего судна {initial.speedKnots:F1} уз, а телеграф даёт {steady:F1} уз — CPA выполнится лишь приблизительно.");
+                }
+            }
+            if (waterArea != null)
+            {
+                if (!waterArea.InBounds(st.Position)) problems.Add($"{tag}: начальная позиция вне района акватории.");
+                float draft = d.parameters != null ? d.parameters.draft : 0f;
+                if (waterArea.DepthAt(st.Position) <= draft) problems.Add($"{tag}: начальная позиция — на мели или на суше.");
+            }
+            if (initial != null)
+            {
+                double ownL = shipParameters != null ? shipParameters.length : 0.0;
+                double tgtL = d.parameters != null ? d.parameters.length : 0.0;
+                if ((st.Position - initial.position).Magnitude < 0.5 * (ownL + tgtL) + 50.0)
+                    problems.Add($"{tag}: начальная позиция слишком близко к своему судну.");
+            }
+        }
     }
 }
