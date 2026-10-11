@@ -1705,6 +1705,7 @@ GameObject:
   - component: {fileID: 440562506}
   - component: {fileID: 440562507}
   - component: {fileID: 440562508}
+  - component: {fileID: 440562509}
   m_Layer: 0
   m_Name: ShipRoot
   m_TagString: Untagged
@@ -1793,6 +1794,27 @@ MonoBehaviour:
   onRefloated:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &440562509
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 440562505}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 79996b98a9ac493a83c084f0083a3828, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BridgeActionMonitor
+  navigation: {fileID: 440562507}
+  wheel: {fileID: 655155207}
+  telegraph: {fileID: 1922673907}
+  horn: {fileID: 2068643253}
+  weather: {fileID: 743935980}
+  helmThresholdDeg: 0.5
+  helmStillDeg: 0.2
+  helmSettleSeconds: 1
+  telegraphSettleSeconds: 0.5
 --- !u!1001 &463198669
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -6891,6 +6913,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ScenarioPanel
   runner: {fileID: 1422889051}
+  recorder: {fileID: 1422889053}
+  traineeIdMaxLength: 8
   showSelectionOnStart: 1
   startDelay: 1.5
   distanceFromHead: 0.95
@@ -6907,6 +6931,7 @@ GameObject:
   - component: {fileID: 1422889052}
   - component: {fileID: 1422889051}
   - component: {fileID: 1422889050}
+  - component: {fileID: 1422889053}
   m_Layer: 0
   m_Name: Scenario
   m_TagString: Untagged
@@ -6961,6 +6986,32 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1422889053
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1422889049}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2878493be3024e9a982a66278a251841, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ExerciseRecorder
+  record: 1
+  trackRateHz: 5
+  flushIntervalSeconds: 1
+  traineeId: 
+  maxSessions: 10
+  customRoot: 
+  runner: {fileID: 1422889051}
+  navigation: {fileID: 440562507}
+  currentSession: 
+  trackRows: 0
+  eventRows: 0
+  stepTimeUs: 0
+  maxDiskWriteMs: 0
+  lastError: 
 --- !u!1 &1424446478 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 7917674758246323946, guid: 77e7c27b2c5525e4aa8cc9f99d654486, type: 3}

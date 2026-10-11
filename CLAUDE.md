@@ -100,7 +100,7 @@ XR Origin — дочерний объект Ship, игрок качается в
 - Действия обучающегося — новые типы шины (в конец enum): HelmStarted/HelmEnded, TelegraphChanged, HornStarted/HornEnded, WeatherChanged; источник — `BridgeActionMonitor` (ShipRoot), пороги в инспекторе (0,5° / 0,2° / 1 с / 0,5 с, предварительные). Органам управления добавлены только свойства: `EngineTelegraph.IsGrabbed/LastChangeFromCode`, `ShipHorn.IsSounding`, `WeatherController.CurrentPresetId`. Гудок пока фиксированные 3 с (C4).
 - ID обучающегося — цифры, без ФИО: VR-клавиатура на брифинге («Ввести ID обучающегося», ScenarioPanel) или `ExerciseRecorder.traineeId`; без ID — `noid`.
 - Replay: `Tools/VR Bridge/Session Replay` (без Play Mode): карта, шкала времени ×1…×60, состояние в момент t, события.
-- Тесты: `RecordingTests` (11); всего 89 (вне Unity 22/22 — Recording + Scenario).
+- Тесты: `RecordingTests` (11); всего 89 (Unity Test Runner 89/89). Проверено в шлеме; 90 Гц с записью.
 ## Качка на волнах (запрос 4)
 - Поле волн — чистый класс `Core/Seakeeping/OceanWaveField` (единый источник для шейдера и C#). `OceanWaves` заполняет его (`ConfigureField`) и шлёт те же значения в шейдер. Фазы θ продвигаются в **FixedUpdate**; в кадре — перенос на время отображения `OceanWaves.RenderTimeOffset` = −(1 − α)·Δt (та же α, что в ShipNavigation).
 - Порядок выполнения: WorldOrigin −100 → ShipNavigation −90 → ScenarioRunner −88 (B2) → BridgeActionMonitor −87 (C1) → GroundingMonitor −85 (B1) → ExerciseRecorder −84 (C1) → OceanWaves −80 → ShipMotion −70 → WaterAreaView −60 (B1).
