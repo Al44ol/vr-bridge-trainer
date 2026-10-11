@@ -22,7 +22,7 @@
 // Отладка (меню A, «Отладка», вне упражнения): «Проверка огней: облёт цели» —
 // неподвижная цель в 0,3 мили, своё судно на паузе переставляется по кругу
 // шагами 15° раз в 3 с носом на цель (в консоли — какие огни должны быть видны);
-// «Проверка огней: цель на 1 / 3 / 6 миль» — неподвижная цель прямо по носу,
+// «Огни, цель: < 1 / 3 / 6 миль >» (стрелки — ближе/дальше) — неподвижная цель прямо по носу,
 // идущая навстречу (видны топовые и оба бортовых).
 // ============================================================
 using System.Collections;
@@ -91,11 +91,11 @@ public class TrafficController : MonoBehaviour
         menuCommands.Add(BridgeMenu.Register("Отладка",
             () => orbit != null ? "Проверка огней: остановить облёт" : "Проверка огней: облёт цели",
             ToggleOrbit, () => CanDebug, instructorOnly: true));
-        menuCommands.Add(BridgeMenu.Register("Отладка",
-            () => debugDistanceIndex + 1 < DebugDistancesNm.Length
-                ? $"Проверка огней: цель на {DebugDistanceTitles[debugDistanceIndex + 1]}"
-                : "Проверка огней: убрать цель",
-            CycleDebugDistance, () => CanDebug && orbit == null, instructorOnly: true));
+        // «< цель: 3 мили >» — стрелками ближе/дальше; левее 1 мили — цели нет
+        menuCommands.Add(BridgeMenu.RegisterStepper("Отладка",
+            () => debugDistanceIndex < 0 ? "Огни, цель: нет" : $"Огни, цель: {DebugDistanceTitles[debugDistanceIndex]}",
+            () => SetDebugDistance(debugDistanceIndex - 1), () => SetDebugDistance(debugDistanceIndex + 1),
+            () => CanDebug && orbit == null, instructorOnly: true));
         Subscribe();
     }
 
@@ -278,12 +278,13 @@ public class TrafficController : MonoBehaviour
     }
 
     // ─────────── Отладка: проверка огней ───────────
-    private void CycleDebugDistance()
+    private void SetDebugDistance(int index)
     {
-        debugDistanceIndex++;
-        if (debugDistanceIndex >= DebugDistancesNm.Length)
+        index = Mathf.Clamp(index, -1, DebugDistancesNm.Length - 1);
+        if (index == debugDistanceIndex) return;
+        debugDistanceIndex = index;
+        if (debugDistanceIndex < 0)
         {
-            debugDistanceIndex = -1;
             RemoveDebugTarget();
             return;
         }

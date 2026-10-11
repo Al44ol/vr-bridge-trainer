@@ -119,6 +119,37 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!1 &15481398
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 15481399}
+  m_Layer: 0
+  m_Name: ScenarioPanelAnchor
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &15481399
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 15481398}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: 0.9999942, z: -0, w: -0.0034126563}
+  m_LocalPosition: {x: 2.6571746, y: 1.638, z: 0.5410233}
+  m_LocalScale: {x: 0.9999999, y: 1, z: 0.9999999}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1663476065}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &38952948
 GameObject:
   m_ObjectHideFlags: 0
@@ -233,6 +264,73 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 38952948}
   m_Mesh: {fileID: 10206, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &41377260
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 41377262}
+  - component: {fileID: 41377261}
+  m_Layer: 0
+  m_Name: Traffic
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &41377261
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 41377260}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0c83d2b176c9435db84c11fcc65e84cb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TrafficController
+  runner: {fileID: 1422889051}
+  navigation: {fileID: 440562507}
+  grounding: {fileID: 440562508}
+  cameraShake: {fileID: 1424446480}
+  cargoParameters: {fileID: 11400000, guid: 1fb6909c64934144ba0b91ae85afcc01, type: 2}
+  tankerParameters: {fileID: 11400000, guid: 1fb6909c64934144ba0b91ae85afcc01, type: 2}
+  smallParameters: {fileID: 11400000, guid: bfe9cbd8e43f5c34eb5c8969288c3bf6, type: 2}
+  cargoHull: {fileID: 2100000, guid: 7ebdeae23dda1964b940be744f1f0fe1, type: 2}
+  tankerHull: {fileID: 2100000, guid: bc7ffc7717e66d44fa86142754fcc9c0, type: 2}
+  smallHull: {fileID: 2100000, guid: 2882ad24f6e89ea47bb9e99f5442d3ad, type: 2}
+  bootMaterial: {fileID: 2100000, guid: 69ebbe60aeb8d8247a951fdeafdc5060, type: 2}
+  deckMaterial: {fileID: 2100000, guid: 92c9363b37ddb884c89c189f111ccf3a, type: 2}
+  houseMaterial: {fileID: 2100000, guid: 0b783a95bcb8c79489c694fe017a8619, type: 2}
+  darkMaterial: {fileID: 2100000, guid: 83527ae947bd6914b9d3a21489d5fcde, type: 2}
+  accentMaterial: {fileID: 2100000, guid: ab20801de629c2b4ab9c8b1cc9d28c0b, type: 2}
+  collisionClip: {fileID: 0}
+  collisionVolume: 1
+  stopTargetOnCollision: 1
+  orbitRadiusNm: 0.3
+  orbitStepDeg: 15
+  orbitStepSeconds: 3
+  targetCount: 0
+  stepTimeUs: 0
+--- !u!4 &41377262
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 41377260}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &42778957
 GameObject:
   m_ObjectHideFlags: 0
@@ -4798,6 +4896,61 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!1 &937235955
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 937235957}
+  - component: {fileID: 937235956}
+  m_Layer: 0
+  m_Name: NavLights
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &937235956
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 937235955}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 30e02fcd489e430ba5dff3baa19eddc6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NavLightField
+  material: {fileID: 2100000, guid: f7e3ed7a47015304490da04fb83fe041, type: 2}
+  angularDiameterDeg: 0.15
+  minRadius: 0.15
+  brightness: 1.5
+  mode: 0
+  darkAmbientThreshold: 0.3
+  restrictedVisibilityNm: 2
+  lightsOn: 0
+  visibilityNm: 0
+  transmissivity: 0
+  lightsDrawn: 0
+--- !u!4 &937235957
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 937235955}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &958860413
 GameObject:
   m_ObjectHideFlags: 0
@@ -6878,6 +7031,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1413735269}
   - component: {fileID: 1413735270}
+  - component: {fileID: 1413735271}
   m_Layer: 0
   m_Name: ScenarioPanel
   m_TagString: Untagged
@@ -6917,8 +7071,26 @@ MonoBehaviour:
   traineeIdMaxLength: 8
   showSelectionOnStart: 1
   startDelay: 1.5
+  startAnchor: {fileID: 15481399}
   distanceFromHead: 0.95
   downOffset: 0.12
+  canvasScale: 0.001
+--- !u!114 &1413735271
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1413735268}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 22156064a31241b9837120fda6fe5c8c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ExerciseFailureNotice
+  showNotice: 1
+  showSeconds: 6
+  distanceFromHead: 1.1
+  upOffset: 0.22
   canvasScale: 0.001
 --- !u!1 &1422889049
 GameObject:
@@ -6966,6 +7138,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ScenarioRunner
   scenarios:
   - {fileID: 11400000, guid: dec80650bea5c374785aa021cbeb333d, type: 2}
+  - {fileID: 11400000, guid: 5cbacf9842e397148b0c5591cf024790, type: 2}
   previewIndex: 0
   navigation: {fileID: 440562507}
   grounding: {fileID: 440562508}
@@ -8114,6 +8287,7 @@ Transform:
   - {fileID: 752309095}
   - {fileID: 1237742644}
   - {fileID: 1413735269}
+  - {fileID: 15481399}
   m_Father: {fileID: 440562506}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1663476066
@@ -11200,6 +11374,7 @@ GameObject:
   m_Component:
   - component: {fileID: 2143363967}
   - component: {fileID: 2143363966}
+  - component: {fileID: 2143363968}
   m_Layer: 0
   m_Name: WaterArea
   m_TagString: Untagged
@@ -11263,6 +11438,22 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2143363968
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2143363965}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3a33757dd8424a41af9eee7099f37080, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AidLightsView
+  view: {fileID: 2143363966}
+  nominalRangeNm: 3
+  lanternHeight: 3.12
+  lightsCount: 0
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -11279,3 +11470,5 @@ SceneRoots:
   - {fileID: 806489819}
   - {fileID: 2143363967}
   - {fileID: 1422889052}
+  - {fileID: 41377262}
+  - {fileID: 937235957}

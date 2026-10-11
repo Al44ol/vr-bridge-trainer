@@ -17,7 +17,9 @@
 //   5. AidLightsView рядом с WaterAreaView — огни знаков МАМС;
 //   6. ExerciseFailureNotice рядом с ScenarioPanel — оповещение «Упражнение провалено»;
 //   7. ScenarioPanelAnchor (дочерний к Ship) — точка панели выбора при запуске: 1 м перед
-//      местом появления игрока (XR Origin), на высоте 1,5 м; если уже есть — не трогается
+//      местом появления игрока (XR Origin), на уровне поручней (1,15 м), с наклоном к глазам;
+//      если уже есть — не трогается. Опустить имеющуюся точку —
+//      Tools/VR Bridge/Scenario Panel To Handrail Height
 //      (подвинуть мышью в Scene View);
 //   8. сценарий Assets/Ocean/Scenarios/Scenario_B3-01_Traffic.asset (DemoTrafficScenario).
 // Требует Setup B2 Scenarios. После запуска — Ctrl+S.
@@ -234,37 +236,70 @@ public static class SetupTraffic
         log.AppendLine($"  + {p.name}: B = {beam} м, d = {draft} м ({source})");
     }
 
-    // 1 м перед местом появления игрока (XR Origin), на высоте 1,5 м над полом, лицом от игрока
+    // Центр панели над полом — примерно на уровне поручней (после первой проверки в шлеме; было 1,5 м)
+    private const float AnchorHeight = 1.15f;
+    private const float EyeHeight = 1.6f;
+
+    // 1 м перед местом появления игрока (XR Origin), на уровне поручней, наклон — к глазам
     private static void PlaceAnchor(Scene scene, Transform anchor, out string where)
     {
-        Transform rig = null;
-        foreach (GameObject root in scene.GetRootGameObjects())
-        {
-            foreach (MonoBehaviour mb in root.GetComponentsInChildren<MonoBehaviour>(true))
-                if (mb != null && mb.GetType().Name == "XROrigin") { rig = mb.transform; break; }
-            if (rig != null) break;
-        }
+        Transform rig = FindRig(scene);
         if (rig == null)
         {
-            Camera cam = null;
-            foreach (GameObject root in scene.GetRootGameObjects())
-                foreach (Camera c in root.GetComponentsInChildren<Camera>(true))
-                    if (c.CompareTag("MainCamera")) { cam = c; break; }
-            rig = cam != null ? cam.transform : null;
-        }
-        if (rig == null)
-        {
-            anchor.SetPositionAndRotation(new Vector3(0f, 1.5f, 1f), Quaternion.identity);
-            where = "в (0; 1,5; 1) — XR Origin не найден";
+            anchor.SetPositionAndRotation(new Vector3(0f, AnchorHeight, 1f), Quaternion.identity);
+            where = $"в (0; {AnchorHeight}; 1) — XR Origin не найден";
             return;
         }
         Vector3 fwd = rig.forward;
         fwd.y = 0f;
         if (fwd.sqrMagnitude < 1e-4f) fwd = Vector3.forward;
         fwd.Normalize();
-        Vector3 pos = rig.position + fwd * 1.0f + Vector3.up * 1.5f;
-        anchor.SetPositionAndRotation(pos, Quaternion.LookRotation(fwd, Vector3.up));
-        where = $"в 1 м перед «{rig.name}» на высоте 1,5 м";
+        Vector3 pos = rig.position + fwd * 1.0f + Vector3.up * AnchorHeight;
+        anchor.SetPositionAndRotation(pos, FacingEye(rig, pos));
+        where = $"в 1 м перед «{rig.name}» на высоте {AnchorHeight} м";
+    }
+
+    /// <summary>Опустить точку панели выбора на уровень поручней (положение по горизонтали сохраняется).</summary>
+    [MenuItem("Tools/VR Bridge/Scenario Panel To Handrail Height")]
+    private static void AnchorToHandrail()
+    {
+        if (EditorApplication.isPlayingOrWillChangePlaymode) { Debug.LogWarning("[Панель] Выйдите из Play Mode."); return; }
+        Scene scene = SceneManager.GetActiveScene();
+        ScenarioPanel panel = FindInScene<ScenarioPanel>(scene);
+        Transform rig = FindRig(scene);
+        if (panel == null || panel.startAnchor == null || rig == null)
+        {
+            Debug.LogError("[Панель] Нет ScenarioPanel.startAnchor или XR Origin — сначала Setup B3 Traffic.");
+            return;
+        }
+        Transform a = panel.startAnchor;
+        Undo.RecordObject(a, "Scenario Panel To Handrail Height");
+        Vector3 pos = a.position;
+        float was = pos.y - rig.position.y;
+        pos.y = rig.position.y + AnchorHeight;
+        a.SetPositionAndRotation(pos, FacingEye(rig, pos));
+        EditorSceneManager.MarkSceneDirty(scene);
+        Debug.Log($"[Панель] Точка панели выбора: {was:F2} → {AnchorHeight:F2} м над полом, наклон к глазам ({EyeHeight} м). Сохраните сцену (Ctrl+S).");
+    }
+
+    // Панель смотрит «от глаз»: ось +Z — из точки глаз игрока на панель (как ScenarioPanel.PositionInFrontOfPlayer)
+    private static Quaternion FacingEye(Transform rig, Vector3 panelPos)
+    {
+        Vector3 eye = rig.position + Vector3.up * EyeHeight;
+        Vector3 dir = panelPos - eye;
+        if (dir.sqrMagnitude < 1e-4f) dir = rig.forward;
+        return Quaternion.LookRotation(dir.normalized, Vector3.up);
+    }
+
+    private static Transform FindRig(Scene scene)
+    {
+        foreach (GameObject root in scene.GetRootGameObjects())
+            foreach (MonoBehaviour mb in root.GetComponentsInChildren<MonoBehaviour>(true))
+                if (mb != null && mb.GetType().Name == "XROrigin") return mb.transform;
+        foreach (GameObject root in scene.GetRootGameObjects())
+            foreach (Camera c in root.GetComponentsInChildren<Camera>(true))
+                if (c.CompareTag("MainCamera")) return c.transform;
+        return null;
     }
 
     private static Material Lit(string name, Color color, float smoothness, StringBuilder log)

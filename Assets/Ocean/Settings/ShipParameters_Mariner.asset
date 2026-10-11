@@ -25,3 +25,14 @@ MonoBehaviour:
   turnSpeedLossCoeff: 0.8062914
   maxRudderAngle: 35
   rudderRate: 5
+  beam: 23.16
+  draft: 8
+  metacentricHeight: 1
+  blockCoefficient: 0.7
+  waterplaneCoefficient: 0.8
+  rollPeriod: 12
+  heavePeriod: 7
+  pitchPeriod: 7
+  rollDamping: 0.1
+  heaveDamping: 0.25
+  pitchDamping: 0.25

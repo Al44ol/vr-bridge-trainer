@@ -1,0 +1,6 @@
+﻿target;course_deg;speed_kn;side;cpa_set_nm;tcpa_set_min;cpa_model_m;cpa_set_m;tcpa_model_s;tcpa_set_s
+Mariner;270;12.0;Ahead;0.50;12.0;926.00;926.00;720.00;720.0
+Mariner;180;12.0;Port;0.30;10.0;555.60;555.60;600.00;600.0
+KCS;300;20.0;Astern;1.00;15.0;1852.00;1852.00;900.00;900.0
+Model45m;90;10.0;Starboard;0.00;8.0;0.00;0.00;480.00;480.0
+Model45m;0;6.0;Starboard;0.20;10.0;370.40;370.40;600.00;600.0

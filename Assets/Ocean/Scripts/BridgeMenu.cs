@@ -14,6 +14,7 @@
 // hideWhenUnavailable не показывается, пока недоступна (команды сценария по фазе:
 // «Начать» — только на брифинге и т. п.), панель пересобирается сама.
 // Прыжок шаблона XR (тоже кнопка A) отключает Setup B1 Water Area.
+// B3: RegisterStepper — строка «< значение >» (выбор значения стрелками, меню не закрывается).
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -36,6 +37,10 @@ public sealed class BridgeMenuCommand
     public bool CloseOnExecute = true;
     /// <summary>Недоступную команду не показывать (а не делать серой) — B2: команды сценария по фазе.</summary>
     public bool HideWhenUnavailable;
+
+    /// <summary>Переключатель «◀ значение ▶» (B3): кнопки-стрелки по бокам, меню не закрывается.</summary>
+    public Action Previous, Next;
+    public bool IsStepper => Previous != null || Next != null;
 
     public bool Available => IsAvailable == null || IsAvailable();
     public bool Visible => !HideWhenUnavailable || Available;
@@ -85,6 +90,21 @@ public class BridgeMenu : MonoBehaviour
                                              bool hideWhenUnavailable = false) =>
         Register(group, () => title, execute, isAvailable, instructorOnly, hideWhenUnavailable);
 
+    /// <summary>
+    /// Переключатель значения «◀ title ▶» (B3): previous/next — по стрелкам, меню остаётся открытым.
+    /// </summary>
+    public static BridgeMenuCommand RegisterStepper(string group, Func<string> title, Action previous, Action next,
+                                                    Func<bool> isAvailable = null, bool instructorOnly = false,
+                                                    bool hideWhenUnavailable = false)
+    {
+        BridgeMenuCommand c = Register(group, title, null, isAvailable, instructorOnly, hideWhenUnavailable);
+        c.Previous = previous;
+        c.Next = next;
+        c.CloseOnExecute = false;
+        if (Instance != null && Instance.IsOpen) Instance.Rebuild();
+        return c;
+    }
+
     public static void Unregister(BridgeMenuCommand c)
     {
         if (c == null) return;
@@ -114,6 +134,8 @@ public class BridgeMenu : MonoBehaviour
     private readonly List<(BridgeMenuCommand cmd, Button btn, Image img, TextMeshProUGUI label)> items = new List<(BridgeMenuCommand, Button, Image, TextMeshProUGUI)>();
     private float nextRefresh;
     private readonly List<BridgeMenuCommand> builtVisible = new List<BridgeMenuCommand>();
+    private readonly List<(BridgeMenuCommand cmd, Button btn, Image img)> arrows = new List<(BridgeMenuCommand, Button, Image)>();
+    private static readonly Color StepperColor = new Color(0.16f, 0.26f, 0.38f);
 
     public bool IsOpen => canvas != null && canvas.enabled;
 
@@ -198,6 +220,7 @@ public class BridgeMenu : MonoBehaviour
         for (int i = background.childCount - 1; i >= 0; i--)
             Destroy(background.GetChild(i).gameObject);
         items.Clear();
+        arrows.Clear();
 
         // Видимые сейчас команды; порядок групп — SetGroupOrder, затем порядок первой регистрации
         var visible = new List<BridgeMenuCommand>();
@@ -239,8 +262,28 @@ public class BridgeMenu : MonoBehaviour
             {
                 if ((c.Group ?? "") != g) continue;
                 BridgeMenuCommand cmd = c;
-                (Button btn, Image img, TextMeshProUGUI label) = MakeButton(ref y, () => Execute(cmd));
-                items.Add((cmd, btn, img, label));
+                if (cmd.IsStepper)
+                {
+                    // «◀» — значение — «▶» в одной строке; меню не закрывается
+                    const float arrow = 48f, gap = 6f;
+                    float full = Width - 2f * Pad, mid = full - 2f * (arrow + gap);
+                    float yRow = y;
+                    (Button prev, Image prevImg, TextMeshProUGUI prevLabel) = MakeButton(ref yRow, () => Step(cmd, cmd.Previous), arrow, -0.5f * full + 0.5f * arrow);
+                    yRow = y;
+                    (Button next, Image nextImg, TextMeshProUGUI nextLabel) = MakeButton(ref yRow, () => Step(cmd, cmd.Next), arrow, 0.5f * full - 0.5f * arrow);
+                    (Button btn, Image img, TextMeshProUGUI label) = MakeButton(ref y, null, mid, 0f);
+                    // Символы «<» «>» — есть в шрифте TMP по умолчанию (◀ ▶ в LiberationSans нет)
+                    prevLabel.richText = nextLabel.richText = false;
+                    prevLabel.text = "<"; nextLabel.text = ">";
+                    prevLabel.fontSize = nextLabel.fontSize = 26f;
+                    prevLabel.fontStyle = nextLabel.fontStyle = FontStyles.Bold;
+                    arrows.Add((cmd, prev, prevImg));
+                    arrows.Add((cmd, next, nextImg));
+                    items.Add((cmd, btn, img, label));
+                    continue;
+                }
+                (Button b0, Image i0, TextMeshProUGUI l0) = MakeButton(ref y, () => Execute(cmd));
+                items.Add((cmd, b0, i0, l0));
             }
         }
         y -= 4f;
@@ -257,6 +300,14 @@ public class BridgeMenu : MonoBehaviour
         catch (Exception e) { Debug.LogException(e, this); }
         if (c.CloseOnExecute) Close();
         else RefreshStates();
+    }
+
+    private void Step(BridgeMenuCommand c, Action a)
+    {
+        if (!c.Available || a == null) return;
+        try { a(); }
+        catch (Exception e) { Debug.LogException(e, this); }
+        RefreshStates();
     }
 
     private void RefreshStates()
@@ -276,11 +327,17 @@ public class BridgeMenu : MonoBehaviour
             return;
         }
 
+        foreach (var a in arrows)
+        {
+            bool on = a.cmd.Available;
+            a.btn.interactable = on;
+            a.img.color = on ? ButtonColor : DisabledColor;
+        }
         foreach (var it in items)
         {
             bool on = it.cmd.Available;
-            it.btn.interactable = on;
-            it.img.color = on ? ButtonColor : DisabledColor;
+            it.btn.interactable = on && !it.cmd.IsStepper;
+            it.img.color = !on ? DisabledColor : it.cmd.IsStepper ? StepperColor : ButtonColor;
             string title = it.cmd.Title != null ? it.cmd.Title() : "—";
             it.label.text = it.cmd.InstructorOnly ? title + " <size=70%>(инстр.)</size>" : title;
             it.label.color = on ? Color.white : new Color(0.6f, 0.6f, 0.6f);
@@ -300,7 +357,8 @@ public class BridgeMenu : MonoBehaviour
         y -= h;
     }
 
-    private (Button, Image, TextMeshProUGUI) MakeButton(ref float y, UnityEngine.Events.UnityAction action)
+    // width < 0 — во всю ширину; x — центр кнопки по горизонтали
+    private (Button, Image, TextMeshProUGUI) MakeButton(ref float y, UnityEngine.Events.UnityAction action, float width = -1f, float x = 0f)
     {
         var go = new GameObject("Button", typeof(RectTransform));
         go.transform.SetParent(background, false);
@@ -308,10 +366,10 @@ public class BridgeMenu : MonoBehaviour
         img.color = ButtonColor;
         var btn = go.AddComponent<Button>();
         btn.targetGraphic = img;
-        btn.onClick.AddListener(action);
+        if (action != null) btn.onClick.AddListener(action);
         var rt = go.GetComponent<RectTransform>();
-        rt.sizeDelta = new Vector2(Width - 2f * Pad, ButtonHeight);
-        rt.anchoredPosition = new Vector2(0f, y - ButtonHeight * 0.5f);
+        rt.sizeDelta = new Vector2(width > 0f ? width : Width - 2f * Pad, ButtonHeight);
+        rt.anchoredPosition = new Vector2(x, y - ButtonHeight * 0.5f);
         y -= ButtonHeight + 6f;
 
         var textGo = new GameObject("Text", typeof(RectTransform));
