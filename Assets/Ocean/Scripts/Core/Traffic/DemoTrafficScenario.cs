@@ -15,6 +15,7 @@
 //        своё судно обгоняет его после поворота (правило 13).
 // Без манёвра своего судна (авторулевой по маршруту) T2 приводит к столкновению
 // около t = 4 мин — это проверяет тест; T1 и T3 проходят на десятках метров.
+// CPA_доп (C2): T1 и T3 в фарватере — 0,05 мили (≈ 93 м), T2 — 0,5 мили (по умолчанию).
 // Значения — демонстрационные (без обоснования как учебной нормы).
 // ============================================================
 using System.Collections.Generic;
@@ -26,6 +27,8 @@ public static class DemoTrafficScenario
     public const double OncomingOffset = 90.0;     // T1: от оси влево (по своему ходу — вправо), м
     public const double OvertakenOffset = 80.0;    // T3: от оси вправо, м
     public const double OncomingFromTurn = 1500.0; // T1: старт на колене 2 в 1500 м от точки поворота
+    /// <summary>CPA_доп в фарватере шириной 2 кбт (T1, T3), мили — предварительно (C2); T2 (открытая вода) — по умолчанию 0,5.</summary>
+    public const float FairwayRequiredCpaNm = 0.05f;
 
     public const string Briefing =
         "Ночь. Своё судно — в 1,2 мили к югу от входа в учебный фарватер, курс 000°, полный ход 15 уз. " +
@@ -62,7 +65,8 @@ public static class DemoTrafficScenario
             id = "T1", name = "Встречный сухогруз", type = TrafficVesselType.Cargo, parameters = cargo,
             placement = TrafficPlacement.Absolute, position = l1 + dir * OncomingFromTurn,
             speedKnots = 12f, motion = TrafficMotion.Route,
-            route = new List<WorldPosition> { l1, left[0], new WorldPosition(left[0].East, -3600) }
+            route = new List<WorldPosition> { l1, left[0], new WorldPosition(left[0].East, -3600) },
+            requiredCpaNm = FairwayRequiredCpaNm
         };
 
         // T2: пересекает курс справа, курс столкновения через 4 мин, затем на юго-запад
@@ -82,7 +86,8 @@ public static class DemoTrafficScenario
             id = "T3", name = "Малое судно впереди", type = TrafficVesselType.Small, parameters = small,
             placement = TrafficPlacement.Absolute, position = new WorldPosition(right[0].East, 1200),
             speedKnots = 6f, motion = TrafficMotion.Route,
-            route = new List<WorldPosition> { r1, r2, r2 + dir2 * 3000.0 }
+            route = new List<WorldPosition> { r1, r2, r2 + dir2 * 3000.0 },
+            requiredCpaNm = FairwayRequiredCpaNm
         };
         return new List<TrafficShipDefinition> { t1, t2, t3 };
     }

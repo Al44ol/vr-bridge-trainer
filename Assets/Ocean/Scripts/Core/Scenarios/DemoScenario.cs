@@ -4,6 +4,7 @@
 // Акватория — демонстрационная (DemoWaterArea, B1). Маршрут — по оси
 // фарватера: старт (0; −2500) → вход в фарватер (0; −300) → точка поворота
 // (0; 3200), поворот вправо на 60° → выход из фарватера (3031; 4950); 9,2 км.
+// Участки фарватера — узкость (правило 9, C2): оценивается, держится ли судно правее оси.
 // XTE доп.: 250 м на подходе, 150 м в фарватере (полуширина 185 м минус запас
 // ≈ 35 м на корпус и рыскание) — предварительные значения (глава 2 ВКР).
 // День, умеренное волнение, полный ход 15 уз; номинальное время ≈ 20 мин,
@@ -21,13 +22,17 @@ public static class DemoScenario
     public const TelegraphOrder StartTelegraph = TelegraphOrder.FullAhead;
     public const float StartSpeedKnots = 15f;
 
+    /// <summary>Правило 9 (C2): в узкости — у правой стороны. Прежняя фраза брифинга — LegacyKeepAxisSentence.</summary>
+    public const string KeepRightSentence = "В фарватере держитесь у оси с правой стороны (правило 9 МППСС).";
+    public const string LegacyKeepAxisSentence = "Держитесь оси фарватера.";
+
     public const string Briefing =
         "Своё судно — в 1,2 мили (2,2 км) к югу от входа в учебный фарватер, курс 000°, полный ход 15 уз.\n\n" +
         "Задача: пройти фарватером по путевым точкам:\n" +
         "  1. Вход в фарватер — за осевым знаком, у первой пары буёв;\n" +
         "  2. Точка поворота — поворот вправо на 60°, на курс 060°;\n" +
         "  3. Выход из фарватера.\n\n" +
-        "Держитесь оси фарватера. Допустимое боковое отклонение — 250 м на подходе и 150 м в фарватере.\n\n" +
+        KeepRightSentence + " Допустимое боковое отклонение — 250 м на подходе и 150 м в фарватере.\n\n" +
         "Фарватер шириной 2 кбт ограждён латеральными знаками МАМС (регион A): красные — слева, " +
         "зелёные — справа по ходу с моря. За поворотом и с внутренней стороны поворота — отмели, " +
         "обозначенные кардинальными знаками; к востоку от линии подхода — камень со знаком отдельной опасности.\n\n" +
@@ -41,8 +46,8 @@ public static class DemoScenario
         {
             new RouteWaypoint("Старт", DemoWaterArea.StartPosition, ApproachXteLimit),
             new RouteWaypoint("Вход в фарватер", axis[0], ApproachXteLimit),
-            new RouteWaypoint("Поворот", axis[1], FairwayXteLimit),
-            new RouteWaypoint("Выход из фарватера", axis[2], FairwayXteLimit)
+            new RouteWaypoint("Поворот", axis[1], FairwayXteLimit, narrowChannel: true),
+            new RouteWaypoint("Выход из фарватера", axis[2], FairwayXteLimit, narrowChannel: true)
         };
     }
 
@@ -69,6 +74,7 @@ public static class DemoScenario
         s.traffic = new List<TrafficShipDefinition>();
         s.timeLimitSeconds = TimeLimitSeconds;
         s.endConditions = ScenarioEndConditions.All;
-        s.assessment = null;
+        s.detectionRangeNm = 0f;
+        // s.assessment не трогается: набор критериев назначает Setup C2 Assessment
     }
 }

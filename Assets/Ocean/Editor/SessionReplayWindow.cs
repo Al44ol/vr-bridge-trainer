@@ -43,6 +43,10 @@ public class SessionReplayWindow : EditorWindow
     private string[] sessionNames = new string[0];
     private int selected = -1;
     private RecordedSession session;
+    // C2: оценка по записи и сравнение с оценкой в шлеме (assessment.csv)
+    private AssessmentResult offline;
+    private string assessmentMatch = "";
+    private Vector2 assessmentScroll;
     private WaterArea area;
 
     private double t;
@@ -91,6 +95,7 @@ public class SessionReplayWindow : EditorWindow
         if (index < 0 || index >= sessions.Count) return;
         selected = index;
         session = SessionReader.Load(sessions[index]);
+        Assess();
         area = FindArea(session.Meta);
         t = 0;
         playing = false;
@@ -144,6 +149,7 @@ public class SessionReplayWindow : EditorWindow
         Map(map);
         EditorGUILayout.BeginVertical(GUILayout.Width(330f));
         State();
+        AssessmentView();
         Events();
         EditorGUILayout.EndVertical();
         EditorGUILayout.EndHorizontal();
@@ -226,6 +232,33 @@ public class SessionReplayWindow : EditorWindow
     }
 
     private static void Row(string label, string value) => EditorGUILayout.LabelField(label, value);
+
+    private void Assess()
+    {
+        offline = null; assessmentMatch = "";
+        try
+        {
+            offline = SessionAssessment.Assess(session);
+            string file = Path.Combine(session.Folder, SessionFormat.AssessmentFile);
+            assessmentMatch = !File.Exists(file) ? "в шлеме не оценивалась (сессия до C2 или прервана)"
+                : File.ReadAllText(file).TrimStart('﻿') == offline.ToCsv() ? "совпадает с оценкой в шлеме" : "НЕ совпадает с assessment.csv";
+        }
+        catch (Exception e) { assessmentMatch = "ошибка: " + e.Message; }
+    }
+
+    private void AssessmentView()
+    {
+        if (offline == null) return;
+        EditorGUILayout.LabelField("Оценка по записи (C2)", EditorStyles.boldLabel);
+        EditorGUILayout.LabelField(offline.Headline() + (offline.Failed ? " — " + offline.FailureText : ""), EditorStyles.wordWrappedLabel);
+        EditorGUILayout.LabelField(assessmentMatch, EditorStyles.miniLabel);
+        assessmentScroll = EditorGUILayout.BeginScrollView(assessmentScroll, GUILayout.Height(160f));
+        foreach (CriterionResult c in offline.Items)
+            EditorGUILayout.LabelField($"{(c.Evaluated ? c.Passed ? "+" : "×" : "–")} {c.Code} {c.Subject}: {c.Note}", eventStyle);
+        EditorGUILayout.EndScrollView();
+        if (GUILayout.Button("Пересчитать оценку")) Assess();
+        EditorGUILayout.Space(4f);
+    }
 
     private void Events()
     {

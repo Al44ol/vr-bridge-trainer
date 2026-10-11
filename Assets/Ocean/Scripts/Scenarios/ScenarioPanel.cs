@@ -18,6 +18,9 @@
 // ScenarioPanelAnchor, дочерний к Ship; двигается мышью в Scene View), а не туда,
 // куда смотрит камера в момент загрузки; из меню — по-прежнему перед игроком.
 // На результатах провал (мель, столкновение) выделен красным (ExerciseFailureNotice).
+// C2: на результатах (в том числе при досрочном завершении) — оценка: балл, зачёт/незачёт и
+// список критериев (ExerciseAssessmentMonitor). Меню «Параметры» (Y) → «Текущий балл» — промежуточная
+// оценка во время упражнения и опасные цели (CPA/TCPA).
 // Команды меню: «Выбор сценария…», «Начать упражнение», «Брифинг»/«Результаты»,
 // «Перезапустить сценарий» (инстр.), «Завершить досрочно» (инстр.); недоступные
 // по фазе — скрыты. Отладочные команды B1 остаются в группе «Отладка» (внизу).
@@ -33,11 +36,13 @@ using UnityEngine.UI;
 
 public class ScenarioPanel : MonoBehaviour
 {
-    private enum Mode { Hidden, Selection, Briefing, Results, Keypad }
+    private enum Mode { Hidden, Selection, Briefing, Results, Keypad, CurrentScore }
 
     public ScenarioRunner runner;
     [Tooltip("Запись упражнения (C1): ID обучающегося, папка сессии. Пусто — найти")]
     public ExerciseRecorder recorder;
+    [Tooltip("Оценка (C2): итог и текущий балл. Пусто — найти")]
+    public ExerciseAssessmentMonitor assessment;
     [Tooltip("Наибольшая длина ID обучающегося, цифр")]
     public int traineeIdMaxLength = 8;
 
@@ -95,6 +100,10 @@ public class ScenarioPanel : MonoBehaviour
             instructorOnly: true, hideWhenUnavailable: true));
         menuCommands.Add(BridgeMenu.Register(MenuGroup, "Завершить досрочно", () => runner.Abort(),
             () => Phase == ScenarioRunner.Phase.Running, instructorOnly: true, hideWhenUnavailable: true));
+        menuCommands.Add(BridgeMenu.Register(MenuGroup, () => Phase == ScenarioRunner.Phase.Finished ? "Оценка (итог)" : "Текущий балл",
+            () => { if (Phase == ScenarioRunner.Phase.Finished) ShowResults(); else ShowCurrentScore(); },
+            () => assessment != null && assessment.assess && (Phase == ScenarioRunner.Phase.Running || Phase == ScenarioRunner.Phase.Finished),
+            hideWhenUnavailable: true).InMenu(BridgeMenu.SettingsMenuId));
         Subscribe();
     }
 
@@ -110,6 +119,7 @@ public class ScenarioPanel : MonoBehaviour
     {
         if (runner == null) runner = ScenarioRunner.Instance != null ? ScenarioRunner.Instance : FindAnyObjectByType<ScenarioRunner>();
         if (recorder == null) recorder = ExerciseRecorder.Instance != null ? ExerciseRecorder.Instance : FindAnyObjectByType<ExerciseRecorder>();
+        if (assessment == null) assessment = ExerciseAssessmentMonitor.Instance != null ? ExerciseAssessmentMonitor.Instance : FindAnyObjectByType<ExerciseAssessmentMonitor>();
         Subscribe();
         BuildCanvas();
         if (showSelectionOnStart) StartCoroutine(ShowSelectionDelayed());
@@ -207,13 +217,52 @@ public class ScenarioPanel : MonoBehaviour
         Title($"Упражнение завершено — {r.ScenarioId}", ref y);
         Text(r.Title, 17f, MutedColor, ref y);
         y -= Gap;
-        Text(r.ToPanelText(ExerciseFailureNotice.Enabled), 19f, Color.white, ref y);
+        AssessmentResult a = assessment != null ? assessment.LastResult : null;
+        if (a != null)
+        {
+            Text(r.ToPanelTextShort(ExerciseFailureNotice.Enabled), 18f, Color.white, ref y);
+            y -= Gap;
+            Text(a.ToPanelText(showFailure: false), 17f, Color.white, ref y);
+        }
+        else Text(r.ToPanelText(ExerciseFailureNotice.Enabled), 19f, Color.white, ref y);
         if (recorder != null && !string.IsNullOrEmpty(recorder.LastSessionFolder))
             Text($"Запись: {System.IO.Path.GetFileName(recorder.LastSessionFolder)}", 15f, MutedColor, ref y);
         y -= Gap;
         ButtonRow(ref y, ButtonHeight,
             ("Перезапустить", StartColor, () => runner.Restart()),
             ("К выбору", NeutralColor, ShowSelection),
+            ("Закрыть", NeutralColor, Hide));
+        EndContent(y);
+    }
+
+    // ─────────── Текущий балл (C2, меню «Параметры» на Y) ───────────
+    /// <summary>Промежуточная оценка во время упражнения: балл, оценённые критерии, цели (CPA/TCPA).</summary>
+    public void ShowCurrentScore()
+    {
+        if (assessment == null) return;
+        if (Phase == ScenarioRunner.Phase.Finished) { ShowResults(); return; }
+        AssessmentResult a = assessment.Current();
+        BeginContent(Mode.CurrentScore);
+        float y = Top;
+        Title($"Текущая оценка — t = {ScenarioText.Clock(runner != null ? runner.ExerciseTime : 0)}", ref y);
+        if (a == null)
+            Text("Оценка начнётся с началом упражнения.", 17f, MutedColor, ref y);
+        else
+        {
+            var targets = new StringBuilder();
+            foreach (ExerciseAssessmentMonitor.LiveTarget t in assessment.LiveTargets)
+            {
+                bool closing = t.TcpaMin > 0;
+                targets.AppendLine($"{t.Id}: D {ScenarioText.Num(t.RangeNm, 2)} мили, пеленг {ScenarioText.Num(t.BearingDeg)}°" +
+                                   (closing ? $", CPA {ScenarioText.Num(t.CpaNm, 2)} мили, TCPA {ScenarioText.Num(t.TcpaMin, 1)} мин" : ", расходимся"));
+            }
+            if (targets.Length > 0) Text(targets.ToString().TrimEnd(), 16f, MutedColor, ref y);
+            Text(a.ToPanelText(), 17f, Color.white, ref y);
+            Text("Предварительно: сближения оцениваются после того, как цель пройдёт; маршрут — по пройденной части.", 14f, MutedColor, ref y);
+        }
+        y -= Gap;
+        ButtonRow(ref y, ButtonHeight,
+            ("Обновить", ButtonColor, ShowCurrentScore),
             ("Закрыть", NeutralColor, Hide));
         EndContent(y);
     }

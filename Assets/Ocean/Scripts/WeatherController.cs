@@ -22,6 +22,8 @@
 // погода «Ночь» + ночь (как до B4). Раздельно — меню A «Обстановка» и сценарий.
 // Исправлено: угол солнца интерполировался через eulerAngles (−15° читалось как 345°,
 // переход ночь → день шёл «длинным путём» — кувырок света); теперь состояние не читается из сцены.
+// C2: плотности тумана пресетов берутся из WeatherVisibility (Core) — по ним же оценка считает
+// видимость и дистанцию обнаружения целей (в шлеме и офлайн по записи).
 // ============================================================
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -77,7 +79,7 @@ public class WeatherController : MonoBehaviour
         ambientSky = new Color(0.53f, 0.71f, 0.85f),
         ambientGround = new Color(0.25f, 0.22f, 0.18f),
         fogColor = new Color(0.7f, 0.8f, 0.9f),
-        fogDensity = 0.0003f,    // видимость ≈ 5,8 км (B1; было 0,001 ≈ 1,7 км)
+        fogDensity = WeatherVisibility.FogDensity(WeatherPresetId.Calm),       // 0,0003: видимость ≈ 5,8 км (B1; было 0,001 ≈ 1,7 км)
         sunAngle = 50f,
         windSpeed = 0.5f
     };
@@ -91,7 +93,7 @@ public class WeatherController : MonoBehaviour
         ambientSky = new Color(0.45f, 0.58f, 0.7f),
         ambientGround = new Color(0.2f, 0.2f, 0.18f),
         fogColor = new Color(0.6f, 0.68f, 0.76f),
-        fogDensity = 0.0004f,    // ≈ 4,3 км, 2,3 мили (было 0,003 ≈ 0,6 км)
+        fogDensity = WeatherVisibility.FogDensity(WeatherPresetId.Moderate),   // 0,0004: ≈ 4,3 км, 2,3 мили (было 0,003 ≈ 0,6 км)
         sunAngle = 45f,
         windSpeed = 1.0f
     };
@@ -105,7 +107,7 @@ public class WeatherController : MonoBehaviour
         ambientSky = new Color(0.08f, 0.09f, 0.11f),
         ambientGround = new Color(0.05f, 0.05f, 0.05f),
         fogColor = new Color(0.25f, 0.27f, 0.3f),
-        fogDensity = 0.0015f,    // ≈ 1,2 км (было 0,025 ≈ 70 м)
+        fogDensity = WeatherVisibility.FogDensity(WeatherPresetId.Storm),      // 0,0015: ≈ 1,2 км (было 0,025 ≈ 70 м)
         sunAngle = 25f,
         windSpeed = 2.2f,
         rain = 1f
@@ -124,7 +126,7 @@ public class WeatherController : MonoBehaviour
         fogColor = new Color(0.6f, 0.68f, 0.76f),
         // ≈ 11,5 км = 6,2 мили (B3: топовые огни видны ≈ 4,2 мили, бортовые ≈ 2,4 мили;
         // при 0,0004 (4,3 км) — лишь 2,4 и 1,5 мили). Было 0,008 ≈ 0,2 км (до B1).
-        fogDensity = 0.00015f,
+        fogDensity = WeatherVisibility.FogDensity(WeatherPresetId.Night),   // 0,00015
         sunAngle = 45f,
         windSpeed = 0.6f
     };

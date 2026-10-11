@@ -76,6 +76,17 @@ public sealed class ExerciseSummary
         return "";
     }
 
+    /// <summary>Короткий итог (вместе с оценкой C2 на панели результатов).</summary>
+    public string ToPanelTextShort(bool markFailure = false)
+    {
+        var b = new StringBuilder();
+        if (markFailure && Failed)
+            b.AppendLine($"<color=#FF5A4A><b>УПРАЖНЕНИЕ ПРОВАЛЕНО:</b> {FailureText()}</color>");
+        b.AppendLine($"<b>{ScenarioText.EndReason(Reason)}</b>{(ByInstructor ? " (инструктор)" : "")} · {ScenarioText.Clock(Duration)} · точек {WaypointsPassed} из {WaypointsTotal}");
+        b.Append($"<size=85%><color=#9AA6B2>max XTE {ScenarioText.Num(MaxAbsXte)} м, вне коридора {ScenarioText.Num(TimeOutsideCorridor)} с · посадок {Groundings}, столкновений {Collisions} · перекладок {HelmActions}, команд телеграфу {TelegraphOrders}, гудков {HornSignals}</color></size>");
+        return b.ToString();
+    }
+
     /// <summary>Текст для VR-панели (TextMeshPro, rich text). markFailure — выделить провал красным.</summary>
     public string ToPanelText(bool markFailure = false)
     {

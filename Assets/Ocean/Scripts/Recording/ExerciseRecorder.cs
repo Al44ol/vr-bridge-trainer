@@ -15,6 +15,10 @@
 //     ScenarioRunner −88, GroundingMonitor −85) с частотой trackRateHz по
 //     времени упражнения; XTE и участок — ScenarioRunner.Route (RouteTracker);
 //   events.csv — каждое событие шины упражнения в момент доставки.
+//   assessment.csv и блок assessment в session.json — оценка по критериям (C2,
+//     ExerciseAssessmentMonitor) в момент конца упражнения.
+// Срез состояния (BuildTrackSample / BuildTargetSamples) — общий для записи и оценки:
+// оценка в шлеме получает те же строки, что окажутся в файлах.
 // Без влияния на кадр: в шаге — только строка в StringBuilder; накопленное
 // раз в flushIntervalSeconds (реальное время) уходит фоновому писателю.
 // Сброс с ожиданием — в конце упражнения, при паузе приложения (Quest:
@@ -172,10 +176,23 @@ public class ExerciseRecorder : MonoBehaviour
         stepTimeUs = (float)(measuredTicks * 1e6 / Stopwatch.Frequency / Math.Max(1, measuredSteps));
     }
 
+    private readonly System.Collections.Generic.List<TargetSample> targetBuffer = new System.Collections.Generic.List<TargetSample>();
+
     private void SampleTrack(SessionRecorder rec, double t)
     {
+        if (!BuildTrackSample(navigation, runner, t, out TrackSample sample)) return;
+        rec.AddTrack(sample);
+        BuildTargetSamples(t, targetBuffer);
+        foreach (TargetSample ts in targetBuffer) rec.AddTarget(ts);
+        trackRows = rec.TrackRows;
+    }
+
+    /// <summary>Срез своего судна в момент t — строка track.csv; тот же срез получает оценка (C2).</summary>
+    public static bool BuildTrackSample(ShipNavigation navigation, ScenarioRunner runner, double t, out TrackSample sample)
+    {
+        sample = default;
         ShipDynamicsModel m = navigation != null ? navigation.Model : null;
-        if (m == null) return;
+        if (m == null) return false;
         RouteTracker r = runner != null ? runner.Route : null;
 
         double heading = navigation.Heading;
@@ -191,7 +208,7 @@ public class ExerciseRecorder : MonoBehaviour
             xte = RouteTracker.CrossTrack(r.Route[leg].position, r.Route[leg + 1].position, new WorldPosition(m.East, m.North));
         }
 
-        rec.AddTrack(new TrackSample
+        sample = new TrackSample
         {
             Time = t,
             East = m.East, North = m.North,
@@ -203,15 +220,21 @@ public class ExerciseRecorder : MonoBehaviour
             Telegraph = (int)ScenarioText.OrderFromSpeedFactor(m.SpeedFactor),
             XteM = xte, Leg = leg, XteLimitM = xteLimit,
             Grounded = m.Grounded
-        });
+        };
+        return true;
+    }
+
+    /// <summary>Срез других судов в момент t — строки targets.csv (B3); тот же срез получает оценка (C2).</summary>
+    public static void BuildTargetSamples(double t, System.Collections.Generic.List<TargetSample> into)
+    {
+        into.Clear();
         foreach (ITrackedTarget target in ExerciseTargets.All)
-            rec.AddTarget(new TargetSample
+            into.Add(new TargetSample
             {
                 Time = t, Id = target.TargetId,
                 East = target.Position.East, North = target.Position.North,
                 HeadingDeg = target.HeadingDeg, SpeedKnots = target.SpeedKnots
             });
-        trackRows = rec.TrackRows;
     }
 
     // ─────────── Сессия ───────────
@@ -272,6 +295,15 @@ public class ExerciseRecorder : MonoBehaviour
             s.Meta.end_reason_ru = ScenarioText.EndReason(e.EndReason);
             s.Meta.by_instructor = e.ByInstructor;
             s.Meta.duration_s = Math.Round(e.Time, 3);
+
+            // Оценка (C2): итог в session.json, подробно — assessment.csv
+            ExerciseAssessmentMonitor monitor = ExerciseAssessmentMonitor.Instance;
+            AssessmentResult assessment = monitor != null ? monitor.FinishNow(e) : null;
+            if (assessment != null)
+            {
+                s.Meta.assessment = SessionAssessmentSummary.From(assessment);
+                s.WriteAssessment(assessment.ToCsv());
+            }
         }
         else
         {

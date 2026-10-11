@@ -60,6 +60,8 @@ public static class SessionFormat
     public const string MetaFile = "session.json";
     /// <summary>Метка «не удалять при ротации».</summary>
     public const string KeepFile = "keep";
+    /// <summary>Оценка по критериям (C2): строка на критерий и цель.</summary>
+    public const string AssessmentFile = "assessment.csv";
 
     public const string TrackHeader =
         "t_s;x_e_m;y_n_m;heading_deg;cog_deg;speed_kn;rot_deg_min;rudder_ordered_deg;rudder_actual_deg;telegraph_sf;telegraph;xte_m;leg;xte_limit_m;grounded";
@@ -121,6 +123,40 @@ public static class SessionFormat
         b.Append('\n');
     }
 
+    // ─────────── Округление как в файле (C2) ───────────
+    // Оценка в реальном времени получает строки траектории, целей и события в том виде,
+    // в каком их прочитает SessionReader из CSV (те же знаки после точки). Поэтому оценка
+    // в шлеме и офлайн-оценка по записи той же сессии совпадают до бита.
+
+    public static TrackSample Quantize(in TrackSample s) => new TrackSample
+    {
+        Time = CsvFormat.Round(s.Time, 3),
+        East = CsvFormat.Round(s.East, 2), North = CsvFormat.Round(s.North, 2),
+        HeadingDeg = CsvFormat.Round(s.HeadingDeg, 2), CogDeg = CsvFormat.Round(s.CogDeg, 2),
+        SpeedKnots = CsvFormat.Round(s.SpeedKnots, 3), RotDegMin = CsvFormat.Round(s.RotDegMin, 2),
+        RudderOrderedDeg = CsvFormat.Round(s.RudderOrderedDeg, 2), RudderActualDeg = CsvFormat.Round(s.RudderActualDeg, 2),
+        TelegraphSf = CsvFormat.Round(s.TelegraphSf, 2), Telegraph = s.Telegraph,
+        XteM = CsvFormat.Round(s.XteM, 2), Leg = s.Leg >= 0 ? s.Leg : -1, XteLimitM = CsvFormat.Round(s.XteLimitM, 1),
+        Grounded = s.Grounded
+    };
+
+    public static TargetSample Quantize(in TargetSample s) => new TargetSample
+    {
+        Time = CsvFormat.Round(s.Time, 3), Id = CsvFormat.Clean(s.Id),
+        East = CsvFormat.Round(s.East, 2), North = CsvFormat.Round(s.North, 2),
+        HeadingDeg = CsvFormat.Round(s.HeadingDeg, 2), SpeedKnots = CsvFormat.Round(s.SpeedKnots, 3)
+    };
+
+    public static ExerciseEvent Quantize(in ExerciseEvent e) => new ExerciseEvent(e.Type)
+    {
+        Time = CsvFormat.Round(e.Time, 3), InExercise = true,
+        Index = e.Index >= 0 ? e.Index : -1,
+        Value = CsvFormat.Round(e.Value, 3), Value2 = CsvFormat.Round(e.Value2, 3),
+        Subject = CsvFormat.Clean(e.Subject), EndReason = e.EndReason, ByInstructor = e.ByInstructor,
+        Position = new WorldPosition(CsvFormat.Round(e.Position.East, 2), CsvFormat.Round(e.Position.North, 2)),
+        HeadingDeg = (float)CsvFormat.Round(e.HeadingDeg, 2), SpeedKnots = (float)CsvFormat.Round(e.SpeedKnots, 3)
+    };
+
     // ─────────── Имя папки ───────────
     /// <summary>Имя папки сессии: yyyyMMdd_HHmmss_&lt;сценарий&gt;_&lt;ID&gt; (без ID — noid).</summary>
     public static string FolderName(DateTime localStart, string scenarioId, string traineeId) =>
@@ -163,6 +199,10 @@ public class SessionMeta
     public SessionShip ship = new SessionShip();
     public SessionRecording recording = new SessionRecording();
     public SessionSummary summary = new SessionSummary();
+    /// <summary>Пороги и веса оценки, с которыми упражнение оценивалось в шлеме (C2): офлайн-оценка по умолчанию берёт их.</summary>
+    public AssessmentSettings assessment_settings = new AssessmentSettings();
+    /// <summary>Итог оценки в шлеме (C2); подробно — assessment.csv.</summary>
+    public SessionAssessmentSummary assessment = new SessionAssessmentSummary();
 
     public const string Interrupted = "Interrupted";
 
@@ -179,6 +219,7 @@ public class SessionMeta
         };
         m.session_id = SessionFormat.FolderName(localStart, s != null ? s.id : "", traineeId);
         if (s != null) m.scenario = SessionScenario.From(s);
+        m.assessment_settings = AssessmentSettings.From(s != null ? s.assessment : null);
         if (p != null) m.ship = SessionShip.From(p);
         return m;
     }
@@ -205,6 +246,8 @@ public class SessionWaypoint
     public double x_e_m, y_n_m;
     /// <summary>XTE доп. на участке, ведущем к точке, м.</summary>
     public double xte_limit_m;
+    /// <summary>Участок к точке — узкость (правило 9; C2).</summary>
+    public bool narrow_channel;
 }
 
 [Serializable]
@@ -225,6 +268,8 @@ public class SessionScenario
     public double visibility_m;
     public double time_limit_s;
     public string end_conditions = "";
+    /// <summary>Дистанция обнаружения целей, мили; 0 — по видимости и времени суток (C2).</summary>
+    public double detection_range_nm;
     public SessionInitial initial = new SessionInitial();
     public List<SessionWaypoint> route = new List<SessionWaypoint>();
     /// <summary>Другие суда (B3): описание и рассчитанное начальное состояние (TrafficPlanner).</summary>
@@ -238,7 +283,8 @@ public class SessionScenario
             water_area = s.waterArea != null ? s.waterArea.name : "",
             weather = s.weather.ToString(), time_of_day = s.timeOfDay.ToString(),
             visibility_m = SessionMeta.R(s.visibilityMeters), time_limit_s = SessionMeta.R(s.timeLimitSeconds),
-            end_conditions = s.endConditions.ToString()
+            end_conditions = s.endConditions.ToString(),
+            detection_range_nm = SessionMeta.R(s.detectionRangeNm)
         };
         if (s.initial != null)
             r.initial = new SessionInitial
@@ -251,7 +297,7 @@ public class SessionScenario
         if (s.route != null)
             foreach (RouteWaypoint w in s.route)
                 if (w != null)
-                    r.route.Add(new SessionWaypoint { name = w.name, x_e_m = w.position.East, y_n_m = w.position.North, xte_limit_m = SessionMeta.R(w.xteLimit) });
+                    r.route.Add(new SessionWaypoint { name = w.name, x_e_m = w.position.East, y_n_m = w.position.North, xte_limit_m = SessionMeta.R(w.xteLimit), narrow_channel = w.narrowChannel });
         if (s.traffic != null)
             for (int i = 0; i < s.traffic.Count; i++)
                 if (s.traffic[i] != null) r.traffic.Add(SessionTraffic.From(s.traffic[i], i, s.initial));
@@ -263,7 +309,7 @@ public class SessionScenario
     {
         var list = new List<RouteWaypoint>();
         foreach (SessionWaypoint w in route)
-            list.Add(new RouteWaypoint(w.name, new WorldPosition(w.x_e_m, w.y_n_m), (float)w.xte_limit_m));
+            list.Add(new RouteWaypoint(w.name, new WorldPosition(w.x_e_m, w.y_n_m), (float)w.xte_limit_m, w.narrow_channel));
         return list;
     }
 }
@@ -288,6 +334,8 @@ public class SessionTraffic
     public double meeting_x_e_m, meeting_y_n_m;
     /// <summary>Путь после старта (пусто — постоянный курс).</summary>
     public List<SessionPoint> path = new List<SessionPoint>();
+    /// <summary>Допустимая дистанция расхождения, мили; 0 — по набору критериев (C2).</summary>
+    public double required_cpa_nm;
 
     public static SessionTraffic From(TrafficShipDefinition d, int index, OwnShipInitialState own)
     {
@@ -301,7 +349,8 @@ public class SessionTraffic
             beam_m = d.parameters != null ? SessionMeta.R(d.parameters.beam) : 0.0,
             service_speed_kn = d.parameters != null ? SessionMeta.R(d.parameters.serviceSpeedKnots) : 0.0,
             x_e_m = SessionMeta.R(st.Position.East), y_n_m = SessionMeta.R(st.Position.North),
-            heading_deg = SessionMeta.R(st.HeadingDeg), speed_kn = SessionMeta.R(st.SpeedKnots)
+            heading_deg = SessionMeta.R(st.HeadingDeg), speed_kn = SessionMeta.R(st.SpeedKnots),
+            required_cpa_nm = SessionMeta.R(d.requiredCpaNm)
         };
         if (d.placement == TrafficPlacement.MeetingPoint)
         {
@@ -348,7 +397,7 @@ public class SessionRecording
     public double fixed_dt_s;
     public string time_base = "t_s — время упражнения (симуляционное) от «Начать», с";
     public string coordinates = "x_e_m — восток, y_n_m — север, м; курс 0 = N, по часовой; руль и XTE > 0 — правый борт / правее линии пути";
-    public List<string> files = new List<string> { SessionFormat.TrackFile, SessionFormat.TargetsFile, SessionFormat.EventsFile, SessionFormat.MetaFile };
+    public List<string> files = new List<string> { SessionFormat.TrackFile, SessionFormat.TargetsFile, SessionFormat.EventsFile, SessionFormat.MetaFile, SessionFormat.AssessmentFile };
     /// <summary>Названия положений телеграфа по номеру (столбец telegraph, index события TelegraphChanged).</summary>
     public List<string> telegraph_positions = new List<string>();
 

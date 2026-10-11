@@ -15,7 +15,10 @@
 //   • другие суда (B3): тип, параметры, начальная позиция (абсолютная, от своего
 //     судна или «точка встречи» по CPA/TCPA), курс и скорость или маршрут;
 //   • лимит времени и условия завершения;
-//   • набор критериев оценки — заготовка для C2.
+//   • оценка (C2): набор критериев (AssessmentCriteria; пусто — значения по
+//     умолчанию), дистанция обнаружения целей (0 — по видимости и времени суток),
+//     у путевой точки — признак «участок — узкость» (правило 9 МППСС),
+//     у цели — допустимая дистанция расхождения CPA_доп.
 // Досрочное завершение инструктором доступно всегда и в условиях не задаётся.
 // ============================================================
 using System;
@@ -88,14 +91,17 @@ public class RouteWaypoint
     public WorldPosition position;
     [Tooltip("Допустимое боковое отклонение XTE на участке, ведущем к этой точке, м (у первой точки не используется)")]
     public float xteLimit = 150f;
+    [Tooltip("Участок, ведущий к этой точке, — узкость или фарватер (правило 9 МППСС: держаться правой стороны). Маршрут — по оси узкости (C2)")]
+    public bool narrowChannel;
 
     public RouteWaypoint() { }
 
-    public RouteWaypoint(string name, WorldPosition position, float xteLimit)
+    public RouteWaypoint(string name, WorldPosition position, float xteLimit, bool narrowChannel = false)
     {
         this.name = name;
         this.position = position;
         this.xteLimit = xteLimit;
+        this.narrowChannel = narrowChannel;
     }
 }
 
@@ -137,7 +143,10 @@ public class ScenarioDefinition : ScriptableObject
     public ScenarioEndConditions endConditions = ScenarioEndConditions.All;
 
     [Header("Оценка (C2)")]
+    [Tooltip("Набор критериев, порогов и весов; пусто — значения по умолчанию (AssessmentSettings.Default)")]
     public AssessmentCriteria assessment;
+    [Tooltip("Дистанция обнаружения целей, мили; 0 — по видимости и времени суток (днём — видимость, ночью — дальность огней)")]
+    public float detectionRangeNm;
 
     public bool Ends(ScenarioEndConditions c) => (endConditions & c) != 0;
 
@@ -188,6 +197,7 @@ public class ScenarioDefinition : ScriptableObject
         if (timeLimitSeconds == 0f && Ends(ScenarioEndConditions.TimeLimit))
             problems.Add("Условие «истечение времени» включено, но лимит = 0 (без лимита).");
         if (visibilityMeters < 0f) problems.Add("Видимость отрицательная.");
+        if (detectionRangeNm < 0f) problems.Add("Дистанция обнаружения целей отрицательная.");
         ValidateTraffic(problems);
         return problems;
     }
@@ -204,6 +214,7 @@ public class ScenarioDefinition : ScriptableObject
             string tag = $"Судно {d.TargetId(i)} «{d.name}»";
             if (!ids.Add(d.TargetId(i))) problems.Add($"{tag}: идентификатор повторяется.");
             if (d.speedKnots < 0f) problems.Add($"{tag}: скорость отрицательная.");
+            if (d.requiredCpaNm < 0f) problems.Add($"{tag}: CPA_доп отрицательная.");
             if (d.parameters != null && d.speedKnots > d.parameters.serviceSpeedKnots + 0.01f)
                 problems.Add($"{tag}: скорость {d.speedKnots:F1} уз больше эксплуатационной {d.parameters.serviceSpeedKnots:F1} уз — будет ограничена.");
             if (d.motion == TrafficMotion.Route && (d.route == null || d.route.Count == 0))

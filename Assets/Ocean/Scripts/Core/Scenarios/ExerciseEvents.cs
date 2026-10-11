@@ -32,6 +32,9 @@
 //   HornStarted / HornEnded   Value (у HornEnded) — длительность звучания, с
 //   WeatherChanged       Index — новый пресет (WeatherPresetId), Value — прежний пресет
 //   TimeOfDayChanged (B4) Index — новое время суток (TimeOfDay), Value — прежнее
+// Оценка (C2, источник — ExerciseAssessmentMonitor; публикуются через 0,2 с — на следующем срезе):
+//   TargetDetected       Subject — id цели, Index — номер цели, Value — дистанция, мили; Value2 — дистанция обнаружения, мили
+//   EncounterStarted     Subject — id цели, Index — ситуация (EncounterSituation), Value — CPA, мили; Value2 — TCPA, мин
 // XTE > 0 — судно правее линии пути.
 // ============================================================
 using System;
@@ -58,7 +61,11 @@ public enum ExerciseEventType
     HornStarted,
     HornEnded,
     WeatherChanged,
-    TimeOfDayChanged    // B4
+    TimeOfDayChanged,   // B4
+    // Оценка (C2, источник — ExerciseAssessmentMonitor): для разбора и окна инструктора;
+    // офлайн-оценка их не читает, а пересчитывает
+    TargetDetected,
+    EncounterStarted
 }
 
 public enum ScenarioEndReason
@@ -132,6 +139,10 @@ public struct ExerciseEvent
             case ExerciseEventType.HornEnded: return $"Гудок окончен, {ScenarioText.Num(Value, 1)} с";
             case ExerciseEventType.WeatherChanged: return $"Погода: {Subject}";
             case ExerciseEventType.TimeOfDayChanged: return $"Время суток: {Subject}";
+            case ExerciseEventType.TargetDetected:
+                return $"Обнаружена цель «{Subject}»: {ScenarioText.Num(Value, 2)} мили (дальность обнаружения {ScenarioText.Num(Value2, 1)} мили)";
+            case ExerciseEventType.EncounterStarted:
+                return $"«{Subject}»: {EncounterClassifier.Title((EncounterSituation)Index)} — {EncounterClassifier.Duty((EncounterSituation)Index)}; CPA {ScenarioText.Num(Value, 2)} мили, TCPA {ScenarioText.Num(Value2, 1)} мин";
         }
         return $"{Type} {Subject}";
     }

@@ -28,6 +28,24 @@ public static class CsvFormat
 
     public static void Int(StringBuilder b, int v) => b.Append(v.ToString(Inv));
 
+    /// <summary>
+    /// Значение, которое прочитается из ячейки, записанной Num(v, decimals) (C2): число
+    /// форматируется и разбирается обратно. Оценка в реальном времени получает те же
+    /// числа, что офлайн-оценка по файлу, — результаты совпадают до бита.
+    /// </summary>
+    public static double Round(double v, int decimals)
+    {
+        if (double.IsNaN(v) || double.IsInfinity(v)) return double.NaN;
+        return double.Parse(v.ToString(Formats[Math.Max(0, Math.Min(Formats.Length - 1, decimals))], Inv), NumberStyles.Float, Inv);
+    }
+
+    /// <summary>Текст, который прочитается из ячейки, записанной Text(s): переводы строк → пробел.</summary>
+    public static string Clean(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        return s.IndexOf('\n') >= 0 || s.IndexOf('\r') >= 0 ? s.Replace("\r\n", " ").Replace('\n', ' ').Replace('\r', ' ') : s;
+    }
+
     /// <summary>Текстовое поле (в кавычках при необходимости).</summary>
     public static void Text(StringBuilder b, string s)
     {

@@ -14,6 +14,10 @@
 //   frametiming_<режим>_<дата>.csv — покадрово;
 //   frametiming_summary.csv        — строка на замер (дописывается).
 // Бюджет кадра при 90 Гц: 1000/90 = 11.1 мс.
+// C2: примечание (столбец note сводки) собирается само — сцена, сценарий и фаза,
+// погода и время суток в начале и в конце замера, был ли переход освещения и сколько
+// раз перерисовывалась проба отражений (B4), идёт ли запись; extraNote — дописывается.
+// До C2 note было фиксированным («BridgeScene, moderate, stop») и условия не отражало.
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -32,8 +36,10 @@ public class FrameTimingCapture : MonoBehaviour
     public float durationSeconds = 30f;
     [Tooltip("Пропустить первые кадры после нажатия (переходные процессы), с")]
     public float warmupSeconds = 2f;
-    [Tooltip("Примечание в сводке (сцена, пресет, условия)")]
-    public string note = "BridgeScene, moderate, stop";
+    [Tooltip("Устарело (до C2): фиксированное примечание, больше не пишется — условия собираются сами")]
+    public string note = "";
+    [Tooltip("Дополнительное примечание к замеру (дописывается к условиям)")]
+    public string extraNote = "";
     [Tooltip("Частота шлема, Гц — для доли кадров, не уложившихся в бюджет")]
     public float targetHz = 90f;
 
@@ -48,6 +54,10 @@ public class FrameTimingCapture : MonoBehaviour
     private ProfilerRecorder drawRec, setPassRec, batchRec;
     private bool capturing;
     private float startTime;
+    private string conditionsAtStart = "";
+    private bool sawTransition;
+    private int probeRendersAtStart;
+    private EnvironmentReflection probe;
 
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
@@ -78,6 +88,7 @@ public class FrameTimingCapture : MonoBehaviour
         if (!capturing) return;
 
         float t = Time.realtimeSinceStartup - startTime;
+        if (WeatherController.Instance != null && WeatherController.Instance.IsTransitioning) sawTransition = true;
         if (t < warmupSeconds) return;
 
         // Тайминги приходят с задержкой в несколько кадров — это нормально для статистики
@@ -103,6 +114,10 @@ public class FrameTimingCapture : MonoBehaviour
                              "(Tools/VR Bridge/Setup Frame Timing). GPU-время будет 0.");
         samples.Clear();
         startTime = Time.realtimeSinceStartup;
+        if (probe == null) probe = FindAnyObjectByType<EnvironmentReflection>();
+        probeRendersAtStart = probe != null ? probe.Renders : 0;
+        sawTransition = WeatherController.Instance != null && WeatherController.Instance.IsTransitioning;
+        conditionsAtStart = Lighting();
         capturing = true;
         Debug.Log($"[FrameTiming] Замер начат: {RenderModeName()}, {durationSeconds:F0} с " +
                   $"(+{warmupSeconds:F0} с прогрев). Не двигайте головой. F8 — прервать.");
@@ -169,15 +184,45 @@ public class FrameTimingCapture : MonoBehaviour
             .Append(F(100f * over / samples.Count, 2)).Append(';')
             .Append(F((float)(draws / samples.Count), 1)).Append(';')
             .Append(F((float)(setPass / samples.Count), 1)).Append(';')
-            .Append(note.Replace(';', ',')).AppendLine();
+            .Append(Conditions().Replace(';', ',')).AppendLine();
         if (newFile) File.WriteAllText(summaryPath, line.ToString(), new UTF8Encoding(true));
         else File.AppendAllText(summaryPath, line.ToString(), new UTF8Encoding(false));
 
         Debug.Log($"[FrameTiming] {mode}: {samples.Count} кадров, GPU ср. {F(Mean(gpu), 2)} мс " +
                   $"(p95 {F(Pct(gpu, 0.95f), 2)}), CPU ср. {F(Mean(cpu), 2)} мс, " +
                   $"draw calls {F((float)(draws / samples.Count), 0)}, вне бюджета {F(100f * over / samples.Count, 1)} %.\n" +
+                  $"Условия: {Conditions()}\n" +
                   $"Файлы: {rawPath}\n{summaryPath}");
     }
+
+    // Условия замера (столбец note): сцена, сценарий, освещение в начале и в конце, переход, проба, запись
+    private string Conditions()
+    {
+        var b = new StringBuilder();
+        b.Append(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
+        ScenarioRunner r = ScenarioRunner.Instance;
+        if (r != null && r.Current != null) b.Append(", сценарий ").Append(r.Current.id).Append(" (").Append(PhaseName(r.CurrentPhase)).Append(')');
+        else b.Append(", без сценария");
+        string end = Lighting();
+        b.Append(", ").Append(conditionsAtStart == end ? end : conditionsAtStart + " -> " + end);
+        b.Append(", переход освещения: ").Append(sawTransition ? "да" : "нет");
+        int renders = probe != null ? probe.Renders - probeRendersAtStart : 0;
+        b.Append(", перерисовок пробы: ").Append(renders.ToString(Inv));
+        ExerciseRecorder rec = ExerciseRecorder.Instance;
+        b.Append(", запись: ").Append(rec != null && rec.IsRecording ? "идёт" : "нет");
+        if (!string.IsNullOrWhiteSpace(extraNote)) b.Append(", ").Append(extraNote.Trim());
+        return b.ToString();
+    }
+
+    private static string Lighting()
+    {
+        WeatherController w = WeatherController.Instance;
+        if (w == null) return "погода ?";
+        return $"погода {w.CurrentPresetId}, время суток {w.CurrentTimeOfDay}";
+    }
+
+    private static string PhaseName(ScenarioRunner.Phase p) =>
+        p == ScenarioRunner.Phase.Running ? "выполнение" : p == ScenarioRunner.Phase.Briefing ? "брифинг" : p == ScenarioRunner.Phase.Finished ? "результаты" : "свободное плавание";
 
     // Фактический режим: при активном загрузчике OpenXR берётся из рантайма
     private static string RenderModeName()

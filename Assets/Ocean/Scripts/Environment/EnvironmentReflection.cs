@@ -23,6 +23,9 @@ public class EnvironmentReflection : MonoBehaviour
     [Header("Состояние (только чтение)")]
     [SerializeField] private int renders;
 
+    /// <summary>Сколько раз проба перерисовывалась (замер F8: была ли перерисовка во время замера).</summary>
+    public int Renders => renders;
+
     private ReflectionProbe probe;
     private int renderId = -1;
     private int renderedVersion = int.MinValue;

@@ -113,6 +113,10 @@ public class TrafficShipDefinition
     [Header("Огни")]
     public VesselLightStatus lights = VesselLightStatus.PowerDrivenUnderway;
 
+    [Header("Оценка (C2)")]
+    [Tooltip("Допустимая дистанция расхождения CPA_доп, мили; 0 — по набору критериев (по умолчанию 0,5). Опасность столкновения — CPA < k·CPA_доп")]
+    public float requiredCpaNm;
+
     /// <summary>Идентификатор цели: заданный или T{номер}.</summary>
     public string TargetId(int index) => string.IsNullOrWhiteSpace(id) ? $"T{index + 1}" : id.Trim();
 

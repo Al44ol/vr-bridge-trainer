@@ -93,6 +93,12 @@ public sealed class SessionRecorder
         return writer.Close(timeoutMs);
     }
 
+    /// <summary>Оценка по критериям (C2) — assessment.csv; пишется до Close.</summary>
+    public void WriteAssessment(string csv)
+    {
+        if (IsOpen && !string.IsNullOrEmpty(csv)) writer.Replace(SessionFormat.AssessmentFile, csv);
+    }
+
     /// <summary>Переписать session.json (при старте и в конце).</summary>
     public void WriteMeta() => writer.Replace(SessionFormat.MetaFile, JsonUtility.ToJson(Meta, true));
 
