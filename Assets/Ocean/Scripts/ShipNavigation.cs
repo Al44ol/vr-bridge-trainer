@@ -126,6 +126,11 @@ public class ShipNavigation : MonoBehaviour
     /// <summary>Название положения телеграфа.</summary>
     public string TelegraphPosition => telegraph != null ? telegraph.PositionName : "—";
     public bool CirculationTestActive => testActive;
+    /// <summary>
+    /// Модель стоит (брифинг сценария B2; пауза инструктора D1): шаг не выполняется,
+    /// судно неподвижно в мире, качка продолжается.
+    /// </summary>
+    public bool Paused { get; set; }
 
     void OnEnable()
     {
@@ -173,6 +178,7 @@ public class ShipNavigation : MonoBehaviour
         ResolveWheelSign();
 
         psiPrev = model.Psi; eastPrev = model.East; northPrev = model.North;
+        if (Paused) return;
 
         int steps = testActive ? Mathf.Max(1, testSpeedup) : 1;
         double dt = Time.fixedDeltaTime;
@@ -204,25 +210,38 @@ public class ShipNavigation : MonoBehaviour
         if (worldOrigin != null)
         {
             worldOrigin.SetShipPosition(eShown, nShown);
-            worldOrigin.ShipSpeed = (float)model.U;
+            worldOrigin.ShipSpeed = Paused ? 0f : (float)model.U;   // на паузе — без кильватерного следа
         }
     }
 
     /// <summary>
     /// Переставить судно (снятие с мели инструктором, B1; начальные условия сценария, B2):
-    /// позиция, курс (градусы), стоп; без интерполяции от прежнего положения.
+    /// позиция, курс (градусы), скорость (уз; по умолчанию стоп), фактический руль
+    /// (градусы, > 0 — ПБ; null — не трогать); без интерполяции от прежнего положения.
+    /// Органы управления (телеграф, штурвал) ставит вызывающий: EngineTelegraph.SetSpeedFactor, SetRudderOrder.
     /// </summary>
-    public void TeleportTo(double east, double north, double headingDeg)
+    public void TeleportTo(double east, double north, double headingDeg, double speedKnots = 0.0, double? rudderDeg = null)
     {
         if (!initialized) return;
-        model.Teleport(east, north, headingDeg * Math.PI / 180.0);
+        model.Teleport(east, north, headingDeg * Math.PI / 180.0, speedKnots * ShipParameters.KnotsToMs, rudderDeg);
         psiPrev = model.Psi; eastPrev = model.East; northPrev = model.North;
         transform.rotation = Quaternion.Euler(0f, (float)(model.Psi * Mathf.Rad2Deg) - bowYawOffset, 0f);
         if (worldOrigin != null)
         {
             worldOrigin.SetShipPosition(model.East, model.North);
-            worldOrigin.ShipSpeed = 0f;
+            worldOrigin.ShipSpeed = Paused ? 0f : (float)model.U;
         }
+    }
+
+    /// <summary>
+    /// Заданный руль (градусы, > 0 — ПБ) — поворотом штурвала с учётом знака штурвала
+    /// (начальные условия сценария, B2). Рулевая машина отрабатывает его сама.
+    /// </summary>
+    public void SetRudderOrder(float rudderDeg)
+    {
+        if (wheel == null) return;
+        ResolveWheelSign();
+        wheel.SetRudderAngle(wheelSignValue * rudderDeg);
     }
 
     // ─────────── Один шаг: органы управления → модель ───────────

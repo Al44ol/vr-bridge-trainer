@@ -10,6 +10,9 @@
 //     BridgeMenu.Register("Судно", "Снять с мели", Refloat, () => grounded);
 // кнопки строятся при открытии; недоступная сейчас команда — серая.
 // Флаг InstructorOnly — задел на окно инструктора (D1).
+// B2: порядок групп — BridgeMenu.SetGroupOrder (меньше — выше); команда с
+// hideWhenUnavailable не показывается, пока недоступна (команды сценария по фазе:
+// «Начать» — только на брифинге и т. п.), панель пересобирается сама.
 // Прыжок шаблона XR (тоже кнопка A) отключает Setup B1 Water Area.
 // ============================================================
 using System;
@@ -31,8 +34,11 @@ public sealed class BridgeMenuCommand
     public bool InstructorOnly;
     /// <summary>Закрыть меню после выполнения.</summary>
     public bool CloseOnExecute = true;
+    /// <summary>Недоступную команду не показывать (а не делать серой) — B2: команды сценария по фазе.</summary>
+    public bool HideWhenUnavailable;
 
     public bool Available => IsAvailable == null || IsAvailable();
+    public bool Visible => !HideWhenUnavailable || Available;
 }
 
 public class BridgeMenu : MonoBehaviour
@@ -47,21 +53,37 @@ public class BridgeMenu : MonoBehaviour
     private static void ResetStatics()
     {
         commands.Clear();
+        groupOrder.Clear();
         Instance = null;
     }
 
-    public static BridgeMenuCommand Register(string group, Func<string> title, Action execute,
-                                             Func<bool> isAvailable = null, bool instructorOnly = false)
+    // Порядок групп (B2): меньше — выше; без порядка — 0, при равенстве — порядок первой регистрации
+    private static readonly Dictionary<string, int> groupOrder = new Dictionary<string, int>();
+
+    public static void SetGroupOrder(string group, int order)
     {
-        var c = new BridgeMenuCommand { Group = group, Title = title, Execute = execute, IsAvailable = isAvailable, InstructorOnly = instructorOnly };
+        groupOrder[group ?? ""] = order;
+        if (Instance != null && Instance.IsOpen) Instance.Rebuild();
+    }
+
+    public static BridgeMenuCommand Register(string group, Func<string> title, Action execute,
+                                             Func<bool> isAvailable = null, bool instructorOnly = false,
+                                             bool hideWhenUnavailable = false)
+    {
+        var c = new BridgeMenuCommand
+        {
+            Group = group, Title = title, Execute = execute, IsAvailable = isAvailable,
+            InstructorOnly = instructorOnly, HideWhenUnavailable = hideWhenUnavailable
+        };
         commands.Add(c);
         if (Instance != null && Instance.IsOpen) Instance.Rebuild();
         return c;
     }
 
     public static BridgeMenuCommand Register(string group, string title, Action execute,
-                                             Func<bool> isAvailable = null, bool instructorOnly = false) =>
-        Register(group, () => title, execute, isAvailable, instructorOnly);
+                                             Func<bool> isAvailable = null, bool instructorOnly = false,
+                                             bool hideWhenUnavailable = false) =>
+        Register(group, () => title, execute, isAvailable, instructorOnly, hideWhenUnavailable);
 
     public static void Unregister(BridgeMenuCommand c)
     {
@@ -91,6 +113,7 @@ public class BridgeMenu : MonoBehaviour
     private RectTransform background;
     private readonly List<(BridgeMenuCommand cmd, Button btn, Image img, TextMeshProUGUI label)> items = new List<(BridgeMenuCommand, Button, Image, TextMeshProUGUI)>();
     private float nextRefresh;
+    private readonly List<BridgeMenuCommand> builtVisible = new List<BridgeMenuCommand>();
 
     public bool IsOpen => canvas != null && canvas.enabled;
 
@@ -176,32 +199,43 @@ public class BridgeMenu : MonoBehaviour
             Destroy(background.GetChild(i).gameObject);
         items.Clear();
 
-        // Порядок групп — порядок первой регистрации
+        // Видимые сейчас команды; порядок групп — SetGroupOrder, затем порядок первой регистрации
+        var visible = new List<BridgeMenuCommand>();
+        foreach (BridgeMenuCommand c in commands) if (c.Visible) visible.Add(c);
+        builtVisible.Clear();
+        builtVisible.AddRange(visible);
+
         var groups = new List<string>();
-        foreach (BridgeMenuCommand c in commands)
+        foreach (BridgeMenuCommand c in visible)
             if (!groups.Contains(c.Group ?? "")) groups.Add(c.Group ?? "");
+        var firstSeen = new List<string>(groups);
+        groups.Sort((a, b) =>
+        {
+            int oa = groupOrder.TryGetValue(a, out int va) ? va : 0, ob = groupOrder.TryGetValue(b, out int vb) ? vb : 0;
+            return oa != ob ? oa.CompareTo(ob) : firstSeen.IndexOf(a).CompareTo(firstSeen.IndexOf(b));
+        });
 
         float rows = 0f;
         rows += 34f;                                             // заголовок
         foreach (string g in groups)
         {
             rows += GroupHeight;
-            foreach (BridgeMenuCommand c in commands) if ((c.Group ?? "") == g) rows += ButtonHeight + 6f;
+            foreach (BridgeMenuCommand c in visible) if ((c.Group ?? "") == g) rows += ButtonHeight + 6f;
         }
-        if (commands.Count == 0) rows += 30f;
+        if (visible.Count == 0) rows += 30f;
         rows += ButtonHeight + 10f;                              // «Закрыть»
         float height = rows + 2f * Pad;
         background.sizeDelta = new Vector2(Width, height);
 
         float y = height * 0.5f - Pad;
         Label("Меню мостика", ref y, 34f, 22f, new Color(0.85f, 0.92f, 1f), TextAlignmentOptions.Center);
-        if (commands.Count == 0)
+        if (visible.Count == 0)
             Label("Нет команд", ref y, 30f, 16f, new Color(0.6f, 0.6f, 0.6f), TextAlignmentOptions.Center);
 
         foreach (string g in groups)
         {
             Label(g, ref y, GroupHeight, 15f, new Color(0.62f, 0.68f, 0.75f), TextAlignmentOptions.Left);
-            foreach (BridgeMenuCommand c in commands)
+            foreach (BridgeMenuCommand c in visible)
             {
                 if ((c.Group ?? "") != g) continue;
                 BridgeMenuCommand cmd = c;
@@ -227,6 +261,21 @@ public class BridgeMenu : MonoBehaviour
 
     private void RefreshStates()
     {
+        // Набор видимых команд изменился (фаза сценария) — пересобрать панель
+        int n = 0;
+        bool changed = false;
+        foreach (BridgeMenuCommand c in commands)
+        {
+            if (!c.Visible) continue;
+            if (n >= builtVisible.Count || builtVisible[n] != c) { changed = true; break; }
+            n++;
+        }
+        if (changed || n != builtVisible.Count)
+        {
+            Rebuild();
+            return;
+        }
+
         foreach (var it in items)
         {
             bool on = it.cmd.Available;

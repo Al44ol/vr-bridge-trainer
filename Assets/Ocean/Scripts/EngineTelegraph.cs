@@ -176,18 +176,24 @@ public class EngineTelegraph : MonoBehaviour
     }
 
     /// <summary>Перевести телеграф на «Стоп» (команда инструктора, B1). Рычаг доворачивается сам.</summary>
-    public void SetStop()
+    public void SetStop() => SetSpeedFactor(0f);
+
+    /// <summary>
+    /// Перевести телеграф в положение с ближайшим SF (начальные условия сценария, B2).
+    /// Рычаг доворачивается сам; если его держат рукой — слежение прерывается.
+    /// </summary>
+    public void SetSpeedFactor(float speedFactor)
     {
-        int stop = currentIndex;
+        int target = currentIndex;
         float best = float.MaxValue;
         for (int i = 0; i < positions.Length; i++)
         {
-            float a = Mathf.Abs(positions[i].speedFactor);
-            if (a < best) { best = a; stop = i; }
+            float a = Mathf.Abs(positions[i].speedFactor - speedFactor);
+            if (a < best) { best = a; target = i; }
         }
         tracking = false;
-        if (stop == currentIndex) return;
-        currentIndex = stop;
+        if (target == currentIndex) return;
+        currentIndex = target;
         ApplyPosition(currentIndex);
         if (audioSource != null && clickClip != null) audioSource.PlayOneShot(clickClip);
     }

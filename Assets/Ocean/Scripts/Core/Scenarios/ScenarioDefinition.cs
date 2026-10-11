@@ -1,0 +1,201 @@
+// ============================================================
+// ScenarioDefinition.cs — Описание учебного сценария (B2)
+//
+// Новый сценарий создаётся без программирования: Create → VR Bridge → Scenario
+// и заполнение полей в инспекторе (маршрут можно взять по оси фарватера
+// кнопкой инспектора и двигать ручками в Scene View — объект Scenario).
+//
+// Содержимое:
+//   • идентификатор, название, текст брифинга;
+//   • акватория (WaterArea) и параметры своего судна (ShipParameters);
+//   • начальные условия своего судна: позиция, курс, скорость, телеграф, руль;
+//   • погода (пресет WeatherController), время суток (B4) и видимость (C4) — пока поля;
+//   • маршрут: путевые точки, у каждой — допустимое боковое отклонение (XTE)
+//     на участке, ведущем К этой точке (у первой точки не используется);
+//   • другие суда — заготовка для B3;
+//   • лимит времени и условия завершения;
+//   • набор критериев оценки — заготовка для C2.
+// Досрочное завершение инструктором доступно всегда и в условиях не задаётся.
+// ============================================================
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+
+/// <summary>Положение машинного телеграфа (как в EngineTelegraph, по умолчанию).</summary>
+public enum TelegraphOrder
+{
+    [InspectorName("Полный вперёд")] FullAhead,
+    [InspectorName("Средний вперёд")] HalfAhead,
+    [InspectorName("Малый вперёд")] SlowAhead,
+    [InspectorName("Самый малый вперёд")] DeadSlowAhead,
+    [InspectorName("Стоп")] Stop,
+    [InspectorName("Самый малый назад")] DeadSlowAstern,
+    [InspectorName("Малый назад")] SlowAstern,
+    [InspectorName("Средний назад")] HalfAstern,
+    [InspectorName("Полный назад")] FullAstern
+}
+
+/// <summary>Пресет погоды WeatherController.</summary>
+public enum WeatherPresetId
+{
+    [InspectorName("Штиль")] Calm,
+    [InspectorName("Умеренное волнение")] Moderate,
+    [InspectorName("Шторм")] Storm,
+    [InspectorName("Ночь (пресет погоды)")] Night
+}
+
+/// <summary>Время суток (применяется в B4; сейчас — только поле).</summary>
+public enum TimeOfDay
+{
+    [InspectorName("День")] Day,
+    [InspectorName("Сумерки")] Twilight,
+    [InspectorName("Ночь")] Night
+}
+
+/// <summary>Условия завершения упражнения (досрочное завершение инструктором — всегда).</summary>
+[Flags]
+public enum ScenarioEndConditions
+{
+    None = 0,
+    [InspectorName("Прибытие в последнюю точку")] Arrival = 1,
+    [InspectorName("Посадка на мель")] Grounding = 2,
+    [InspectorName("Столкновение (B3)")] Collision = 4,
+    [InspectorName("Истечение времени")] TimeLimit = 8,
+    All = Arrival | Grounding | Collision | TimeLimit
+}
+
+/// <summary>Начальные условия своего судна.</summary>
+[Serializable]
+public class OwnShipInitialState
+{
+    [Tooltip("Позиция: восток, север, м")]
+    public WorldPosition position;
+    [Tooltip("Курс, градусы (0 = N, по часовой)")]
+    public float headingDeg;
+    [Tooltip("Скорость хода, уз (судно разгоняется/тормозит к скорости телеграфа)")]
+    public float speedKnots;
+    public TelegraphOrder telegraph = TelegraphOrder.Stop;
+    [Tooltip("Руль, градусы (> 0 — правый борт)")]
+    public float rudderDeg;
+}
+
+/// <summary>Путевая точка маршрута.</summary>
+[Serializable]
+public class RouteWaypoint
+{
+    public string name = "Точка";
+    public WorldPosition position;
+    [Tooltip("Допустимое боковое отклонение XTE на участке, ведущем к этой точке, м (у первой точки не используется)")]
+    public float xteLimit = 150f;
+
+    public RouteWaypoint() { }
+
+    public RouteWaypoint(string name, WorldPosition position, float xteLimit)
+    {
+        this.name = name;
+        this.position = position;
+        this.xteLimit = xteLimit;
+    }
+}
+
+/// <summary>Другое судно (заготовка для B3).</summary>
+[Serializable]
+public class TrafficShipDefinition
+{
+    public string name = "Судно";
+    public ShipParameters parameters;
+    public WorldPosition position;
+    public float headingDeg;
+    public float speedKnots;
+}
+
+[CreateAssetMenu(menuName = "VR Bridge/Scenario", fileName = "Scenario", order = 10)]
+public class ScenarioDefinition : ScriptableObject
+{
+    [Header("Сценарий")]
+    [Tooltip("Короткий идентификатор (для записи и отчётов), например B2-01")]
+    public string id = "S-00";
+    public string title = "Новый сценарий";
+    [TextArea(6, 20)] public string briefing = "";
+
+    [Header("Акватория и судно")]
+    public WaterArea waterArea;
+    [Tooltip("Пусто — параметры, назначенные в сцене")]
+    public ShipParameters shipParameters;
+
+    [Header("Начальные условия своего судна")]
+    public OwnShipInitialState initial = new OwnShipInitialState();
+
+    [Header("Условия плавания")]
+    public WeatherPresetId weather = WeatherPresetId.Moderate;
+    [Tooltip("Применяется в B4")]
+    public TimeOfDay timeOfDay = TimeOfDay.Day;
+    [Tooltip("Видимость, м; 0 — по пресету погоды. Применяется в C4")]
+    public float visibilityMeters;
+
+    [Header("Маршрут")]
+    public List<RouteWaypoint> route = new List<RouteWaypoint>();
+
+    [Header("Другие суда (B3)")]
+    public List<TrafficShipDefinition> traffic = new List<TrafficShipDefinition>();
+
+    [Header("Завершение")]
+    [Tooltip("Лимит времени, с; 0 — без лимита")]
+    public float timeLimitSeconds = 1800f;
+    public ScenarioEndConditions endConditions = ScenarioEndConditions.All;
+
+    [Header("Оценка (C2)")]
+    public AssessmentCriteria assessment;
+
+    public bool Ends(ScenarioEndConditions c) => (endConditions & c) != 0;
+
+    /// <summary>Длина маршрута по путевым точкам, м.</summary>
+    public double RouteLength
+    {
+        get
+        {
+            double s = 0;
+            for (int i = 0; i + 1 < route.Count; i++) s += (route[i + 1].position - route[i].position).Magnitude;
+            return s;
+        }
+    }
+
+    /// <summary>Проблемы описания сценария (пусто — сценарий корректен).</summary>
+    public List<string> Validate()
+    {
+        var problems = new List<string>();
+        if (string.IsNullOrWhiteSpace(id)) problems.Add("Не задан идентификатор.");
+        if (string.IsNullOrWhiteSpace(title)) problems.Add("Не задано название.");
+        if (string.IsNullOrWhiteSpace(briefing)) problems.Add("Пустой текст брифинга.");
+        if (waterArea == null) problems.Add("Не назначена акватория (WaterArea).");
+        if (route == null || route.Count < 2)
+            problems.Add("В маршруте меньше двух путевых точек.");
+        else
+        {
+            for (int i = 1; i < route.Count; i++)
+            {
+                if (route[i] == null) { problems.Add($"Путевая точка {i} пустая."); continue; }
+                if (route[i].xteLimit <= 0f) problems.Add($"Точка {i} «{route[i].name}»: XTE должно быть больше 0.");
+                if (route[i - 1] != null && (route[i].position - route[i - 1].position).Magnitude < 1.0)
+                    problems.Add($"Точки {i - 1} и {i} совпадают.");
+            }
+            if (waterArea != null)
+                for (int i = 0; i < route.Count; i++)
+                    if (route[i] != null && !waterArea.InBounds(route[i].position))
+                        problems.Add($"Точка {i} «{route[i].name}» вне района акватории.");
+        }
+        if (initial == null) problems.Add("Не заданы начальные условия.");
+        else
+        {
+            if (waterArea != null && !waterArea.InBounds(initial.position)) problems.Add("Начальная позиция вне района акватории.");
+            if (waterArea != null && shipParameters != null && waterArea.DepthAt(initial.position) < shipParameters.draft)
+                problems.Add("Начальная позиция — на мели или на суше.");
+            if (initial.speedKnots < 0f) problems.Add("Начальная скорость отрицательная (задний ход начальными условиями не задаётся).");
+        }
+        if (timeLimitSeconds < 0f) problems.Add("Лимит времени отрицательный.");
+        if (timeLimitSeconds == 0f && Ends(ScenarioEndConditions.TimeLimit))
+            problems.Add("Условие «истечение времени» включено, но лимит = 0 (без лимита).");
+        if (visibilityMeters < 0f) problems.Add("Видимость отрицательная.");
+        return problems;
+    }
+}

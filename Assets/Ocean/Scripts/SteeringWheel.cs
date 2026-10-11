@@ -55,6 +55,17 @@ public class SteeringWheel : MonoBehaviour
     public float RudderAngle => currentRudderAngle;
     public bool IsGrabbed => isGrabbed;
 
+    /// <summary>
+    /// Поставить штурвал на заданный угол руля (начальные условия сценария, B2).
+    /// Знак — как у RudderAngle (какой это борт, решает ShipNavigation.SetRudderOrder).
+    /// Если штурвал держат — хват продолжается от нового положения без рывка.
+    /// </summary>
+    public void SetRudderAngle(float angle)
+    {
+        currentRudderAngle = Mathf.Clamp(angle, -maxRudderAngle, maxRudderAngle);
+        hasGripDir = false;
+    }
+
     /// <summary>Ось штурвала в мировых координатах.</summary>
     public Vector3 WorldAxis
     {

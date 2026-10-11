@@ -137,6 +137,32 @@ public class WeatherController : MonoBehaviour
         return false;
     }
 
+    /// <summary>
+    /// Пресет по идентификатору (сценарий B2). instant — сразу, без 3-секундного перехода
+    /// (погода сценария применяется при загрузке, до брифинга).
+    /// </summary>
+    public void SetPreset(WeatherPresetId id, bool instant = false)
+    {
+        WeatherPreset p;
+        switch (id)
+        {
+            case WeatherPresetId.Calm: p = calm; break;
+            case WeatherPresetId.Storm: p = storm; break;
+            case WeatherPresetId.Night: p = night; break;
+            default: p = moderate; break;
+        }
+        if (!instant)
+        {
+            TransitionTo(p);
+            return;
+        }
+        currentState = p;
+        targetState = p;
+        transitionProgress = 1f;
+        currentPreset = p.name;
+        ApplyPreset(p);
+    }
+
     public void SetCalm() { TransitionTo(calm); }
     public void SetModerate() { TransitionTo(moderate); }
     public void SetStorm() { TransitionTo(storm); }

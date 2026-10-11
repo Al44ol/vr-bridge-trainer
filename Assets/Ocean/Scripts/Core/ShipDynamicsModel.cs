@@ -198,11 +198,20 @@ public sealed class ShipDynamicsModel : IVesselModel
         North += U * Math.Cos(Psi) * dt;
     }
 
-    /// <summary>Мгновенно переставить судно (снятие с мели инструктором): стоп, без поворота.</summary>
-    public void Teleport(double east, double north, double psi)
+    /// <summary>
+    /// Мгновенно переставить судно, без поворота (r = 0): снятие с мели инструктором (B1) —
+    /// стоп; начальные условия сценария (B2) — скорость u (м/с) и фактический руль δ (градусы).
+    /// Без δ руль не трогается (как в B1).
+    /// </summary>
+    public void Teleport(double east, double north, double psi, double u = 0.0, double? deltaDeg = null)
     {
         East = east; North = north; Psi = Wrap2Pi(psi);
-        U = 0.0; R = 0.0;
+        U = u; R = 0.0;
+        if (deltaDeg.HasValue)
+        {
+            double max = Parameters != null ? Parameters.maxRudderAngle : 35.0;
+            Delta = Ordered = Clamp(deltaDeg.Value, -max, max);
+        }
         Grounded = false;
     }
 

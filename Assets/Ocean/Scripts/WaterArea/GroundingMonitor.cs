@@ -12,8 +12,9 @@
 //   • «снятие» — контур вышел из мели (задним ходом, если сели на переднем;
 //     в модели — k_снят от скорости телеграфа) или команда инструктора в меню
 //     мостика «Снять с мели»: возврат на чистую позицию ≈30 с назад, стоп.
-// События — C# (для шины упражнения B2, оценки C2, тактильного отклика D3)
-// и UnityEvent (для настройки в инспекторе). Время событий — симуляционное.
+// События — C# (оценка C2, тактильный отклик D3), UnityEvent (для настройки
+// в инспекторе) и с B2 — шина упражнения ExerciseEvents (время — время упражнения).
+// Время GroundingEventInfo — симуляционное, от запуска сцены.
 // Квитирование сигнализации — команда меню; новое опасное событие снимает квитирование.
 // ============================================================
 using System;
@@ -323,6 +324,22 @@ public class GroundingMonitor : MonoBehaviour
             HazardName = hazard.Valid ? hazard.Name : "", HazardDepth = hazard.Valid ? hazard.Depth : float.NaN,
             Distance = hazard.Distance, ByInstructor = byInstructor
         };
+        // B2: то же событие — в шину упражнения (запись C1, оценка C2, тактильный отклик D3)
+        ExerciseEventType busType;
+        switch (kind)
+        {
+            case GroundingEvents.WarningStarted: busType = ExerciseEventType.ShoalWarningStarted; break;
+            case GroundingEvents.WarningCleared: busType = ExerciseEventType.ShoalWarningCleared; break;
+            case GroundingEvents.Grounded: busType = ExerciseEventType.Grounded; break;
+            default: busType = ExerciseEventType.Refloated; break;
+        }
+        ExerciseEvents.Publish(new ExerciseEvent(busType)
+        {
+            Position = info.Position, HeadingDeg = info.HeadingDeg, SpeedKnots = info.SpeedKnots,
+            Index = hazard.Valid ? hazard.Index : -1, Subject = info.HazardName,
+            Value = info.Distance, Value2 = info.HazardDepth, ByInstructor = byInstructor
+        });
+
         string tag = "[Мель] ";
         switch (kind)
         {
