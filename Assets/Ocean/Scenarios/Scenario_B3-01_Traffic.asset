@@ -59,21 +59,25 @@ MonoBehaviour:
       East: 0
       North: -2500
     xteLimit: 250
+    narrowChannel: 0
   - name: "\u0412\u0445\u043E\u0434 \u0432 \u0444\u0430\u0440\u0432\u0430\u0442\u0435\u0440"
     position:
       East: 0
       North: -300
     xteLimit: 250
+    narrowChannel: 0
   - name: "\u041F\u043E\u0432\u043E\u0440\u043E\u0442"
     position:
       East: 0
       North: 3200
     xteLimit: 150
+    narrowChannel: 1
   - name: "\u0412\u044B\u0445\u043E\u0434 \u0438\u0437 \u0444\u0430\u0440\u0432\u0430\u0442\u0435\u0440\u0430"
     position:
       East: 3031.088913245535
       North: 4950
     xteLimit: 150
+    narrowChannel: 1
   traffic:
   - id: T1
     name: "\u0412\u0441\u0442\u0440\u0435\u0447\u043D\u044B\u0439 \u0441\u0443\u0445\u043E\u0433\u0440\u0443\u0437"
@@ -99,6 +103,7 @@ MonoBehaviour:
     - East: -90
       North: -3600
     lights: 0
+    requiredCpaNm: 0.05
   - id: T2
     name: "\u0422\u0430\u043D\u043A\u0435\u0440, \u043F\u0435\u0440\u0435\u0441\u0435\u043A\u0430\u044E\u0449\u0438\u0439
       \u0441\u043F\u0440\u0430\u0432\u0430"
@@ -122,6 +127,7 @@ MonoBehaviour:
     - East: -900
       North: -4500
     lights: 0
+    requiredCpaNm: 0
   - id: T3
     name: "\u041C\u0430\u043B\u043E\u0435 \u0441\u0443\u0434\u043D\u043E \u0432\u043F\u0435\u0440\u0435\u0434\u0438"
     type: 2
@@ -146,6 +152,8 @@ MonoBehaviour:
     - East: 5669.1651245988505
       North: 6380.717967697245
     lights: 0
+    requiredCpaNm: 0.05
   timeLimitSeconds: 1800
   endConditions: 15
-  assessment: {fileID: 0}
+  assessment: {fileID: 11400000, guid: 0dfb1cfc7a8080b42a5d9cdecb92e81a, type: 2}
+  detectionRangeNm: 0
