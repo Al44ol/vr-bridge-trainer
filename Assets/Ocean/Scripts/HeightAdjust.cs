@@ -2,7 +2,8 @@
 // HeightAdjust.cs — Настройка высоты игрока в VR
 //
 // Создаёт world-space панель с ползунком высоты.
-// Открывается кнопкой Y (левый контроллер Quest) или H на клавиатуре.
+// Открывается кнопкой X (левый контроллер Quest: primaryButton) или H на клавиатуре.
+// (B4: Y левого — меню «Параметры», BridgeMenu.)
 // Повесить на XR Origin Hands (XR Rig).
 // ============================================================
 using UnityEngine;
@@ -38,7 +39,7 @@ public class HeightAdjust : MonoBehaviour
         BuildPanel();
         ApplyHeight();
 
-        // Y на левом контроллере = primaryButton левого
+        // X на левом контроллере = primaryButton левого (Y — secondaryButton)
         yButtonAction = new InputAction("HeightPanel", InputActionType.Button);
         yButtonAction.AddBinding("<XRController>{LeftHand}/primaryButton");
         yButtonAction.AddBinding("<Keyboard>/h");

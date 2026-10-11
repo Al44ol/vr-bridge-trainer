@@ -23,6 +23,7 @@
 //   положение поставлено кодом (съём с мели инструктором, B1).
 // Гудок: начало / конец звучания → HornStarted / HornEnded (Value — длительность, с).
 // Погода: смена пресета → WeatherChanged (Index — новый, Value — прежний пресет).
+// Время суток (B4): смена → TimeOfDayChanged (Index — новое, Value — прежнее).
 // Пороги — предварительные, задаются в инспекторе монитора.
 // ============================================================
 using System;
@@ -42,6 +43,8 @@ public struct ControlState
     public bool TelegraphByCode;
     public bool HornSounding;
     public int WeatherPreset;
+    /// <summary>Время суток — номер TimeOfDay (B4; 0 — день).</summary>
+    public int TimeOfDay;
 }
 
 public sealed class ControlActionDetector
@@ -62,7 +65,7 @@ public sealed class ControlActionDetector
     // Гудок, погода
     private bool horn;
     private double hornStart;
-    private int weather;
+    private int weather, timeOfDay;
 
     /// <summary>Начальное состояние (начало упражнения): текущие положения — не действия.</summary>
     public void Reset(double time, in ControlState s)
@@ -75,6 +78,7 @@ public sealed class ControlActionDetector
         horn = s.HornSounding;
         hornStart = time;
         weather = s.WeatherPreset;
+        timeOfDay = s.TimeOfDay;
     }
 
     public IReadOnlyList<ExerciseEvent> Update(double time, in ControlState s)
@@ -84,6 +88,7 @@ public sealed class ControlActionDetector
         Telegraph(time, s);
         Horn(time, s);
         Weather(s);
+        DayTime(s);
         return events;
     }
 
@@ -156,5 +161,15 @@ public sealed class ControlActionDetector
             Index = s.WeatherPreset, Value = weather, Subject = ScenarioText.WeatherTitle((WeatherPresetId)s.WeatherPreset)
         });
         weather = s.WeatherPreset;
+    }
+
+    private void DayTime(in ControlState s)
+    {
+        if (s.TimeOfDay == timeOfDay) return;
+        events.Add(new ExerciseEvent(ExerciseEventType.TimeOfDayChanged)
+        {
+            Index = s.TimeOfDay, Value = timeOfDay, Subject = ScenarioText.TimeOfDayTitle((TimeOfDay)s.TimeOfDay)
+        });
+        timeOfDay = s.TimeOfDay;
     }
 }

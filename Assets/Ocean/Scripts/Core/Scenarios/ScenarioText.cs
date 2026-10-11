@@ -45,7 +45,7 @@ public static class ScenarioText
         {
             case WeatherPresetId.Calm: return "штиль, видимость ≈ 5,8 км";
             case WeatherPresetId.Storm: return "шторм, видимость ≈ 1,2 км";
-            case WeatherPresetId.Night: return "ночь, видимость ≈ 11,5 км (6,2 мили)";
+            case WeatherPresetId.Night: return "слабое волнение, видимость ≈ 11,5 км (6,2 мили)";   // B4: темноту даёт время суток
             default: return "умеренное волнение, видимость ≈ 4,3 км";
         }
     }
@@ -57,7 +57,7 @@ public static class ScenarioText
         {
             case WeatherPresetId.Calm: return "штиль";
             case WeatherPresetId.Storm: return "шторм";
-            case WeatherPresetId.Night: return "ночь";
+            case WeatherPresetId.Night: return "ясно, видимость 6,2 мили";
             default: return "умеренное волнение";
         }
     }
@@ -81,6 +81,13 @@ public static class ScenarioText
         if (double.IsNaN(deg)) return "—";
         if (Math.Abs(deg) < 0.05) return "0°";
         return $"{Num(Math.Abs(deg), 1)}° {(deg > 0 ? "ПБ" : "ЛБ")}";
+    }
+
+    /// <summary>Условия сценария (B4): «ночь · слабое волнение, видимость …» — время суток и погода раздельно.</summary>
+    public static string Conditions(WeatherPresetId w, TimeOfDay t)
+    {
+        string tod = TimeOfDayTitle(t);
+        return char.ToUpper(tod[0]) + tod.Substring(1) + " · " + Weather(w);
     }
 
     public static string TimeOfDayTitle(TimeOfDay t)

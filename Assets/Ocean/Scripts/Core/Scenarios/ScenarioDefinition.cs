@@ -9,7 +9,7 @@
 //   • идентификатор, название, текст брифинга;
 //   • акватория (WaterArea) и параметры своего судна (ShipParameters);
 //   • начальные условия своего судна: позиция, курс, скорость, телеграф, руль;
-//   • погода (пресет WeatherController), время суток (B4) и видимость (C4) — пока поля;
+//   • погода (пресет WeatherController) и время суток (B4) — независимо; видимость (C4) — пока поле;
 //   • маршрут: путевые точки, у каждой — допустимое боковое отклонение (XTE)
 //     на участке, ведущем К этой точке (у первой точки не используется);
 //   • другие суда (B3): тип, параметры, начальная позиция (абсолютная, от своего
@@ -42,10 +42,10 @@ public enum WeatherPresetId
     [InspectorName("Штиль")] Calm,
     [InspectorName("Умеренное волнение")] Moderate,
     [InspectorName("Шторм")] Storm,
-    [InspectorName("Ночь (пресет погоды)")] Night
+    [InspectorName("Слабое волнение, видимость 6,2 мили (бывш. «Ночь»)")] Night
 }
 
-/// <summary>Время суток (применяется в B4; сейчас — только поле).</summary>
+/// <summary>Время суток (B4): независимо от погоды; освещение — EnvironmentModel.</summary>
 public enum TimeOfDay
 {
     [InspectorName("День")] Day,
@@ -120,7 +120,7 @@ public class ScenarioDefinition : ScriptableObject
 
     [Header("Условия плавания")]
     public WeatherPresetId weather = WeatherPresetId.Moderate;
-    [Tooltip("Применяется в B4")]
+    [Tooltip("День / сумерки / ночь — независимо от погоды (B4)")]
     public TimeOfDay timeOfDay = TimeOfDay.Day;
     [Tooltip("Видимость, м; 0 — по пресету погоды. Применяется в C4")]
     public float visibilityMeters;

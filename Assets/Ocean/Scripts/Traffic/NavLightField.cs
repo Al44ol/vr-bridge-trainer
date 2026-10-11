@@ -11,9 +11,11 @@
 //   • метеорологическая видимость V по туману сцены (ExponentialSquared,
 //     V = 1,73/ρ — как в WeatherController); без тумана — ясно (K = 0,8);
 //   • коэффициент пропускания K = 0,05^(1852/V) (NavigationLights);
-//   • огни горят (режим «авто»): темно (RenderSettings.ambientIntensity меньше
-//     порога — пресет «Ночь»; шторм) или ограниченная видимость V < 2 миль
+//   • огни горят (режим «авто»): темно или ограниченная видимость V < 2 миль
 //     (правило 20 б, в). Режим «вкл/выкл» — команда меню мостика «Отладка».
+//     B4: «темно» — по времени суток (WeatherController.Darkness ≥ 0,5: сумерки
+//     и ночь, EnvironmentModel.LightsRequired); без WeatherController — как в B3,
+//     RenderSettings.ambientIntensity < 0,3. Шторм днём — огни по видимости (0,65 мили).
 // Порядок −95: Update — раньше источников (условия кадра готовы), LateUpdate — после всех.
 // ============================================================
 using System.Collections.Generic;
@@ -40,8 +42,10 @@ public class NavLightField : MonoBehaviour
 
     [Header("Когда горят огни")]
     public LightsMode mode = LightsMode.Auto;
-    [Tooltip("Авто: темно, если RenderSettings.ambientIntensity меньше порога")]
+    [Tooltip("Авто без WeatherController (как в B3): темно, если RenderSettings.ambientIntensity меньше порога")]
     public float darkAmbientThreshold = 0.3f;
+    [Tooltip("Авто (B4): темно, если WeatherController.Darkness не меньше порога (сумерки 0,6, ночь 1)")]
+    public float darknessThreshold = EnvironmentModel.DarknessForLights;
     [Tooltip("Авто: ограниченная видимость меньше, мили")]
     public float restrictedVisibilityNm = 2f;
 
@@ -123,7 +127,8 @@ public class NavLightField : MonoBehaviour
             if (k > 0.0) vis = k / RenderSettings.fogDensity;
         }
         Transmissivity = NavigationLights.TransmissivityFromVisibility(vis);
-        bool dark = RenderSettings.ambientIntensity < darkAmbientThreshold;
+        WeatherController weather = WeatherController.Instance;
+        bool dark = weather != null ? weather.Darkness >= darknessThreshold : RenderSettings.ambientIntensity < darkAmbientThreshold;
         bool restricted = vis < restrictedVisibilityNm * NavigationLights.MetersPerNm;
         lightsOn = mode == LightsMode.On || (mode == LightsMode.Auto && (dark || restricted));
         visibilityNm = (float)(vis / NavigationLights.MetersPerNm);

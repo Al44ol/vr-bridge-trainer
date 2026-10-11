@@ -4,9 +4,9 @@
 // Источник событий шины ExerciseEvents (как ScenarioRunner и GroundingMonitor):
 // на каждом шаге модели читает органы управления — заданный руль
 // (ShipNavigation.RudderOrdered, с учётом знака штурвала) и хват штурвала,
-// положение телеграфа и хват рычага, звучание гудка, пресет погоды — и через
+// положение телеграфа и хват рычага, звучание гудка, пресет погоды, время суток (B4) — и через
 // ControlActionDetector (Core) публикует перекладки руля, команды телеграфу,
-// гудки и смены погоды. Органы управления о шине не знают.
+// гудки, смены погоды и времени суток. Органы управления о шине не знают.
 //
 // Порядок −87: после шага модели (−90) и ScenarioRunner (−88) — у действия
 // то же время упражнения, что у событий маршрута этого шага.
@@ -105,7 +105,8 @@ public class BridgeActionMonitor : MonoBehaviour
             TelegraphGrabbed = telegraph != null && telegraph.IsGrabbed,
             TelegraphByCode = telegraph != null && telegraph.LastChangeFromCode,
             HornSounding = horn != null && horn.IsSounding,
-            WeatherPreset = weather != null ? (int)weather.CurrentPresetId : (int)WeatherPresetId.Moderate
+            WeatherPreset = weather != null ? (int)weather.CurrentPresetId : (int)WeatherPresetId.Moderate,
+            TimeOfDay = weather != null ? (int)weather.CurrentTimeOfDay : (int)global::TimeOfDay.Day
         };
     }
 }

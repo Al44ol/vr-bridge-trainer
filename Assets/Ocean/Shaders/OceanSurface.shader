@@ -17,6 +17,9 @@
 //    два слоя попеременно гаснут и появляются в случайных местах;
 //  • корпус: внутри контура вода не рисуется, у борта волны гасятся;
 //  • пенный след за кормой (полоса + «усы» Кельвина) и бурун у носа.
+// B4:
+//  • лунная дорожка: ночью блик главного источника (луны) шире и ярче
+//    (_OceanNightSpec от WeatherController; днём 0 — вода как раньше).
 // ============================================================
 Shader "VRBridgeTrainer/OceanSurface"
 {
@@ -153,6 +156,11 @@ Shader "VRBridgeTrainer/OceanSurface"
             // Судно: frame xy = центр, zw = направление носа; dims = (выступ носа, выступ кормы, полуширина, скорость м/с)
             float4 _OceanShipFrame;
             float4 _OceanShipDims;
+
+            // B4 (WeatherController): лунная дорожка — блик главного источника (ночью луна)
+            //   x — доп. усиление (блик × (1 + x)), y — расширение лепестка (показатель / (1 + y));
+            //   днём (и пока не задан) 0, 0 — блик как до B4
+            float4 _OceanNightSpec;
 
             // Согласовано с OceanWaves.FoamPeriod / FoamStretch
             #define FOAM_PERIOD  240.0
@@ -323,7 +331,8 @@ Shader "VRBridgeTrainer/OceanSurface"
                 // Блик (Blinn-Phong)
                 float3 H     = normalize(mainLight.direction + V);
                 float  NdotH = saturate(dot(N, H));
-                float  spec  = pow(NdotH, exp2(10.0 * _Smoothness + 1.0)) * _Smoothness;
+                float  spec  = pow(NdotH, exp2(10.0 * _Smoothness + 1.0) / (1.0 + _OceanNightSpec.y))
+                             * _Smoothness * (1.0 + _OceanNightSpec.x);
 
                 // Ambient (Spherical Harmonics)
                 float3 ambient = SampleSH(N);

@@ -13,6 +13,18 @@
 //   _SkyOvercast  — сплошная облачность (шторм), 0..1: процедурные тучи
 //                   (периодический шум на куполе), цвет — от цвета тумана;
 //   _SkyCloudOffset — дрейф туч (по модулю периода шума).
+//
+// B4 — ночное небо (SkyWeather; по умолчанию _SkyNight = 0 — небо как до B4):
+//   _SkyNight — доля ночного слоя: градиент от цвета тумана у горизонта
+//               к _SkyNightZenith, звёзды, луна; плавно смешивается с дневной кубмапой;
+//   звёзды процедурные (внешних ассетов нет): направление → грань куба,
+//               сетка STAR_CELLS × STAR_CELLS ячеек, звезда в ячейке с вероятностью
+//               STAR_DENSITY; распределение блеска N(<m) ∝ 10^(0,47m) → поток F = u^(−0,85),
+//               яркость на экране — логарифмическая; размер ~1 пиксель по fwidth (без
+//               мерцания при повороте головы); к горизонту гаснут (атмосферная экстинкция);
+//   луна — диск ≈ 0,3° с ореолом, направление _SkyMoonDir.xyz, яркость — .w;
+//   _SkyTwilight — тёплое свечение у горизонта со стороны солнца (сумерки).
+// Тучи шторма рисуются поверх ночного слоя — закрывают звёзды и луну.
 // ============================================================
 Shader "VRBridgeTrainer/SkyboxHorizonFog"
 {
@@ -67,7 +79,20 @@ Shader "VRBridgeTrainer/SkyboxHorizonFog"
             float  _SkyOvercast;
             float4 _SkyCloudOffset;
 
+            // Ночь (B4, SkyWeather.cs)
+            float  _SkyNight;
+            float4 _SkyNightZenith;
+            float  _SkyStars;
+            float4 _SkyMoonDir;        // xyz — на луну, w — яркость диска
+            float4 _SkyMoonColor;
+            float  _SkyTwilight;
+            float4 _SkyTwilightColor;
+            float4 _SkySunDir;         // xyz — на солнце
+
             #define CLOUD_CELLS 64.0   // период шума туч в ячейках
+            #define STAR_CELLS 512.0   // ячеек на ребро грани куба: ячейка ≈ 0,2° ≈ 5 пикселей шлема
+            #define STAR_DENSITY 0.0032 // доля ячеек со звездой: ≈ 5000 звёзд на сфере
+            #define MOON_RADIUS 0.0052  // угловой радиус диска луны, рад (≈ 0,3°; реальный 0,26°)
 
             float Hash21(float2 i)
             {
@@ -99,6 +124,39 @@ Shader "VRBridgeTrainer/SkyboxHorizonFog"
                     p *= 2.0; cells *= 2.0; amp *= 0.5;
                 }
                 return sum / 0.9375;
+            }
+
+            float4 Hash43(float3 p)
+            {
+                float4 q = frac(float4(p.xyzx) * float4(0.1031, 0.1030, 0.0973, 0.1099));
+                q += dot(q, q.wzxy + 33.33);
+                return frac((q.xxyz + q.yzzw) * q.zywx);
+            }
+
+            // Звёзды: грань куба → ячейка → одна звезда в ячейке (центр 0,2…0,8, чтобы не резалась краем)
+            half3 Stars(float3 dir)
+            {
+                float3 a = abs(dir);
+                float2 uv; float face;
+                if (a.x >= a.y && a.x >= a.z) { uv = dir.zy / a.x; face = dir.x > 0 ? 0 : 1; }
+                else if (a.y >= a.z)          { uv = dir.xz / a.y; face = dir.y > 0 ? 2 : 3; }
+                else                          { uv = dir.xy / a.z; face = dir.z > 0 ? 4 : 5; }
+                float2 g = (uv * 0.5 + 0.5) * STAR_CELLS;
+                float2 cell = floor(g);
+                float2 f = g - cell;
+                float px = max(fwidth(g.x), fwidth(g.y));           // ячеек на пиксель (до ветвления)
+                float4 h = Hash43(float3(cell, face * 1031.0 + 7.0));
+                if (h.x > STAR_DENSITY) return 0;
+
+                float u = h.x / STAR_DENSITY;                       // 0…1 — ранг по блеску
+                float flux = pow(max(u, 2e-4), -0.85);              // F = u^(−0,85): 1 … ≈ 1400
+                float level = 0.12 + 0.88 * saturate(log10(flux) / 3.0);
+                float2 c = 0.2 + 0.6 * h.yz;
+                float d = length(f - c) / max(px, 1e-4);            // расстояние в пикселях
+                float core = exp(-d * d * 1.6);
+                // Цвет — от «тёплых» до «холодных» звёзд
+                half3 tint = lerp(half3(1.0, 0.86, 0.72), half3(0.78, 0.86, 1.0), h.w);
+                return tint * (core * level);
             }
 
             // Как unity_ColorSpaceDouble во встроенном шейдере (проект в Linear)
@@ -146,6 +204,34 @@ Shader "VRBridgeTrainer/SkyboxHorizonFog"
                 half4  tex = SAMPLE_TEXTURECUBE(_Tex, sampler_Tex, dir);
                 half3  sky = DecodeHDREnvironment(tex, _Tex_HDR) * _Tint.rgb * COLOR_SPACE_DOUBLE * _Exposure;
                 sky *= 1.0 - saturate(_SkyDarkening);
+
+                // Ночь (B4): тёмный градиент, звёзды, луна — смешивание с дневной кубмапой.
+                // Без ветвления: внутри есть производные (fwidth), днём _SkyNight = 0.
+                {
+                    float up = saturate(dir.y);
+                    half3 night = lerp(unity_FogColor.rgb, _SkyNightZenith.rgb, sqrt(up));
+                    night += Stars(dir) * (_SkyStars * smoothstep(0.0, 0.12, dir.y));
+
+                    // Луна: диск с мягким краем (по пикселю) и ореол
+                    float3 md = _SkyMoonDir.xyz / max(length(_SkyMoonDir.xyz), 1e-4);   // без NaN, пока глобал не задан
+                    float  dm = length(dir - md);                    // ≈ угол, рад
+                    float  aa = max(fwidth(dm), 1e-5);
+                    float  disc = 1.0 - smoothstep(MOON_RADIUS - aa, MOON_RADIUS + aa, dm);
+                    float  halo = 0.10 * exp(-dm / 0.035) + 0.03 * exp(-dm / 0.25);
+                    night += _SkyMoonColor.rgb * (_SkyMoonDir.w * (disc + halo)) * step(-0.02, md.y);
+
+                    sky = lerp(sky, night, saturate(_SkyNight));
+                }
+
+                // Сумерки: свечение у горизонта, сильнее со стороны солнца
+                if (_SkyTwilight > 0.001)
+                {
+                    float2 hz = normalize(dir.xz + 1e-5);
+                    float2 sz = normalize(_SkySunDir.xz + 1e-5);
+                    float  toward = saturate(dot(hz, sz) * 0.5 + 0.5);
+                    float  band = exp(-max(dir.y, 0.0) / 0.12);
+                    sky += _SkyTwilightColor.rgb * (_SkyTwilight * band * (0.2 + 0.8 * toward * toward));
+                }
 
                 // Тучи: проекция на плоский «потолок» над наблюдателем, гаснут к горизонту
                 if (_SkyOvercast > 0.001 && dir.y > -0.05)

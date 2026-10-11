@@ -5,7 +5,7 @@
 //   Idle (свободное плавание) → Load(сценарий) → Briefing → StartExercise() →
 //   Running → End(причина) → Finished → Restart() / Load(другой) / FreeSail().
 //
-// Load — применяет сценарий: параметры судна, акваторию, погоду (сразу, без
+// Load — применяет сценарий: параметры судна, акваторию, погоду и время суток (B4; сразу, без
 //   перехода), ставит судно в начальную точку (ShipNavigation.TeleportTo +
 //   GroundingMonitor.ResetState), телеграф и руль. На брифинге модель стоит
 //   (ShipNavigation.Paused): судно с ходом 15 уз не уплывает, пока читают текст.
@@ -220,9 +220,12 @@ public class ScenarioRunner : MonoBehaviour
             waterArea.area = s.waterArea;
             waterArea.Rebuild();
         }
-        if (weather != null) weather.SetPreset(s.weather, instant: true);
-        if (s.timeOfDay != TimeOfDay.Day)
-            Debug.Log($"[Сценарий] Время суток «{ScenarioText.TimeOfDayTitle(s.timeOfDay)}» будет применяться с B4; сейчас — только пресет погоды.");
+        // B4: погода и время суток — раздельно (ночь + штиль, ночь + шторм и т. д.)
+        if (weather != null)
+        {
+            weather.SetWeather(s.weather, instant: true);
+            weather.SetTimeOfDay(s.timeOfDay, instant: true);
+        }
         if (s.visibilityMeters > 0f)
             Debug.Log($"[Сценарий] Видимость {s.visibilityMeters:F0} м будет применяться с C4; сейчас — по пресету погоды.");
         PlaceShip(s);

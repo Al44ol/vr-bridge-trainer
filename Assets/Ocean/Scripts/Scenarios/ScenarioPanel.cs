@@ -162,7 +162,7 @@ public class ScenarioPanel : MonoBehaviour
             if (s == null) continue;
             ScenarioDefinition sc = s;
             string limit = s.timeLimitSeconds > 0 ? $" · {ScenarioText.Num(s.timeLimitSeconds / 60.0)} мин" : "";
-            string label = $"<b>{s.id}</b>  {s.title}\n<size=75%><color=#C8D2DC>{ScenarioText.Weather(s.weather)}{limit} · маршрут {ScenarioText.Num(s.RouteLength / 1000.0, 1)} км</color></size>";
+            string label = $"<b>{s.id}</b>  {s.title}\n<size=75%><color=#C8D2DC>{ScenarioText.Conditions(s.weather, s.timeOfDay)}{limit} · маршрут {ScenarioText.Num(s.RouteLength / 1000.0, 1)} км</color></size>";
             ButtonRow(ref y, 66f, (label, ButtonColor, () => runner.Load(sc)));
         }
         y -= Gap;
@@ -291,7 +291,7 @@ public class ScenarioPanel : MonoBehaviour
     {
         var b = new StringBuilder();
         b.AppendLine("<b>Условия</b>");
-        b.AppendLine($"Погода: {ScenarioText.Weather(s.weather)}; {ScenarioText.TimeOfDayTitle(s.timeOfDay)}");
+        b.AppendLine($"Время суток: {ScenarioText.TimeOfDayTitle(s.timeOfDay)}; погода: {ScenarioText.Weather(s.weather)}");
         OwnShipInitialState i = s.initial;
         if (i != null)
             b.AppendLine($"Начало: курс {i.headingDeg:000}°, {ScenarioText.Num(i.speedKnots, 1)} уз, телеграф «{ScenarioText.Telegraph(i.telegraph)}», руль {ScenarioText.Num(i.rudderDeg)}°");

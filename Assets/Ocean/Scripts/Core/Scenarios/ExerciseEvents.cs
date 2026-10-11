@@ -31,6 +31,7 @@
 //                        ByInstructor — положение поставлено кодом (не рукой)
 //   HornStarted / HornEnded   Value (у HornEnded) — длительность звучания, с
 //   WeatherChanged       Index — новый пресет (WeatherPresetId), Value — прежний пресет
+//   TimeOfDayChanged (B4) Index — новое время суток (TimeOfDay), Value — прежнее
 // XTE > 0 — судно правее линии пути.
 // ============================================================
 using System;
@@ -56,7 +57,8 @@ public enum ExerciseEventType
     TelegraphChanged,
     HornStarted,
     HornEnded,
-    WeatherChanged
+    WeatherChanged,
+    TimeOfDayChanged    // B4
 }
 
 public enum ScenarioEndReason
@@ -129,6 +131,7 @@ public struct ExerciseEvent
             case ExerciseEventType.HornStarted: return "Гудок";
             case ExerciseEventType.HornEnded: return $"Гудок окончен, {ScenarioText.Num(Value, 1)} с";
             case ExerciseEventType.WeatherChanged: return $"Погода: {Subject}";
+            case ExerciseEventType.TimeOfDayChanged: return $"Время суток: {Subject}";
         }
         return $"{Type} {Subject}";
     }

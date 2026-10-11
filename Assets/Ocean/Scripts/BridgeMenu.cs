@@ -15,6 +15,11 @@
 // «Начать» — только на брифинге и т. п.), панель пересобирается сама.
 // Прыжок шаблона XR (тоже кнопка A) отключает Setup B1 Water Area.
 // B3: RegisterStepper — строка «< значение >» (выбор значения стрелками, меню не закрывается).
+// B4: несколько меню — у команды признак Menu (пусто — меню A), у экземпляра
+// BridgeMenu — menuId. Второе меню «Параметры» (SettingsMenuId) — на кнопке Y
+// левого контроллера: свет рубки, подсветка приборов, экспозиция ночи.
+//     BridgeMenu.RegisterStepper("Свет", …).InMenu(BridgeMenu.SettingsMenuId);
+// Прежние вызовы Register попадают в меню A, как раньше. Открытие одного меню закрывает другие.
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -42,8 +47,19 @@ public sealed class BridgeMenuCommand
     public Action Previous, Next;
     public bool IsStepper => Previous != null || Next != null;
 
+    /// <summary>В каком меню команда (B4): пусто — меню A, BridgeMenu.SettingsMenuId — меню «Параметры» (Y).</summary>
+    public string Menu = "";
+
     public bool Available => IsAvailable == null || IsAvailable();
     public bool Visible => !HideWhenUnavailable || Available;
+
+    /// <summary>Перенести команду в другое меню (B4).</summary>
+    public BridgeMenuCommand InMenu(string menu)
+    {
+        Menu = menu ?? "";
+        BridgeMenu.RebuildOpen();
+        return this;
+    }
 }
 
 public class BridgeMenu : MonoBehaviour
@@ -51,7 +67,11 @@ public class BridgeMenu : MonoBehaviour
     // ── Реестр команд (статический: модули регистрируются в любом порядке) ──
     private static readonly List<BridgeMenuCommand> commands = new List<BridgeMenuCommand>();
     public static IReadOnlyList<BridgeMenuCommand> Commands => commands;
+    /// <summary>Меню A (основное).</summary>
     public static BridgeMenu Instance { get; private set; }
+    /// <summary>Меню «Параметры» на кнопке Y (B4).</summary>
+    public const string SettingsMenuId = "Параметры";
+    private static readonly List<BridgeMenu> instances = new List<BridgeMenu>();
 
     // Если в настройках Play Mode отключена перезагрузка домена — не тащить команды прошлого запуска
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -59,6 +79,7 @@ public class BridgeMenu : MonoBehaviour
     {
         commands.Clear();
         groupOrder.Clear();
+        instances.Clear();
         Instance = null;
     }
 
@@ -68,7 +89,14 @@ public class BridgeMenu : MonoBehaviour
     public static void SetGroupOrder(string group, int order)
     {
         groupOrder[group ?? ""] = order;
-        if (Instance != null && Instance.IsOpen) Instance.Rebuild();
+        RebuildOpen();
+    }
+
+    /// <summary>Пересобрать открытые меню (реестр изменился).</summary>
+    public static void RebuildOpen()
+    {
+        foreach (BridgeMenu m in instances)
+            if (m != null && m.IsOpen) m.Rebuild();
     }
 
     public static BridgeMenuCommand Register(string group, Func<string> title, Action execute,
@@ -81,7 +109,7 @@ public class BridgeMenu : MonoBehaviour
             InstructorOnly = instructorOnly, HideWhenUnavailable = hideWhenUnavailable
         };
         commands.Add(c);
-        if (Instance != null && Instance.IsOpen) Instance.Rebuild();
+        RebuildOpen();
         return c;
     }
 
@@ -101,7 +129,7 @@ public class BridgeMenu : MonoBehaviour
         c.Previous = previous;
         c.Next = next;
         c.CloseOnExecute = false;
-        if (Instance != null && Instance.IsOpen) Instance.Rebuild();
+        RebuildOpen();
         return c;
     }
 
@@ -109,7 +137,7 @@ public class BridgeMenu : MonoBehaviour
     {
         if (c == null) return;
         commands.Remove(c);
-        if (Instance != null && Instance.IsOpen) Instance.Rebuild();
+        RebuildOpen();
     }
 
     [Header("Положение панели")]
@@ -119,8 +147,12 @@ public class BridgeMenu : MonoBehaviour
     public float canvasScale = 0.0012f;
 
     [Header("Управление")]
-    [Tooltip("Кнопка вызова: A на правом контроллере")]
+    [Tooltip("Кнопка вызова: A на правом контроллере (меню «Параметры» — Y левого: {LeftHand}/secondaryButton)")]
     public string toggleBinding = "<XRController>{RightHand}/primaryButton";
+    [Tooltip("Какие команды показывает (B4): пусто — меню A, «Параметры» — BridgeMenu.SettingsMenuId")]
+    public string menuId = "";
+    [Tooltip("Заголовок панели")]
+    public string menuTitle = "Меню мостика";
 
     private const float Width = 360f, ButtonHeight = 40f, GroupHeight = 26f, Pad = 12f;
     private static readonly Color PanelColor = new Color(0.08f, 0.1f, 0.13f, 0.94f);
@@ -141,13 +173,15 @@ public class BridgeMenu : MonoBehaviour
 
     void Awake()
     {
-        if (Instance != null && Instance != this)
-        {
-            Debug.LogWarning("[BridgeMenu] В сцене несколько меню — используется первое.", this);
-            return;
-        }
-        Instance = this;
+        foreach (BridgeMenu m in instances)
+            if (m != null && m != this && (m.menuId ?? "") == (menuId ?? ""))
+                Debug.LogWarning($"[BridgeMenu] В сцене несколько меню «{menuId}» — команды покажут оба.", this);
+        if (!instances.Contains(this)) instances.Add(this);
+        if (string.IsNullOrEmpty(menuId) && Instance == null) Instance = this;
     }
+
+    // Команда показывается в этом меню
+    private bool Shows(BridgeMenuCommand c) => (c.Menu ?? "") == (menuId ?? "") && c.Visible;
 
     void Start()
     {
@@ -162,6 +196,7 @@ public class BridgeMenu : MonoBehaviour
     {
         toggleAction?.Disable();
         toggleAction?.Dispose();
+        instances.Remove(this);
         if (Instance == this) Instance = null;
     }
 
@@ -182,6 +217,8 @@ public class BridgeMenu : MonoBehaviour
     public void Open()
     {
         if (canvas == null) BuildPanel();
+        foreach (BridgeMenu m in instances)
+            if (m != null && m != this && m.IsOpen) m.Close();
         Rebuild();
         PositionInFrontOfPlayer();
         canvas.enabled = true;
@@ -224,7 +261,7 @@ public class BridgeMenu : MonoBehaviour
 
         // Видимые сейчас команды; порядок групп — SetGroupOrder, затем порядок первой регистрации
         var visible = new List<BridgeMenuCommand>();
-        foreach (BridgeMenuCommand c in commands) if (c.Visible) visible.Add(c);
+        foreach (BridgeMenuCommand c in commands) if (Shows(c)) visible.Add(c);
         builtVisible.Clear();
         builtVisible.AddRange(visible);
 
@@ -251,7 +288,7 @@ public class BridgeMenu : MonoBehaviour
         background.sizeDelta = new Vector2(Width, height);
 
         float y = height * 0.5f - Pad;
-        Label("Меню мостика", ref y, 34f, 22f, new Color(0.85f, 0.92f, 1f), TextAlignmentOptions.Center);
+        Label(menuTitle, ref y, 34f, 22f, new Color(0.85f, 0.92f, 1f), TextAlignmentOptions.Center);
         if (visible.Count == 0)
             Label("Нет команд", ref y, 30f, 16f, new Color(0.6f, 0.6f, 0.6f), TextAlignmentOptions.Center);
 
@@ -317,7 +354,7 @@ public class BridgeMenu : MonoBehaviour
         bool changed = false;
         foreach (BridgeMenuCommand c in commands)
         {
-            if (!c.Visible) continue;
+            if (!Shows(c)) continue;
             if (n >= builtVisible.Count || builtVisible[n] != c) { changed = true; break; }
             n++;
         }
