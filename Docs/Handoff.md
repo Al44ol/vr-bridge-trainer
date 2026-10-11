@@ -16,7 +16,9 @@ C1 проверен в шлеме, замечаний нет.
 - Запись целей: каждая цель реализует ITrackedTarget и регистрируется в ExerciseTargets (Core) — ExerciseRecorder сам пишет targets.csv.
 - Столкновение — событие ExerciseEventType.Collision в шину (Subject — id цели), ScenarioRunner уже завершает по нему упражнение.
 - Модель движения целей — тот же ShipDynamicsModel (Core), авторулевой и расчёт «точки встречи» — чистые классы Core с EditMode-тестами.
-- Видимость огней в шлеме проверяем через Virtual Desktop (Play Mode), 90 Гц.
+- Столкновение — пересечение контуров корпусов: использовать HullFootprint и Polygon2D из Core (как контроль мели в B1).
+- Качка целей — OceanWaves.Instance.SampleHeight(WorldPosition); позиция в сцене — WorldOrigin.WorldToScene().
+- Огни ночью пока проверяем в пресете погоды «Ночь» (настоящая ночь — B4). Видимость огней в шлеме — через Virtual Desktop (Play Mode), 90 Гц.
 
 В конце: список файлов, ручные шаги, что проверить в шлеме, запись в ThesisNotes.md, коммит и push.
 ```
