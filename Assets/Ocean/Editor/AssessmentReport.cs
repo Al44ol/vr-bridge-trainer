@@ -82,12 +82,12 @@ public static class AssessmentReport
                .Append(x.mandatory ? 1 : 0).Append(';').Append(F(x.full, 4)).Append(';').Append(F(x.pass, 4)).Append(';')
                .Append(F(x.zero, 4)).Append(';').Append(F(x.weight, 2)).Append(';').Append(Q(c.Basis)).Append('\n');
             string op = c.HigherIsBetter ? "≥" : "≤";
-            md.AppendLine($"| {c.Code} | {c.Title} | {c.Rule} | {c.Unit} | {op} {N(x.full)} | {op} {N(x.pass)} | {N(x.zero)} | {(x.mandatory ? "да" : "")} | {N(x.weight)} |");
+            md.AppendLine($"| {c.Code} | {c.Title} | {c.Rule} | {c.Unit} | {op} {G(x.full)} | {op} {G(x.pass)} | {G(x.zero)} | {(x.mandatory ? "да" : "")} | {G(x.weight)} |");
         }
         File.WriteAllText(Path.Combine(dir, "criteria.csv"), csv.ToString(), Utf8Bom);
-        md.AppendLine($"\nВеса групп: расхождение {N(s.weightEncounters)}, реакция {N(s.weightReaction)}, маршрут {N(s.weightRoute)}; проходной балл {N(s.passScore)}.");
-        md.AppendLine($"Параметры ситуаций: CPA_доп по умолчанию {N(s.defaultRequiredCpaNm)} мили, опасность — CPA < {N(s.riskCpaFactor)}·CPA_доп и 0 < TCPA ≤ {N(s.riskHorizonMin)} мин, " +
-                      $"встречные — ±{N(s.headOnSectorDeg)}°, действие — руль ≥ {N(s.actionRudderDeg)}°, переклассификация — цель изменила курс > {N(s.targetTurnDeg)}°.\n");
+        md.AppendLine($"\nВеса групп: расхождение {G(s.weightEncounters)}, реакция {G(s.weightReaction)}, маршрут {G(s.weightRoute)}; проходной балл {G(s.passScore)}.");
+        md.AppendLine($"Параметры ситуаций: CPA_доп по умолчанию {G(s.defaultRequiredCpaNm)} мили, опасность — CPA < {G(s.riskCpaFactor)}·CPA_доп и 0 < TCPA ≤ {G(s.riskHorizonMin)} мин, " +
+                      $"встречные — ±{G(s.headOnSectorDeg)}°, действие — руль ≥ {G(s.actionRudderDeg)}°, переклассификация — цель изменила курс > {G(s.targetTurnDeg)}°.\n");
     }
 
     // ─────────── Дистанция обнаружения ───────────
@@ -183,7 +183,7 @@ public static class AssessmentReport
                      .Append(c.Evaluated ? F(c.Value, 4) : "").Append(';').Append(Q(c.Info.Unit)).Append(';').Append(F(c.Setting.pass, 4)).Append(';')
                      .Append(c.Evaluated ? (c.Passed ? "1" : "0") : "").Append(';').Append(c.Evaluated ? F(c.Score, 3) : "").Append(';')
                      .Append(c.Mandatory ? 1 : 0).Append(';').Append(Q(c.Note)).Append('\n');
-            md.AppendLine($"| {sc} | {DemoAssessmentRuns.Title(v)} | {ScenarioText.EndReason(sim.EndReason)} | {ScenarioText.Clock(sim.EndTime)} | {N(r.Score)} | {verdict}{(r.Failed ? $" ({r.FailureText})" : "")} | {string.Join(", ", r.MandatoryFailed)} |");
+            md.AppendLine($"| {sc} | {DemoAssessmentRuns.Title(v)} | {ScenarioText.EndReason(sim.EndReason)} | {ScenarioText.Clock(sim.EndTime)} | {N(r.Score, 1)} | {verdict}{(r.Failed ? $" ({Md(r.FailureText)})" : "")} | {string.Join(", ", r.MandatoryFailed)} |");
 
             details.AppendLine($"### {sc} — {DemoAssessmentRuns.Title(v)}\n");
             foreach (EncounterSummary e in r.Encounters)
@@ -195,7 +195,7 @@ public static class AssessmentReport
             details.AppendLine("| Критерий | Объект | Значение | Зачёт | Балл | Пояснение |");
             details.AppendLine("|---|---|---|---|---|---|");
             foreach (CriterionResult c in r.Items)
-                details.AppendLine($"| {c.Code} {c.Info.Title} | {c.Subject} | {AssessmentResult.ValueText(c)} | {(c.Evaluated ? c.Passed ? "да" : "нет" : "—")} | {(c.Evaluated ? N(c.Score, 2) : "—")} | {c.Note} |");
+                details.AppendLine($"| {c.Code} {c.Info.Title} | {c.Subject} | {AssessmentResult.ValueText(c)} | {(c.Evaluated ? c.Passed ? "да" : "нет" : "—")} | {(c.Evaluated ? N(c.Score, 2) : "—")} | {Md(c.Note)} |");
             details.AppendLine();
 
             if (sc == DemoTrafficScenario.Id) Tracks(dir, v, sim);
@@ -246,6 +246,10 @@ public static class AssessmentReport
 
     private static string F(double v, int digits) => double.IsNaN(v) || double.IsInfinity(v) ? "" : v.ToString("F" + digits, Inv);
     private static string N(double v, int digits = 0) => double.IsNaN(v) ? "—" : ScenarioText.Num(v, digits);
+    // Порог, вес: до двух знаков без лишних нулей (0,5; 0,25; 70)
+    private static string G(double v) => double.IsNaN(v) ? "—" : v.ToString("0.##", Inv).Replace('.', ',').Replace('-', '−');
+    // Текст в ячейке markdown-таблицы: «|» (|XTE|) разбивает ячейку
+    private static string Md(string s) => (s ?? "").Replace("|", "\\|");
 
     private static string Q(string s)
     {
