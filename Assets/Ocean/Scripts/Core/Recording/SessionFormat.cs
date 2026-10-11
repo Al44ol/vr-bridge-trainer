@@ -62,6 +62,8 @@ public static class SessionFormat
     public const string KeepFile = "keep";
     /// <summary>Оценка по критериям (C2): строка на критерий и цель.</summary>
     public const string AssessmentFile = "assessment.csv";
+    /// <summary>Отчёт по упражнению (C3): самодостаточная страница для браузера и печати.</summary>
+    public const string ReportFile = "report.html";
 
     public const string TrackHeader =
         "t_s;x_e_m;y_n_m;heading_deg;cog_deg;speed_kn;rot_deg_min;rudder_ordered_deg;rudder_actual_deg;telegraph_sf;telegraph;xte_m;leg;xte_limit_m;grounded";
@@ -274,6 +276,8 @@ public class SessionScenario
     public List<SessionWaypoint> route = new List<SessionWaypoint>();
     /// <summary>Другие суда (B3): описание и рассчитанное начальное состояние (TrafficPlanner).</summary>
     public List<SessionTraffic> traffic = new List<SessionTraffic>();
+    /// <summary>Снимок акватории (C3): знаки, мели, суша, фарватеры — для схемы траектории по записи.</summary>
+    public SessionArea area = new SessionArea();
 
     public static SessionScenario From(ScenarioDefinition s)
     {
@@ -284,7 +288,8 @@ public class SessionScenario
             weather = s.weather.ToString(), time_of_day = s.timeOfDay.ToString(),
             visibility_m = SessionMeta.R(s.visibilityMeters), time_limit_s = SessionMeta.R(s.timeLimitSeconds),
             end_conditions = s.endConditions.ToString(),
-            detection_range_nm = SessionMeta.R(s.detectionRangeNm)
+            detection_range_nm = SessionMeta.R(s.detectionRangeNm),
+            area = SessionArea.From(s.waterArea)
         };
         if (s.initial != null)
             r.initial = new SessionInitial
@@ -397,7 +402,7 @@ public class SessionRecording
     public double fixed_dt_s;
     public string time_base = "t_s — время упражнения (симуляционное) от «Начать», с";
     public string coordinates = "x_e_m — восток, y_n_m — север, м; курс 0 = N, по часовой; руль и XTE > 0 — правый борт / правее линии пути";
-    public List<string> files = new List<string> { SessionFormat.TrackFile, SessionFormat.TargetsFile, SessionFormat.EventsFile, SessionFormat.MetaFile, SessionFormat.AssessmentFile };
+    public List<string> files = new List<string> { SessionFormat.TrackFile, SessionFormat.TargetsFile, SessionFormat.EventsFile, SessionFormat.MetaFile, SessionFormat.AssessmentFile, SessionFormat.ReportFile };
     /// <summary>Названия положений телеграфа по номеру (столбец telegraph, index события TelegraphChanged).</summary>
     public List<string> telegraph_positions = new List<string>();
 

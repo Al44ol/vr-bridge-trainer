@@ -21,6 +21,14 @@
 // C2: на результатах (в том числе при досрочном завершении) — оценка: балл, зачёт/незачёт и
 // список критериев (ExerciseAssessmentMonitor). Меню «Параметры» (Y) → «Текущий балл» — промежуточная
 // оценка во время упражнения и опасные цели (CPA/TCPA).
+// C3: результаты — разбор на трёх вкладках (высота панели ограничена):
+//   «Итог» — причина завершения, оценка и почему незачёт, баллы групп, сближения,
+//     нарушения с пояснениями и правилами МППСС (DebriefText);
+//   «Критерии» — таблица «значение / порог / результат» по страницам;
+//   «Схема» — траектория вида сверху по записанной сессии (DebriefMapGraphic):
+//     весь маршрут и окна сближений, переключатель «< … >». Схема и report.html
+//     строятся в фоне после закрытия записи (ExerciseRecorder.LastDebrief) —
+//     до готовности «Схема строится…», затем панель обновляется сама.
 // Команды меню: «Выбор сценария…», «Начать упражнение», «Брифинг»/«Результаты»,
 // «Перезапустить сценарий» (инстр.), «Завершить досрочно» (инстр.); недоступные
 // по фазе — скрыты. Отладочные команды B1 остаются в группе «Отладка» (внизу).
@@ -37,6 +45,7 @@ using UnityEngine.UI;
 public class ScenarioPanel : MonoBehaviour
 {
     private enum Mode { Hidden, Selection, Briefing, Results, Keypad, CurrentScore }
+    private enum DebriefTab { Summary, Criteria, Map }
 
     public ScenarioRunner runner;
     [Tooltip("Запись упражнения (C1): ID обучающегося, папка сессии. Пусто — найти")]
@@ -60,6 +69,16 @@ public class ScenarioPanel : MonoBehaviour
     [Tooltip("Масштаб холста, м на пиксель")]
     public float canvasScale = 0.001f;
 
+    [Header("Разбор (C3)")]
+    [Tooltip("Строк таблицы критериев на странице")]
+    [Range(4, 20)] public int criteriaPerPage = 10;
+    [Tooltip("Высота схемы траектории, пикселей холста (ширина — вся панель)")]
+    public float mapHeight = 500f;
+    [Tooltip("Нарушений на вкладке «Итог» (остальные — на вкладке «Критерии»)")]
+    [Range(1, 20)] public int maxViolationsOnSummary = 6;
+    [Tooltip("Ширины столбцов таблицы критериев (доли): отметка, критерий, значение, порог")]
+    public float[] criteriaColumns = { 0.05f, 0.6f, 0.17f, 0.18f };
+
     private const string MenuGroup = "Сценарий";
     private const float Width = 680f, Pad = 22f, ButtonHeight = 48f, Gap = 8f;
     private static readonly Color PanelColor = new Color(0.07f, 0.09f, 0.12f, 0.96f);
@@ -69,6 +88,7 @@ public class ScenarioPanel : MonoBehaviour
     private static readonly Color TitleColor = new Color(0.85f, 0.92f, 1f);
     private static readonly Color MutedColor = new Color(0.62f, 0.68f, 0.75f);
     private static readonly Color WarnColor = new Color(1f, 0.78f, 0.35f);
+    private static readonly Color ActiveTabColor = new Color(0.3f, 0.52f, 0.8f);
 
     private Mode mode = Mode.Hidden;
     private GameObject panel;
@@ -78,6 +98,9 @@ public class ScenarioPanel : MonoBehaviour
     private ScenarioRunner subscribed;
     private string keypadBuffer = "";
     private bool placeAtAnchor;
+    private DebriefTab tab;
+    private int criteriaPage, mapView;
+    private bool waitingDebrief;
 
     public bool IsOpen => canvas != null && canvas.enabled;
 
@@ -208,31 +231,219 @@ public class ScenarioPanel : MonoBehaviour
         EndContent(y);
     }
 
+    // ─────────── Разбор (C3): итог, критерии, схема ───────────
+    /// <summary>Разбор упражнения с первой вкладки («Итог»).</summary>
     public void ShowResults()
+    {
+        tab = DebriefTab.Summary;
+        criteriaPage = 0;
+        mapView = 0;
+        ShowDebrief();
+    }
+
+    private void ShowDebrief()
     {
         ExerciseSummary r = runner != null ? runner.LastSummary : null;
         if (r == null) return;
         BeginContent(Mode.Results);
+        waitingDebrief = false;
         float y = Top;
-        Title($"Упражнение завершено — {r.ScenarioId}", ref y);
-        Text(r.Title, 17f, MutedColor, ref y);
-        y -= Gap;
+        Title($"Разбор упражнения — {r.ScenarioId}", ref y);
         AssessmentResult a = assessment != null ? assessment.LastResult : null;
-        if (a != null)
+        ButtonRow(ref y, ButtonHeight,
+            Tab("Итог", DebriefTab.Summary),
+            Tab("Критерии", DebriefTab.Criteria),
+            Tab("Схема", DebriefTab.Map));
+        y -= 4f;
+        switch (tab)
         {
-            Text(r.ToPanelTextShort(ExerciseFailureNotice.Enabled), 18f, Color.white, ref y);
-            y -= Gap;
-            Text(a.ToPanelText(showFailure: false), 17f, Color.white, ref y);
+            case DebriefTab.Criteria: CriteriaTab(a, ref y); break;
+            case DebriefTab.Map: MapTab(ref y); break;
+            default: SummaryTab(r, a, ref y); break;
         }
-        else Text(r.ToPanelText(ExerciseFailureNotice.Enabled), 19f, Color.white, ref y);
-        if (recorder != null && !string.IsNullOrEmpty(recorder.LastSessionFolder))
-            Text($"Запись: {System.IO.Path.GetFileName(recorder.LastSessionFolder)}", 15f, MutedColor, ref y);
         y -= Gap;
         ButtonRow(ref y, ButtonHeight,
             ("Перезапустить", StartColor, () => runner.Restart()),
             ("К выбору", NeutralColor, ShowSelection),
             ("Закрыть", NeutralColor, Hide));
         EndContent(y);
+    }
+
+    private (string, Color, UnityAction) Tab(string label, DebriefTab t) =>
+        (label, tab == t ? ActiveTabColor : NeutralColor, () => { tab = t; ShowDebrief(); });
+
+    private void SummaryTab(ExerciseSummary r, AssessmentResult a, ref float y)
+    {
+        Text(r.Title, 17f, MutedColor, ref y);
+        Text(r.ToPanelTextShort(ExerciseFailureNotice.Enabled), 18f, Color.white, ref y);
+        if (a == null)
+        {
+            Text(r.ToPanelText(ExerciseFailureNotice.Enabled), 18f, Color.white, ref y);
+        }
+        else
+        {
+            y -= Gap;
+            string color = a.Failed ? "#FF5A4A" : a.Passed ? "#6FE08A" : "#FFC85A";
+            var b = new StringBuilder($"<b><color={color}>{a.Headline()}</color></b>");
+            string reason = DebriefText.VerdictReason(a);
+            if (reason.Length > 0) b.Append($"\n<color={color}>{char.ToUpperInvariant(reason[0])}{reason.Substring(1)}</color>");
+            string groups = DebriefText.GroupsLine(a);
+            if (groups.Length > 0) b.Append($"\n<size=85%><color=#9AA6B2>{groups}</color></size>");
+            Text(b.ToString(), 20f, Color.white, ref y);
+            if (a.Encounters.Count > 0)
+            {
+                var e = new StringBuilder();
+                foreach (EncounterSummary s in a.Encounters) e.AppendLine(DebriefText.EncounterLine(s));
+                Text(e.ToString().TrimEnd(), 16f, MutedColor, ref y);
+            }
+            y -= Gap;
+            List<DebriefViolation> v = DebriefText.Violations(a);
+            if (v.Count == 0) Text("<color=#6FE08A>Нарушений нет</color>", 18f, Color.white, ref y);
+            else
+            {
+                var t = new StringBuilder("<b>Нарушения и замечания</b>");
+                int shown = Mathf.Min(v.Count, maxViolationsOnSummary);
+                for (int i = 0; i < shown; i++)
+                    t.Append($"\n<color={(v[i].Severe ? "#FF7A6A" : "#FFC85A")}>•</color> {v[i].Text}");
+                if (v.Count > shown) t.Append($"\n<color=#9AA6B2>… ещё {v.Count - shown} — на вкладке «Критерии»</color>");
+                Text(t.ToString(), 16f, Color.white, ref y);
+            }
+        }
+        if (recorder != null && !string.IsNullOrEmpty(recorder.LastSessionFolder))
+        {
+            DebriefBuild d = CurrentDebrief();
+            bool pending = DebriefPending(d);
+            string report = pending ? " · отчёт строится…" : d == null ? "" : string.IsNullOrEmpty(d.Error) ? $" · отчёт: {SessionFormat.ReportFile}" : " · отчёт не построен";
+            if (pending) waitingDebrief = true;
+            Text($"Запись: {System.IO.Path.GetFileName(recorder.LastSessionFolder)}{report}", 15f, MutedColor, ref y);
+        }
+    }
+
+    private void CriteriaTab(AssessmentResult a, ref float y)
+    {
+        if (a == null) { Text("Оценка не выполнялась.", 17f, MutedColor, ref y); return; }
+        List<CriterionRow> rows = DebriefText.Rows(a);
+        int pages = DebriefText.PageCount(rows.Count, criteriaPerPage);
+        criteriaPage = Mathf.Clamp(criteriaPage, 0, pages - 1);
+        TableRow(ref y, 15f, FontStyles.Bold, ("", MutedColor), ("Критерий (объект)", MutedColor), ("Значение", MutedColor), ("Порог", MutedColor));
+        foreach (CriterionRow c in DebriefText.Page(rows, criteriaPage, criteriaPerPage))
+        {
+            Color col = c.State == CriterionState.Passed ? Color.white : c.State == CriterionState.FailedMandatory ? new Color(1f, 0.45f, 0.38f) :
+                        c.State == CriterionState.Failed ? WarnColor : MutedColor;
+            Color mark = c.State == CriterionState.Passed ? new Color(0.44f, 0.88f, 0.54f) : col;
+            TableRow(ref y, 16f, FontStyles.Normal, (c.Mark, mark), ($"{c.Code}  {c.TitleWithSubject}", col), (c.Value, col), (c.Threshold, col));
+        }
+        Text("«+» — выполнен, «×» — не выполнен (красный — обязательный), «–» — не оценивался", 14f, MutedColor, ref y);
+        if (pages > 1)
+            ButtonRow(ref y, ButtonHeight,
+                ("<", ButtonColor, () => { criteriaPage = (criteriaPage + pages - 1) % pages; ShowDebrief(); }),
+                ($"стр. {criteriaPage + 1} / {pages}", NeutralColor, () => { criteriaPage = (criteriaPage + 1) % pages; ShowDebrief(); }),
+                (">", ButtonColor, () => { criteriaPage = (criteriaPage + 1) % pages; ShowDebrief(); }));
+    }
+
+    private void MapTab(ref float y)
+    {
+        DebriefBuild d = CurrentDebrief();
+        if (d == null || !d.Done || d.Map == null)
+        {
+            bool pending = DebriefPending(d);
+            if (pending) waitingDebrief = true;
+            string why = pending ? "Схема строится…"
+                : d == null ? "Схема строится по записи упражнения — запись или разбор выключены (ExerciseRecorder)."
+                : $"Схема не построена: {d.Error}";
+            Text(why, 17f, MutedColor, ref y);
+            return;
+        }
+        DebriefMapData map = d.Map;
+        mapView = Mathf.Clamp(mapView, 0, map.Views.Count - 1);
+        float w = Width - 2f * Pad;
+        var go = new GameObject("DebriefMap", typeof(RectTransform));
+        go.transform.SetParent(background, false);
+        RectTransform rt = Top0(go, w, mapHeight, y);
+        var g = go.AddComponent<DebriefMapGraphic>();
+        g.SetView(map, mapView);
+        foreach (DebriefMapGraphic.Label l in g.Labels()) MapLabel(rt, l);
+        y -= mapHeight + 6f;
+
+        // Легенда
+        var leg = new StringBuilder($"<color=#{ColorUtility.ToHtmlStringRGB(DebriefMapGraphic.OwnColor)}>——</color> своё судно");
+        for (int i = 0; i < map.TargetNames.Count; i++)
+            leg.Append($"   <color=#{ColorUtility.ToHtmlStringRGB(DebriefMapGraphic.TargetColor(i))}>——</color> {map.TargetNames[i]}");
+        if (map.HasRoute) leg.Append($"   <color=#{ColorUtility.ToHtmlStringRGB(DebriefMapGraphic.RouteColor)}>——</color> маршрут и коридор");
+        leg.Append($"\n<color=#{ColorUtility.ToHtmlStringRGB(DebriefMapGraphic.OkColor)}>●</color>/<color=#{ColorUtility.ToHtmlStringRGB(DebriefMapGraphic.BadColor)}>●</color> наименьшая дистанция (допустимо / меньше допустимой) · ○ начало манёвра · " +
+                   $"точки — каждые {ScenarioText.Num(map.Views[mapView].TickStepS / 60.0)} мин · сетка {ScenarioText.Num(g.GridStepM)} м");
+        Text(leg.ToString(), 14f, MutedColor, ref y);
+        if (map.Views.Count > 1)
+        {
+            int n = map.Views.Count;
+            ButtonRow(ref y, ButtonHeight,
+                ("<", ButtonColor, () => { mapView = (mapView + n - 1) % n; ShowDebrief(); }),
+                (map.Views[mapView].Key == "all" ? "Весь маршрут" : $"Сближение с {map.Views[mapView].Key}", NeutralColor, () => { mapView = (mapView + 1) % n; ShowDebrief(); }),
+                (">", ButtonColor, () => { mapView = (mapView + 1) % n; ShowDebrief(); }));
+        }
+    }
+
+    /// <summary>Разбор текущего упражнения (не предыдущего: запись может закрыться позже показа панели).</summary>
+    private DebriefBuild CurrentDebrief()
+    {
+        if (recorder == null || recorder.LastDebrief == null) return null;
+        DebriefBuild d = recorder.LastDebrief;
+        return d.Folder == recorder.LastSessionFolder ? d : null;
+    }
+
+    /// <summary>Разбор ещё будет: запись не закрыта или фоновое построение идёт.</summary>
+    private bool DebriefPending(DebriefBuild d) =>
+        d != null ? !d.Done : recorder != null && recorder.IsRecording && recorder.buildDebrief;
+
+    void Update()
+    {
+        // Схема и отчёт строятся в фоне после закрытия записи — показать, когда готовы
+        if (!waitingDebrief || mode != Mode.Results || !IsOpen) return;
+        if (DebriefPending(CurrentDebrief())) return;
+        ShowDebrief();
+    }
+
+    private void MapLabel(RectTransform parent, DebriefMapGraphic.Label l)
+    {
+        var go = new GameObject("Label", typeof(RectTransform));
+        go.transform.SetParent(parent, false);
+        var tmp = go.AddComponent<TextMeshProUGUI>();
+        tmp.text = l.Text;
+        tmp.fontSize = 14f;
+        tmp.color = l.Color;
+        tmp.alignment = TextAlignmentOptions.Left;
+        tmp.textWrappingMode = TextWrappingModes.NoWrap;
+        tmp.raycastTarget = false;
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);   // начало координат графики — её точка привязки (верх, центр)
+        rt.pivot = new Vector2(0f, 0.5f);
+        rt.sizeDelta = new Vector2(180f, 20f);
+        rt.anchoredPosition = l.Local;
+    }
+
+    /// <summary>Строка таблицы: столбцы по ширинам criteriaColumns (доли), высота — по самому высокому.</summary>
+    private void TableRow(ref float y, float size, FontStyles style, params (string text, Color color)[] cells)
+    {
+        float w = Width - 2f * Pad;
+        float x = -w * 0.5f, h = 0f;
+        for (int i = 0; i < cells.Length; i++)
+        {
+            float cw = w * criteriaColumns[Mathf.Min(i, criteriaColumns.Length - 1)];
+            var go = new GameObject("Cell", typeof(RectTransform));
+            go.transform.SetParent(background, false);
+            var tmp = go.AddComponent<TextMeshProUGUI>();
+            tmp.fontSize = size; tmp.color = cells[i].color; tmp.fontStyle = style;
+            tmp.alignment = TextAlignmentOptions.TopLeft;
+            tmp.textWrappingMode = TextWrappingModes.Normal;
+            tmp.raycastTarget = false;
+            tmp.text = cells[i].text;
+            float ch = Mathf.Ceil(tmp.GetPreferredValues(cells[i].text, cw - 6f, 0f).y) + 2f;
+            RectTransform rt = Top0(go, cw - 6f, ch, y);
+            rt.anchoredPosition = new Vector2(x + cw * 0.5f, y);
+            h = Mathf.Max(h, ch);
+            x += cw;
+        }
+        y -= h + 3f;
     }
 
     // ─────────── Текущий балл (C2, меню «Параметры» на Y) ───────────

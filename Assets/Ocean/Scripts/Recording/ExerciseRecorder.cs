@@ -16,7 +16,9 @@
 //     времени упражнения; XTE и участок — ScenarioRunner.Route (RouteTracker);
 //   events.csv — каждое событие шины упражнения в момент доставки.
 //   assessment.csv и блок assessment в session.json — оценка по критериям (C2,
-//     ExerciseAssessmentMonitor) в момент конца упражнения.
+//     ExerciseAssessmentMonitor) в момент конца упражнения;
+//   report.html — отчёт по упражнению (C3): после закрытия записи в фоновом
+//     потоке (DebriefBuild) по файлам сессии; там же — схема для панели разбора.
 // Срез состояния (BuildTrackSample / BuildTargetSamples) — общий для записи и оценки:
 // оценка в шлеме получает те же строки, что окажутся в файлах.
 // Без влияния на кадр: в шаге — только строка в StringBuilder; накопленное
@@ -53,6 +55,8 @@ public class ExerciseRecorder : MonoBehaviour
     [Header("Хранение")]
     [Tooltip("Сколько последних сессий хранить; старые удаляются перед новой записью. Сессии с меткой «Сохранить» (окно Replay) не удаляются. 0 — без ротации (эксперимент)")]
     [Min(0)] public int maxSessions = 10;
+    [Tooltip("После упражнения строить разбор: схему траектории для панели и report.html в папке сессии (фоновый поток, C3)")]
+    public bool buildDebrief = true;
     [Tooltip("Папка сессий; пусто — по умолчанию (редактор: ThesisData/Sessions)")]
     public string customRoot = "";
 
@@ -81,6 +85,9 @@ public class ExerciseRecorder : MonoBehaviour
     public bool IsRecording => session != null && session.IsOpen;
     /// <summary>Папка текущей или последней записанной сессии.</summary>
     public string LastSessionFolder { get; private set; } = "";
+    /// <summary>Разбор последнего упражнения (C3): схема и report.html; null — не строился.</summary>
+    public DebriefBuild LastDebrief { get; private set; }
+    private bool debriefLogged = true;
 
     /// <summary>Корень папки сессий для текущей платформы.</summary>
     public string Root => !string.IsNullOrWhiteSpace(customRoot) ? customRoot : DefaultRoot;
@@ -284,6 +291,7 @@ public class ExerciseRecorder : MonoBehaviour
         if (session == null) return;
         SessionRecorder s = session;
         session = null;
+        AssessmentResult assessment = null;
 
         if (ended.HasValue)
         {
@@ -298,7 +306,7 @@ public class ExerciseRecorder : MonoBehaviour
 
             // Оценка (C2): итог в session.json, подробно — assessment.csv
             ExerciseAssessmentMonitor monitor = ExerciseAssessmentMonitor.Instance;
-            AssessmentResult assessment = monitor != null ? monitor.FinishNow(e) : null;
+            assessment = monitor != null ? monitor.FinishNow(e) : null;
             if (assessment != null)
             {
                 s.Meta.assessment = SessionAssessmentSummary.From(assessment);
@@ -327,6 +335,24 @@ public class ExerciseRecorder : MonoBehaviour
         if (!written) Debug.LogWarning($"[Запись] Сессия {s.Meta.session_id}: запись на диск не завершилась за 2 с.", this);
         Debug.Log($"[Запись] Сессия {s.Meta.session_id} записана: {s.Meta.end_reason_ru}, строк траектории {s.TrackRows}, событий {s.EventRows}" +
                   (string.IsNullOrEmpty(lastError) ? "" : $" (ошибка: {lastError})"), this);
+
+        // Разбор (C3): по записанным файлам, в фоновом потоке; оценка — готовая (в шлеме = по записи, C2)
+        LastDebrief = null;
+        if (ended.HasValue && written && buildDebrief && assessment != null)
+        {
+            LastDebrief = DebriefBuild.Start(s.Folder, assessment);
+            debriefLogged = false;
+        }
+    }
+
+    void Update()
+    {
+        if (debriefLogged || LastDebrief == null || !LastDebrief.Done) return;
+        debriefLogged = true;
+        if (string.IsNullOrEmpty(LastDebrief.Error))
+            Debug.Log($"[Разбор] {LastDebrief.ReportPath} ({LastDebrief.ElapsedMs:F0} мс, фоновый поток)", this);
+        else
+            Debug.LogWarning($"[Разбор] Отчёт не построен: {LastDebrief.Error}", this);
     }
 
     private static void FillApp(SessionApp app)

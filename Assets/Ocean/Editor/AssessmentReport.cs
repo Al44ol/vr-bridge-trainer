@@ -135,7 +135,7 @@ public static class AssessmentReport
     }
 
     // ─────────── Прогоны ───────────
-    private static ScenarioDefinition B2(WaterArea area, ShipParameters own, AssessmentCriteria criteria)
+    internal static ScenarioDefinition B2(WaterArea area, ShipParameters own, AssessmentCriteria criteria)
     {
         var s = ScriptableObject.CreateInstance<ScenarioDefinition>();
         DemoScenario.Fill(s, area, own);
@@ -143,7 +143,7 @@ public static class AssessmentReport
         return s;
     }
 
-    private static ScenarioDefinition B3(WaterArea area, ShipParameters own, ShipParameters mariner, AssessmentCriteria criteria)
+    internal static ScenarioDefinition B3(WaterArea area, ShipParameters own, ShipParameters mariner, AssessmentCriteria criteria)
     {
         var s = ScriptableObject.CreateInstance<ScenarioDefinition>();
         DemoTrafficScenario.Fill(s, area, own, mariner, mariner, own);

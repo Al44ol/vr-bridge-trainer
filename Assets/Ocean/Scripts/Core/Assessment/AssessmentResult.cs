@@ -32,7 +32,8 @@ public sealed class CriterionResult
 /// <summary>Сближение с целью — для разбора и окна инструктора.</summary>
 public sealed class EncounterSummary
 {
-    public string TargetId = "", TargetName = "";
+    /// <summary>TargetId — подпись (при нескольких сближениях с одной целью — «T3 (2)»), TargetKey — id цели в targets.csv.</summary>
+    public string TargetId = "", TargetName = "", TargetKey = "";
     public EncounterSituation Situation;
     public double DetectTime = double.NaN, DetectRangeNm = double.NaN, DetectionRangeNm = double.NaN;
     public double OnsetTime = double.NaN, OnsetCpaNm = double.NaN, OnsetTcpaMin = double.NaN, BearingRateDegMin = double.NaN;

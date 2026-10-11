@@ -715,7 +715,7 @@ public sealed class ExerciseAssessor
 
         var summary = new EncounterSummary
         {
-            TargetId = id, TargetName = tr.Info.Name, Situation = sit,
+            TargetId = id, TargetName = tr.Info.Name, TargetKey = tr.Info.Id, Situation = sit,
             DetectTime = tr.DetectTime, DetectRangeNm = tr.DetectRangeNm, DetectionRangeNm = tr.DetectionRangeNm,
             OnsetTime = e.OnsetTime, OnsetCpaNm = e.OnsetCpaM / Nm, OnsetTcpaMin = e.OnsetTcpaS / 60.0,
             BearingRateDegMin = e.BearingRateDegMin, SteadyBearing = e.SteadyBearing, NarrowChannel = e.NarrowChannel,

@@ -13,7 +13,9 @@
 //   • шкала времени: пуск/пауза, скорость ×1…×60, переход по событиям;
 //   • состояние судна в момент t (интерполяция по track.csv) и список событий
 //     (клик — перемотка);
-//   • «Сохранить» — метка keep: сессия не удаляется ротацией записи.
+//   • «Сохранить» — метка keep: сессия не удаляется ротацией записи;
+//   • C3: «Отчёт (report.html)» — отчёт по записи (в том числе для старой сессии)
+//     и открыть в браузере; «Сводка по папке…» — сводная таблица по сессиям.
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -103,21 +105,7 @@ public class SessionReplayWindow : EditorWindow
         Repaint();
     }
 
-    private static WaterArea FindArea(SessionMeta meta)
-    {
-        foreach (string guid in AssetDatabase.FindAssets("t:ScenarioDefinition"))
-        {
-            var s = AssetDatabase.LoadAssetAtPath<ScenarioDefinition>(AssetDatabase.GUIDToAssetPath(guid));
-            if (s != null && s.id == meta.scenario.id && s.waterArea != null) return s.waterArea;
-        }
-        if (string.IsNullOrEmpty(meta.scenario.water_area)) return null;
-        foreach (string guid in AssetDatabase.FindAssets("t:WaterArea"))
-        {
-            var a = AssetDatabase.LoadAssetAtPath<WaterArea>(AssetDatabase.GUIDToAssetPath(guid));
-            if (a != null && a.name == meta.scenario.water_area) return a;
-        }
-        return null;
-    }
+    private static WaterArea FindArea(SessionMeta meta) => DebriefReport.FindArea(meta);
 
     private double Duration => session != null ? session.Duration : 0;
 
@@ -194,9 +182,15 @@ public class SessionReplayWindow : EditorWindow
                 SessionStorage.SetKept(session.Folder, nk);
                 Refresh();
             }
+            if (GUILayout.Button("Отчёт (report.html)", EditorStyles.toolbarButton))
+            {
+                try { DebriefReport.BuildReport(session.Folder); }
+                catch (Exception e) { Debug.LogException(e); }
+            }
             if (GUILayout.Button("Показать в проводнике", EditorStyles.toolbarButton))
                 EditorUtility.RevealInFinder(Path.Combine(session.Folder, SessionFormat.MetaFile));
         }
+        if (GUILayout.Button("Сводка по папке…", EditorStyles.toolbarButton)) DebriefReport.Summary(root);
         EditorGUILayout.EndHorizontal();
     }
 
