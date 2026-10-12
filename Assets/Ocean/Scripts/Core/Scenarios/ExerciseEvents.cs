@@ -52,6 +52,9 @@
 //   SteeringFailure      вводная «отказ рулевого устройства»: Value — заклиненный фактический руль, ° (> 0 — ПБ);
 //                        Value2 — заданный руль в момент отказа, °
 //   SteeringRestored     Value — сколько длился отказ, с
+// Навигационный планшет (D2; источник — NavPlotter, ByInstructor = true):
+//   PlotterRevealTargets режим инструктора / теста «все цели»: Value — 1 включён (обучающийся видит на планшете
+//                        все цели, в том числе не обнаруженные и скрытые флагом сценария), 0 — выключен
 // XTE > 0 — судно правее линии пути.
 // ============================================================
 using System;
@@ -93,7 +96,9 @@ public enum ExerciseEventType
     EngineFailure,
     EngineRestored,
     SteeringFailure,
-    SteeringRestored
+    SteeringRestored,
+    // Навигационный планшет (D2)
+    PlotterRevealTargets
 }
 
 public enum ScenarioEndReason
@@ -184,6 +189,8 @@ public struct ExerciseEvent
             case ExerciseEventType.EngineRestored: return $"Главный двигатель восстановлен (отказ {ScenarioText.Num(Value)} с)";
             case ExerciseEventType.SteeringFailure: return $"ВВОДНАЯ: отказ рулевого устройства — руль заклинило на {ScenarioText.Rudder(Value)}";
             case ExerciseEventType.SteeringRestored: return $"Рулевое устройство восстановлено (отказ {ScenarioText.Num(Value)} с)";
+            case ExerciseEventType.PlotterRevealTargets:
+                return Value > 0 ? "Планшет: показаны ВСЕ цели (инструктор)" : "Планшет: все цели скрыты — только обнаруженные";
         }
         return $"{Type} {Subject}";
     }

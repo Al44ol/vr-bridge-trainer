@@ -10,6 +10,8 @@
 //     масштаб к курсору, перетаскивание — сдвиг; «За судном» (следование с
 //     перецентровкой, MapViewport), «Весь маршрут», «+», «−»; масштаб и сетка внизу;
 //     справа внизу — вид из шлема (PiP: кнопка здесь или меню Y «Монитор инструктора»).
+//     D2: «Планшет: все цели / обнаруженные» — что видит обучающийся на планшете (NavPlotter);
+//     суда и следы — общий класс LiveMapTracks (с планшетом).
 //   • Справа — состояние своего судна и маршрута; таблица целей (дистанция, пеленг,
 //     курсовой угол, CPA, TCPA, ситуация по МППСС из оценки C2 — инструктор видит
 //     цели и при флаге сценария «цели не показывать»); вводные (отказ ГД, отказ руля,
@@ -78,8 +80,8 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
     private bool builtOnce;
     private TextMeshProUGUI scaleText;
     private readonly List<TextMeshProUGUI> shipLabels = new List<TextMeshProUGUI>();
-    private readonly Dictionary<string, InstructorMapGraphic.Ship> ships = new Dictionary<string, InstructorMapGraphic.Ship>();
-    private readonly InstructorMapGraphic.Ship own = new InstructorMapGraphic.Ship { Id = "своё", Own = true, Color = DebriefMapGraphic.OwnColor };
+    private readonly LiveMapTracks tracks = new LiveMapTracks();   // суда и следы (общий класс с планшетом D2)
+    private NavPlotter plotter;
     private bool dragging;
     private RawImage pipImage;
 
@@ -101,6 +103,7 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         if (weather == null) weather = FindAnyObjectByType<WeatherController>();
         navigation = runner != null && runner.navigation != null ? runner.navigation : FindAnyObjectByType<ShipNavigation>();
         if (grounding == null && navigation != null) grounding = navigation.GetComponent<GroundingMonitor>();
+        plotter = FindAnyObjectByType<NavPlotter>();   // D2 (нет — кнопка «Планшет» неактивна)
         Build();
     }
 
@@ -160,35 +163,13 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
             builtVersion = -1;   // новой схеме — границы текущего окна
         }
 
-        // Суда: своё и цели; след — по мере движения
-        own.Position = navigation.PositionEastNorth;
-        own.HeadingDeg = navigation.Heading;
-        own.SpeedKnots = navigation.SpeedKnots;
-        if (navigation.parameters != null) { own.LengthM = navigation.parameters.length; own.BeamM = navigation.parameters.beam; }
-        AddTrail(own);
-        var seen = new HashSet<string>();
-        int series = 0;
-        foreach (ITrackedTarget t in ExerciseTargets.All)
-        {
-            if (!ships.TryGetValue(t.TargetId, out InstructorMapGraphic.Ship s))
-                ships[t.TargetId] = s = new InstructorMapGraphic.Ship { Id = t.TargetId };
-            s.Color = DebriefMapGraphic.TargetColor(series++);
-            s.Position = t.Position;
-            s.HeadingDeg = t.HeadingDeg;
-            s.SpeedKnots = t.SpeedKnots;
-            if (t is TrafficVessel v && v.Model.Parameters != null) { s.LengthM = v.Model.Parameters.length; s.BeamM = v.Model.Parameters.beam; }
-            AddTrail(s);
-            seen.Add(t.TargetId);
-        }
-        var gone = new List<string>();
-        foreach (string id in ships.Keys) if (!seen.Contains(id)) gone.Add(id);
-        foreach (string id in gone) ships.Remove(id);
+        // Суда: своё и цели (все — инструктор видит всё); след — по мере движения
+        tracks.TrailMinMeters = trailMinMeters;
+        tracks.TrailMaxPoints = trailMaxPoints;
+        tracks.Update(navigation);
+        tracks.Fill(mapLive);
 
-        mapLive.Ships.Clear();
-        foreach (InstructorMapGraphic.Ship s in ships.Values) mapLive.Ships.Add(s);
-        mapLive.Ships.Add(own);   // своё — поверх целей
-
-        viewport.Track(own.Position);
+        viewport.Track(tracks.Own.Position);
         if (viewport.Version != builtVersion)
         {
             builtVersion = viewport.Version;
@@ -199,21 +180,6 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         Labels();
         scaleText.text = $"1 пикс. = {ScenarioText.Num(viewport.MetersPerPixel, viewport.MetersPerPixel < 10 ? 1 : 0)} м · сетка {ScenarioText.Num(mapStatic.GridStepM)} м" +
                          (viewport.Follow ? " · за судном" : "") + " · колесо — масштаб, перетаскивание — сдвиг";
-    }
-
-    private void AddTrail(InstructorMapGraphic.Ship s)
-    {
-        List<WorldPosition> tr = s.Trail;
-        if (tr.Count > 0)
-        {
-            WorldPosition last = tr[tr.Count - 1];
-            double de = s.Position.East - last.East, dn = s.Position.North - last.North;
-            double d2 = de * de + dn * dn;
-            if (d2 < trailMinMeters * trailMinMeters) return;
-            if (d2 > 500.0 * 500.0) tr.Clear();   // перестановка судна (начальные условия) — след заново
-        }
-        tr.Add(s.Position);
-        if (tr.Count > trailMaxPoints) tr.RemoveRange(0, tr.Count - trailMaxPoints);
     }
 
     private void Labels()
@@ -411,8 +377,7 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         {
             if (e.Type == ExerciseEventType.ScenarioLoaded) events.Clear();
             if (scoreText != null) scoreText.text = "";
-            own.Trail.Clear();
-            foreach (InstructorMapGraphic.Ship s in ships.Values) s.Trail.Clear();
+            tracks.ClearTrails();
             if (mapLive != null) mapLive.Failures.Clear();
         }
         if (e.Type == ExerciseEventType.EngineFailure || e.Type == ExerciseEventType.SteeringFailure)
@@ -455,6 +420,7 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
             case ExerciseEventType.EngineFailure:
             case ExerciseEventType.SteeringFailure:
             case ExerciseEventType.EncounterStarted:
+            case ExerciseEventType.PlotterRevealTargets:   // D2: обучающемуся показаны все цели
                 return "#FFC85A";
             case ExerciseEventType.EngineRestored:
             case ExerciseEventType.SteeringRestored:
@@ -578,7 +544,7 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         mapLive = Layer<InstructorMapGraphic>("MapLive");
 
         mapControls = Panel(mapRect, "MapControls", new Color(0f, 0f, 0f, 0f));
-        Place(mapControls, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(8f, -8f), new Vector2(560f, RowHeight), new Vector2(0f, 1f));
+        Place(mapControls, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(8f, -8f), new Vector2(780f, RowHeight), new Vector2(0f, 1f));
         float x = 0f;
         Button(mapControls, ref x, 0f, 44f, "+", NeutralColor, () => Zoom(1.5f, mapRect.rect.center));
         Button(mapControls, ref x, 0f, 44f, "−", NeutralColor, () => Zoom(1f / 1.5f, mapRect.rect.center));
@@ -591,6 +557,10 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
                null, null, () => runner != null && runner.Current != null);
         Button(mapControls, ref x, 0f, 130f, "Вид из шлема", NeutralColor, () => station.TogglePip(),
                null, () => station.Pip != null && station.Pip.Active ? ActiveColor : NeutralColor);
+        // D2: режим «все цели» на планшете обучающегося (пишется в журнал упражнения)
+        Button(mapControls, ref x, 0f, 210f, "", NeutralColor, () => plotter.SetRevealAll(!plotter.RevealAll),
+               () => plotter != null && plotter.RevealAll ? "Планшет: все цели" : "Планшет: обнаруженные",
+               () => plotter != null && plotter.RevealAll ? WarnColor : NeutralColor, () => plotter != null);
 
         scaleText = MakeText(mapRect, "", 14f, MutedColor, TextAlignmentOptions.BottomLeft);
         Place(scaleText.rectTransform, Vector2.zero, Vector2.zero, new Vector2(10f, 8f), new Vector2(900f, 24f), Vector2.zero);

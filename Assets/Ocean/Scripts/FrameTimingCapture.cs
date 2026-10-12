@@ -28,6 +28,7 @@
 // дочерний к судну, поэтому качается с мостиком без пересчёта в каждом кадре. В note — «индикатор:
 // вкл/выкл». Выход из Play Mode во время замера — набранное сохраняется (aborted = 1), а не теряется.
 // В сводку добавлены столбцы frames_over_20ms и max_frame_dt_ms (в конец, после note).
+// D2: в note — навигационный планшет (скрыт / север вверх / курс вверх).
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -496,6 +497,9 @@ public class FrameTimingCapture : MonoBehaviour
         string monitor = MonitorMode(true);
         if (monitor.Length > 0) b.Append(", монитор: ").Append(monitor);
         b.Append(", индикатор: ").Append(showIndicator ? "вкл" : "выкл");
+        // D2: навигационный планшет в руке — показан ли и в каком режиме (в конце замера)
+        NavPlotter plotter = NavPlotter.Instance;
+        if (plotter != null) b.Append(", планшет: ").Append(plotter.Shown ? (plotter.headUp ? "курс вверх" : "север вверх") : "скрыт");
         if (!string.IsNullOrWhiteSpace(extraNote)) b.Append(", ").Append(extraNote.Trim());
         return b.ToString();
     }

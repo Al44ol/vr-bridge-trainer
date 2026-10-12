@@ -116,6 +116,12 @@ public class BridgeLighting : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Панель, построенная в рантайме (D2: навигационный планшет), — затемнять вместе с приборами
+    /// («Подсветка приборов»). Шторка — последним дочерним элементом панели, лучи не ловит.
+    /// </summary>
+    public void RegisterInstrumentPanel(RectTransform panel) => AddShade(panel, false);
+
     public static string ModeTitle(CabinMode m) => m == CabinMode.Off ? "выкл" : m == CabinMode.Red ? "красный" : "белый";
 
     /// <summary>Тумблер на пульте: включить / выключить (цвет сохраняется).</summary>

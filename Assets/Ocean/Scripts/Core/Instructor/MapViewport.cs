@@ -11,7 +11,8 @@
 //     центральной части окна (FollowBox от размера), окно стоит; вышло —
 //     окно встаёт центром на судно. Поэтому неподвижный слой карты
 //     (акватория, маршрут) перестраивается редко, а не на каждом кадре;
-//   • Fit — показать прямоугольник целиком («Весь маршрут»).
+//   • Fit — показать прямоугольник целиком («Весь маршрут»);
+//   • D2 (планшет): Fit в окно меньше слоя, SetMetersPerPixel — шкала дальности.
 // Version растёт при каждом изменении окна (сигнал перестроить слои).
 // ============================================================
 using System;
@@ -91,13 +92,28 @@ public sealed class MapViewport
     }
 
     /// <summary>Показать прямоугольник целиком (поля — доля размера); следование выключается.</summary>
-    public void Fit(MapRect r, double padding = 0.05)
+    public void Fit(MapRect r, double padding = 0.05) => Fit(r, padding, WidthPx, HeightPx);
+
+    /// <summary>
+    /// То же, но вписать в видимое окно fitWidthPx × fitHeightPx (D2: слой карты планшета больше окна —
+    /// запас на поворот «курс вверх»); центр окна и слоя общий.
+    /// </summary>
+    public void Fit(MapRect r, double padding, double fitWidthPx, double fitHeightPx)
     {
         if (r.IsEmpty) return;
         double w = Math.Max(1.0, r.Width * (1 + 2 * padding)), h = Math.Max(1.0, r.Height * (1 + 2 * padding));
-        MetersPerPixel = Clamp(Math.Max(w / WidthPx, h / HeightPx), MinMetersPerPixel, MaxMetersPerPixel);
+        MetersPerPixel = Clamp(Math.Max(w / Math.Max(1.0, fitWidthPx), h / Math.Max(1.0, fitHeightPx)), MinMetersPerPixel, MaxMetersPerPixel);
         Center = r.Center;
         Follow = false;
+        Version++;
+    }
+
+    /// <summary>Новый масштаб без сдвига центра (D2: шкала дальности планшета).</summary>
+    public void SetMetersPerPixel(double m)
+    {
+        m = Clamp(m, MinMetersPerPixel, MaxMetersPerPixel);
+        if (Math.Abs(m - MetersPerPixel) < 1e-12) return;
+        MetersPerPixel = m;
         Version++;
     }
 
