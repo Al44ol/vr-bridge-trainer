@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4a2ee9adcd7586b44889f3205a429281, type: 3}
+  m_Name: ShipParameters_FastBoat
+  m_EditorClassIdentifier: VRBridge.Core::ShipParameters
+  length: 18
+  serviceSpeedKnots: 35
+  accelerationTimeConstant: 10
+  decelerationTimeConstant: 15
+  asternFactor: 0.4
+  nomotoKPrime: 1
+  nomotoTPrime: 1.2
+  minCalcSpeed: 0.05
+  yawModel: 0
+  norrbinAlphaPrime: 0
+  turnSpeedLossCoeff: 0
+  maxRudderAngle: 35
+  rudderRate: 10
+  beam: 4.8
+  draft: 1.1
+  metacentricHeight: 1.2
+  blockCoefficient: 0.42
+  waterplaneCoefficient: 0.72
+  rollPeriod: 4.080521
+  heavePeriod: 2.2725587
+  pitchPeriod: 2.2725587
+  rollDamping: 0.15
+  heaveDamping: 0.3
+  pitchDamping: 0.3
