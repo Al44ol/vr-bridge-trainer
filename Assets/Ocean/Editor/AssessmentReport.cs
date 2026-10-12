@@ -5,9 +5,10 @@
 //   detection_range.csv/.svg — дистанция обнаружения цели по видимости V: ночью (огни,
 //                             закон Алларда) с носа и с кормы, днём — V;
 //   runs.csv                — итог прогонов (B3-01: без манёвра / правильно / влево / поздно;
-//                             B2-01: с упреждением / без): причина, время, балл, зачёт;
+//                             B2-01: с упреждением / без; C4-01 (туман, с C4): правильно / без сигналов /
+//                             не снизил ход / влево): причина, время, балл, зачёт;
 //   runs_criteria.csv       — по каждому прогону — все критерии (значение, порог, зачёт, балл);
-//   b3_<вариант>_tracks.svg — траектории своего судна и целей;
+//   b3_<вариант>_tracks.svg, c4_<вариант>_tracks.svg — траектории своего судна и целей;
 //   summary.md              — сводка для вставки в ВКР, в том числе проверка «оценка в
 //                             реальном времени = оценка по записи» на прогоне с записью.
 // Сценарии строятся заново (DemoScenario / DemoTrafficScenario) с ассетами параметров
@@ -151,6 +152,14 @@ public static class AssessmentReport
         return s;
     }
 
+    internal static ScenarioDefinition C4(WaterArea area, ShipParameters own, ShipParameters mariner, AssessmentCriteria criteria)
+    {
+        var s = ScriptableObject.CreateInstance<ScenarioDefinition>();
+        DemoFogScenario.Fill(s, area, own, mariner);
+        s.assessment = criteria;
+        return s;
+    }
+
     private static void Runs(string dir, StringBuilder md, WaterArea area, ShipParameters own, ShipParameters mariner, AssessmentCriteria criteria)
     {
         var runs = new StringBuilder("scenario;variant;title;end_reason;duration_s;score;passed;failed;failure;mandatory_failed;criteria_evaluated;criteria_failed\n");
@@ -162,6 +171,7 @@ public static class AssessmentReport
         var list = new List<(string sc, string v)>();
         foreach (string v in DemoAssessmentRuns.B3Variants) list.Add((DemoTrafficScenario.Id, v));
         foreach (string v in DemoAssessmentRuns.B2Variants) list.Add((DemoScenario.Id, v));
+        foreach (string v in DemoAssessmentRuns.C4Variants) list.Add((DemoFogScenario.Id, v));
         var details = new StringBuilder();
         for (int k = 0; k < list.Count; k++)
         {
@@ -169,7 +179,8 @@ public static class AssessmentReport
             EditorUtility.DisplayProgressBar("Отчёт C2", $"{sc}: {DemoAssessmentRuns.Title(v)}", 0.1f + 0.8f * k / list.Count);
             var sim = new ExerciseSimulation
             {
-                Scenario = sc == DemoScenario.Id ? B2(area, own, criteria) : B3(area, own, mariner, criteria)
+                Scenario = sc == DemoScenario.Id ? B2(area, own, criteria)
+                         : sc == DemoFogScenario.Id ? C4(area, own, mariner, criteria) : B3(area, own, mariner, criteria)
             };
             DemoAssessmentRuns.Configure(sim, v);
             sim.Run();
@@ -198,7 +209,8 @@ public static class AssessmentReport
                 details.AppendLine($"| {c.Code} {c.Info.Title} | {c.Subject} | {AssessmentResult.ValueText(c)} | {(c.Evaluated ? c.Passed ? "да" : "нет" : "—")} | {(c.Evaluated ? N(c.Score, 2) : "—")} | {Md(c.Note)} |");
             details.AppendLine();
 
-            if (sc == DemoTrafficScenario.Id) Tracks(dir, v, sim);
+            if (sc == DemoTrafficScenario.Id) Tracks(dir, "b3", "B3-01", v, sim);
+            if (sc == DemoFogScenario.Id) Tracks(dir, "c4", "C4-01", v, sim);
         }
         File.WriteAllText(Path.Combine(dir, "runs.csv"), runs.ToString(), Utf8Bom);
         File.WriteAllText(Path.Combine(dir, "runs_criteria.csv"), items.ToString(), Utf8Bom);
@@ -206,9 +218,9 @@ public static class AssessmentReport
         md.Append(details);
     }
 
-    private static void Tracks(string dir, string variant, ExerciseSimulation sim)
+    private static void Tracks(string dir, string prefix, string scenarioId, string variant, ExerciseSimulation sim)
     {
-        var plot = new SvgPlot { Title = $"B3-01: {DemoAssessmentRuns.Title(variant)}", XLabel = "Восток, м", YLabel = "Север, м", EqualAspect = true };
+        var plot = new SvgPlot { Title = $"{scenarioId}: {DemoAssessmentRuns.Title(variant)}", XLabel = "Восток, м", YLabel = "Север, м", EqualAspect = true };
         SvgPlot.Dash[] dashes = { SvgPlot.Dash.Solid, SvgPlot.Dash.Dashed, SvgPlot.Dash.DashDot, SvgPlot.Dash.Dotted };
         for (int i = 0; i < sim.Tracks.Count; i++)
         {
@@ -216,7 +228,7 @@ public static class AssessmentReport
             foreach (WorldPosition p in sim.Tracks[i]) pts.Add(new Vector2((float)p.East, (float)p.North));
             plot.Add(sim.TrackNames[i], dashes[Math.Min(i, dashes.Length - 1)], pts);
         }
-        File.WriteAllText(Path.Combine(dir, $"b3_{variant}_tracks.svg"), plot.Render(), new UTF8Encoding(false));
+        File.WriteAllText(Path.Combine(dir, $"{prefix}_{variant}_tracks.svg"), plot.Render(), new UTF8Encoding(false));
     }
 
     // ─────────── Оценка в реальном времени = по записи ───────────

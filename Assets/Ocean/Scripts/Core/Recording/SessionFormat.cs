@@ -272,6 +272,10 @@ public class SessionScenario
     public string end_conditions = "";
     /// <summary>Дистанция обнаружения целей, мили; 0 — по видимости и времени суток (C2).</summary>
     public double detection_range_nm;
+    /// <summary>Безопасная скорость в ограниченную видимость, уз; 0 — не оценивается (C4).</summary>
+    public double safe_speed_kn;
+    /// <summary>Цели не показываются на планшете и в «Текущем балле» (C4).</summary>
+    public bool hide_targets;
     public SessionInitial initial = new SessionInitial();
     public List<SessionWaypoint> route = new List<SessionWaypoint>();
     /// <summary>Другие суда (B3): описание и рассчитанное начальное состояние (TrafficPlanner).</summary>
@@ -289,6 +293,7 @@ public class SessionScenario
             visibility_m = SessionMeta.R(s.visibilityMeters), time_limit_s = SessionMeta.R(s.timeLimitSeconds),
             end_conditions = s.endConditions.ToString(),
             detection_range_nm = SessionMeta.R(s.detectionRangeNm),
+            safe_speed_kn = SessionMeta.R(s.safeSpeedKnots), hide_targets = s.hideTargetsOnPlotter,
             area = SessionArea.From(s.waterArea)
         };
         if (s.initial != null)

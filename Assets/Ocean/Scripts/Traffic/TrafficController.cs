@@ -22,8 +22,13 @@
 // Отладка (меню A, «Отладка», вне упражнения): «Проверка огней: облёт цели» —
 // неподвижная цель в 0,3 мили, своё судно на паузе переставляется по кругу
 // шагами 15° раз в 3 с носом на цель (в консоли — какие огни должны быть видны);
-// «Огни, цель: < 1 / 3 / 6 миль >» (стрелки — ближе/дальше) — неподвижная цель прямо по носу,
-// идущая навстречу (видны топовые и оба бортовых).
+// «Огни, цель: < 0,25 / 0,5 / 1 / 3 / 6 миль >» (стрелки — ближе/дальше) — неподвижная цель прямо по носу,
+// идущая навстречу (видны топовые и оба бортовых; с C4 0,25 и 0,5 мили — проверка, где корпус теряется в тумане).
+// C4 — туманные сигналы целей (FogSignalSystem, Core; тот же класс — в прогонах ExerciseSimulation):
+// при ограниченной видимости (WeatherController.VisibilityM < 2 миль) каждая цель подаёт «—» на ходу
+// или «— —» без хода раз в 110 с; звук доходит с задержкой d/340 с — в этот момент он звучит с мачты цели
+// (TrafficShipView.PlaySignal: громкость и фильтр по дистанции) и публикуется TargetSoundSignal.
+// Часы сигналов идут, только пока судно не на паузе (брифинг).
 // ============================================================
 using System.Collections;
 using System.Collections.Generic;
@@ -57,6 +62,13 @@ public class TrafficController : MonoBehaviour
     [Tooltip("После контакта цель ставит «Стоп»")]
     public bool stopTargetOnCollision = true;
 
+    [Header("Туманные сигналы целей (C4)")]
+    [Tooltip("Подавать туманные сигналы при ограниченной видимости (правило 35)")]
+    public bool fogSignals = true;
+    [Tooltip("Ограниченная видимость: меньше, мили")]
+    public float restrictedVisibilityNm = 2f;
+    [Range(0f, 1f)] public float fogSignalVolume = 1f;
+
     [Header("Отладка: проверка огней")]
     public float orbitRadiusNm = 0.3f;
     public float orbitStepDeg = 15f;
@@ -81,8 +93,13 @@ public class TrafficController : MonoBehaviour
     private TrafficShipView debugView;
     private Coroutine orbit;
     private int debugDistanceIndex = -1;
-    private static readonly float[] DebugDistancesNm = { 1f, 3f, 6f };
-    private static readonly string[] DebugDistanceTitles = { "1 милю", "3 мили", "6 миль" };
+    private static readonly float[] DebugDistancesNm = { 0.25f, 0.5f, 1f, 3f, 6f };
+    private static readonly string[] DebugDistanceTitles = { "0,25 мили", "0,5 мили", "1 милю", "3 мили", "6 миль" };
+    // C4: туманные сигналы
+    private readonly FogSignalSystem fogSystem = new FogSignalSystem();
+    private readonly List<FogSignalSource> fogSources = new List<FogSignalSource>();
+    private readonly List<HeardSignal> fogHeard = new List<HeardSignal>();
+    private double fogClock;
 
     void Awake() => Instance = this;
 
@@ -188,6 +205,8 @@ public class TrafficController : MonoBehaviour
         foreach (TrafficVessel v in vessels)
             v.Reset(TrafficPlanner.Resolve(v.Definition, spawnedFor.initial));
         foreach (HullContact c in contacts) c.Reset();
+        fogSystem.Reset();
+        fogClock = 0;
     }
 
     private void Clear()
@@ -199,6 +218,8 @@ public class TrafficController : MonoBehaviour
         contacts.Clear();
         spawnedFor = null;
         targetCount = 0;
+        fogSystem.Reset();
+        fogClock = 0;
     }
 
     private TrafficShipView CreateView(TrafficVessel v, string objectName)
@@ -238,7 +259,11 @@ public class TrafficController : MonoBehaviour
         }
         if (debugTarget != null) debugTarget.KeepPrevious();   // отладочная цель стоит
 
-        if (!paused) CheckCollisions();
+        if (!paused)
+        {
+            CheckCollisions();
+            UpdateFogSignals(dt);
+        }
 
         float us = (float)((System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1e6 / System.Diagnostics.Stopwatch.Frequency);
         stepTimeUs = stepTimeUs <= 0f ? us : stepTimeUs + (us - stepTimeUs) * 0.02f;
@@ -274,6 +299,37 @@ public class TrafficController : MonoBehaviour
             if (stopTargetOnCollision) v.EngineStopped = true;
             if (impactSource != null && collisionClip != null) impactSource.PlayOneShot(collisionClip, collisionVolume);
             if (cameraShake != null) cameraShake.Impact(Mathf.Clamp01((float)(0.4 + rel / 10.0)));
+        }
+    }
+
+    // ─────────── Туманные сигналы целей (C4) ───────────
+    private void UpdateFogSignals(double dt)
+    {
+        if (!fogSignals || vessels.Count == 0 || navigation == null || navigation.Model == null) return;
+        fogClock += dt;
+        WeatherController weather = WeatherController.Instance;
+        bool restricted = weather != null && FogSignals.Restricted(weather.VisibilityM, restrictedVisibilityNm);
+        fogSources.Clear();
+        foreach (TrafficVessel v in vessels)
+            fogSources.Add(new FogSignalSource { Id = v.TargetId, Index = v.Index, Position = v.Position, SpeedKnots = v.SpeedKnots, LengthM = v.Model.Parameters.length });
+        ShipDynamicsModel own = navigation.Model;
+        var ownPos = new WorldPosition(own.East, own.North);
+        fogSystem.Update(fogClock, restricted, ownPos, navigation.Heading, fogSources, fogHeard);
+        foreach (HeardSignal h in fogHeard)
+        {
+            int i = vessels.FindIndex(v => v.TargetId == h.Id);
+            if (i >= 0 && i < views.Count && views[i] != null)
+            {
+                double range = FogSignals.AudibleRangeNm(h.LengthM) * NavigationLights.MetersPerNm;
+                double d = (vessels[i].Position - ownPos).Magnitude;
+                views[i].PlaySignal(h.Kind, (float)FogSignals.FrequencyHz(h.LengthM),
+                                    (float)FogSignals.Loudness(d, range) * fogSignalVolume, (float)FogSignals.LowPassHz(d, range));
+            }
+            ExerciseEvents.Publish(new ExerciseEvent(ExerciseEventType.TargetSoundSignal)
+            {
+                Subject = h.Id, Index = (int)h.Kind, Value = h.DistanceM, Value2 = h.QOwnDeg,
+                Position = ownPos, HeadingDeg = navigation.Heading, SpeedKnots = navigation.SpeedKnots
+            });
         }
     }
 

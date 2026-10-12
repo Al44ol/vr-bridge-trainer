@@ -16,6 +16,8 @@
 //     B4: «темно» — по времени суток (WeatherController.Darkness ≥ 0,5: сумерки
 //     и ночь, EnvironmentModel.LightsRequired); без WeatherController — как в B3,
 //     RenderSettings.ambientIntensity < 0,3. Шторм днём — огни по видимости (0,65 мили).
+//   • C4: порог освещённости по «темноте» (NavigationLights.ThresholdFor): ночью и в сумерках —
+//     2·10⁻⁷ лк (как в B3, B4), днём — 10⁻³ лк: днём в тумане огонь не виден дальше корпуса.
 // Порядок −95: Update — раньше источников (условия кадра готовы), LateUpdate — после всех.
 // ============================================================
 using System.Collections.Generic;
@@ -59,6 +61,8 @@ public class NavLightField : MonoBehaviour
     public bool LightsOn => lightsOn;
     /// <summary>Коэффициент пропускания атмосферы K на милю.</summary>
     public double Transmissivity { get; private set; } = NavigationLights.ClearTransmissivity;
+    /// <summary>Порог освещённости глаза, лк (C4: днём выше, чем ночью).</summary>
+    public double ThresholdLux { get; private set; } = NavigationLights.ThresholdLux;
 
     private struct Entry { public Vector3 Position; public Color Color; }
     private readonly List<Entry> entries = new List<Entry>();
@@ -129,6 +133,7 @@ public class NavLightField : MonoBehaviour
         Transmissivity = NavigationLights.TransmissivityFromVisibility(vis);
         WeatherController weather = WeatherController.Instance;
         bool dark = weather != null ? weather.Darkness >= darknessThreshold : RenderSettings.ambientIntensity < darkAmbientThreshold;
+        ThresholdLux = weather != null ? NavigationLights.ThresholdFor(weather.Darkness) : NavigationLights.ThresholdLux;
         bool restricted = vis < restrictedVisibilityNm * NavigationLights.MetersPerNm;
         lightsOn = mode == LightsMode.On || (mode == LightsMode.Auto && (dark || restricted));
         visibilityNm = (float)(vis / NavigationLights.MetersPerNm);
@@ -148,7 +153,7 @@ public class NavLightField : MonoBehaviour
     public float Level(double intensityCd, double distanceM, double sectorFactor = 1.0)
     {
         if (!lightsOn || sectorFactor <= 0.0) return 0f;
-        return (float)NavigationLights.DisplayLevel(NavigationLights.Illuminance(intensityCd * sectorFactor, distanceM, Transmissivity));
+        return (float)NavigationLights.DisplayLevel(NavigationLights.Illuminance(intensityCd * sectorFactor, distanceM, Transmissivity), ThresholdLux);
     }
 
     void LateUpdate()

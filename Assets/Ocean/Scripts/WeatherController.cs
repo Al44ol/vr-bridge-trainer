@@ -24,6 +24,11 @@
 // переход ночь → день шёл «длинным путём» — кувырок света); теперь состояние не читается из сцены.
 // C2: плотности тумана пресетов берутся из WeatherVisibility (Core) — по ним же оценка считает
 // видимость и дистанцию обнаружения целей (в шлеме и офлайн по записи).
+// C4: видимость, заданная сценарием или инструктором (SetVisibility, меню A «Обстановка» →
+// «Видимость»), заменяет плотность тумана пресета: ρ = √(−ln 0,05)/V ≈ 1,73/V (WeatherVisibility.DensityFor) —
+// предмет на дистанции V закрыт туманом на 95 %. 0 — по погоде (бит в бит как до C4). Переход — 3 с.
+// Смену видимости записывает BridgeActionMonitor (VisibilityChanged); огни (NavLightField) берут
+// видимость из плотности тумана сцены — гаснут по закону Алларда при той же V.
 // ============================================================
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -45,6 +50,8 @@ public class WeatherController : MonoBehaviour
     [Header("Текущее состояние")]
     [SerializeField] private string currentPreset = "moderate";
     [SerializeField] private TimeOfDay currentTimeOfDay = TimeOfDay.Day;
+    [Tooltip("Видимость, заданная сценарием или инструктором, м (0 — по погоде; C4)")]
+    [SerializeField] private float visibilityOverrideM;
 
     [Header("Время суток (B4)")]
     [Tooltip("Длительность перехода между соседними фазами (день ↔ сумерки ↔ ночь), с")]
@@ -143,7 +150,15 @@ public class WeatherController : MonoBehaviour
     public float Darkness => Lighting.Darkness;
     /// <summary>Растёт при каждом изменении освещения (обновление отражений).</summary>
     public int LightingVersion { get; private set; }
-    public bool IsTransitioning => weatherT < 1f || phaseT < 1f;
+    public bool IsTransitioning => weatherT < 1f || phaseT < 1f || fogT < 1f;
+
+    /// <summary>Видимость, заданная сценарием или инструктором, м (0 — по погоде; C4).</summary>
+    public float VisibilityOverrideM => visibilityOverrideM;
+    /// <summary>Видимость сейчас (по плотности тумана сцены), м.</summary>
+    public double VisibilityM => WeatherVisibility.FromFogDensity(fogDensityNow);
+
+    private float fogFrom, fogDensityNow, fogT = 1f;
+    private static readonly float[] VisibilityStepsNm = { 0f, 4f, 2f, 1f, 0.5f, 0.25f };
 
     private WeatherPreset weatherFrom, weatherTo, weatherNow;
     private float weatherT = 1f;
@@ -176,6 +191,9 @@ public class WeatherController : MonoBehaviour
         menuCommands.Add(BridgeMenu.RegisterStepper("Обстановка",
             () => $"Погода: {ScenarioText.WeatherTitle(CurrentPresetId)}",
             () => StepWeather(-1), () => StepWeather(+1)));
+        menuCommands.Add(BridgeMenu.RegisterStepper("Обстановка",
+            () => visibilityOverrideM > 0f ? $"Видимость: {ScenarioText.Num(visibilityOverrideM / 1852f, 2)} мили" : "Видимость: по погоде",
+            () => StepVisibility(-1), () => StepVisibility(+1)));
         menuCommands.Add(BridgeMenu.RegisterStepper("Ночь",
             () => $"Экспозиция ночи: {ScenarioText.Num(nightProfile.Exposure, 1)}",
             () => SetNightExposure(nightProfile.Exposure - 0.1f),
@@ -211,6 +229,11 @@ public class WeatherController : MonoBehaviour
             float span = Mathf.Max(Mathf.Abs(phaseTo - phaseFrom), 1e-3f);
             phaseT = Mathf.Clamp01(phaseT + Time.deltaTime / (Mathf.Max(timeOfDayTransitionSeconds, 0.01f) * span));
             phaseNow = Mathf.Lerp(phaseFrom, phaseTo, Mathf.SmoothStep(0f, 1f, phaseT));
+            changed = true;
+        }
+        if (fogT < 1f)
+        {
+            fogT = Mathf.Clamp01(fogT + Time.deltaTime / WeatherTransitionSeconds);
             changed = true;
         }
         if (changed) Apply();
@@ -276,6 +299,31 @@ public class WeatherController : MonoBehaviour
         phaseFrom = phaseNow;
         phaseTo = target;
         phaseT = Mathf.Approximately(phaseFrom, phaseTo) ? 1f : 0f;
+    }
+
+    /// <summary>
+    /// Видимость, м (C4): сценарий или инструктор; 0 — по погоде. Плотность тумана сцены ρ = 1,73/V.
+    /// instant — сразу (сценарий при загрузке), иначе переход 3 с.
+    /// </summary>
+    public void SetVisibility(float meters, bool instant = false)
+    {
+        meters = Mathf.Max(0f, meters);
+        if (Mathf.Abs(meters - visibilityOverrideM) < 0.5f && !instant) return;
+        visibilityOverrideM = meters;
+        fogFrom = fogDensityNow;
+        fogT = instant ? 1f : 0f;
+        dirty = true;
+    }
+
+    private void StepVisibility(int dir)
+    {
+        // Ближайшая ступень к текущей; dir > 0 — хуже видимость
+        int i = 0;
+        float nm = visibilityOverrideM / 1852f;
+        for (int k = 0; k < VisibilityStepsNm.Length; k++)
+            if (Mathf.Abs(VisibilityStepsNm[k] - nm) < Mathf.Abs(VisibilityStepsNm[i] - nm)) i = k;
+        i = Mathf.Clamp(i + dir, 0, VisibilityStepsNm.Length - 1);
+        SetVisibility(VisibilityStepsNm[i] * 1852f);
     }
 
     /// <summary>Экспозиция ночи (меню «Параметры»): 0,3…3.</summary>
@@ -348,7 +396,12 @@ public class WeatherController : MonoBehaviour
     private void Apply()
     {
         dirty = false;
-        EnvironmentLighting L = EnvironmentModel.Combine(ToLook(weatherNow), phaseNow, nightProfile);
+        // C4: видимость сценария / инструктора заменяет туман пресета (0 — по погоде, как до C4)
+        float target = visibilityOverrideM > 0f ? WeatherVisibility.DensityFor(visibilityOverrideM) : weatherNow.fogDensity;
+        fogDensityNow = fogT < 1f ? Mathf.Lerp(fogFrom, target, Mathf.SmoothStep(0f, 1f, fogT)) : target;
+        WeatherPreset w = weatherNow;
+        w.fogDensity = fogDensityNow;
+        EnvironmentLighting L = EnvironmentModel.Combine(ToLook(w), phaseNow, nightProfile);
         Lighting = L;
         LightingVersion++;
 

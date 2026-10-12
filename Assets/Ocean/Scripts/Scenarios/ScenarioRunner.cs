@@ -226,8 +226,10 @@ public class ScenarioRunner : MonoBehaviour
             weather.SetWeather(s.weather, instant: true);
             weather.SetTimeOfDay(s.timeOfDay, instant: true);
         }
+        // C4: видимость сценария (0 — по погоде); плотность тумана сцены ρ = 1,73/V
+        if (weather != null) weather.SetVisibility(s.visibilityMeters, instant: true);
         if (s.visibilityMeters > 0f)
-            Debug.Log($"[Сценарий] Видимость {s.visibilityMeters:F0} м будет применяться с C4; сейчас — по пресету погоды.");
+            Debug.Log($"[Сценарий] Видимость {s.visibilityMeters:F0} м ({s.visibilityMeters / 1852f:F2} мили), плотность тумана {WeatherVisibility.DensityFor(s.visibilityMeters):F5}.");
         PlaceShip(s);
     }
 

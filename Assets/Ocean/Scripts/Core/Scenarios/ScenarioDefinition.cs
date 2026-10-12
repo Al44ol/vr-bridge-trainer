@@ -128,8 +128,12 @@ public class ScenarioDefinition : ScriptableObject
     public WeatherPresetId weather = WeatherPresetId.Moderate;
     [Tooltip("День / сумерки / ночь — независимо от погоды (B4)")]
     public TimeOfDay timeOfDay = TimeOfDay.Day;
-    [Tooltip("Видимость, м; 0 — по пресету погоды. Применяется в C4")]
+    [Tooltip("Видимость, м; 0 — по пресету погоды. Плотность тумана сцены пересчитывается: ρ = 1,73/V (C4)")]
     public float visibilityMeters;
+    [Tooltip("Безопасная скорость в ограниченную видимость, уз (правила 6, 19 б; критерии F3, F4); 0 — не оценивается")]
+    public float safeSpeedKnots;
+    [Tooltip("Не показывать цели на навигационном планшете и в «Текущем балле» (обнаружение — только глазами и на слух; C4, D2)")]
+    public bool hideTargetsOnPlotter;
 
     [Header("Маршрут")]
     public List<RouteWaypoint> route = new List<RouteWaypoint>();
@@ -197,6 +201,7 @@ public class ScenarioDefinition : ScriptableObject
         if (timeLimitSeconds == 0f && Ends(ScenarioEndConditions.TimeLimit))
             problems.Add("Условие «истечение времени» включено, но лимит = 0 (без лимита).");
         if (visibilityMeters < 0f) problems.Add("Видимость отрицательная.");
+        if (safeSpeedKnots < 0f) problems.Add("Безопасная скорость отрицательная.");
         if (detectionRangeNm < 0f) problems.Add("Дистанция обнаружения целей отрицательная.");
         ValidateTraffic(problems);
         return problems;

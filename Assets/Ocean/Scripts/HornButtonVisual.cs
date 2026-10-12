@@ -8,8 +8,8 @@
 //   • при наведении колпачок подсвечивается, пока звучит гудок — светится;
 //   • в темноте (WeatherController.Darkness) колпачок слабо тлеет — кнопку
 //     видно ночью, как тумблер «СВЕТ» (B4).
-// Сам гудок по-прежнему — ShipHorn.PlayHorn по selectEntered (фиксированные 3 с);
-// «гудок, пока держат» и тип сигнала по правилу 32 — запрос C4.
+// Сам гудок — ShipHorn: с C4 звучит, пока кнопку держат (selectEntered → PlayHorn,
+// selectExited → StopHorn); тип звука и сигнала по правилам 32–35 пишет BridgeActionMonitor.
 // ============================================================
 using UnityEngine;
 using UnityEngine.XR.Interaction.Toolkit.Interactables;

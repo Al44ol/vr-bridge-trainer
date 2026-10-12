@@ -33,6 +33,8 @@ public sealed class AssessmentContext
     public double ScenarioVisibilityM;
     /// <summary>Дистанция обнаружения сценария, мили (0 — по видимости и времени суток).</summary>
     public double DetectionRangeNm;
+    /// <summary>Безопасная скорость в ограниченную видимость, уз (0 — F3, F4 не оцениваются; C4).</summary>
+    public double SafeSpeedKnots;
     public double TimeLimitS;
     /// <summary>Параметры своего судна (null — нет в записи: момент перекладки не оценивается).</summary>
     public ShipParameters Own;
@@ -61,6 +63,7 @@ public sealed class AssessmentContext
         if (Enum.TryParse(s.time_of_day, out TimeOfDay t)) c.TimeOfDay = t;
         c.ScenarioVisibilityM = s.visibility_m;
         c.DetectionRangeNm = s.detection_range_nm;
+        c.SafeSpeedKnots = s.safe_speed_kn;
         c.TimeLimitS = s.time_limit_s;
         if (s.traffic != null)
             for (int i = 0; i < s.traffic.Count; i++)

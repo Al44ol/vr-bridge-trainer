@@ -461,7 +461,9 @@ public class ScenarioPanel : MonoBehaviour
         else
         {
             var targets = new StringBuilder();
-            foreach (ExerciseAssessmentMonitor.LiveTarget t in assessment.LiveTargets)
+            // C4: в сценарии «цели не показывать» (туман) CPA/TCPA целей здесь тоже не видны
+            bool hideTargets = runner != null && runner.Current != null && runner.Current.hideTargetsOnPlotter;
+            foreach (ExerciseAssessmentMonitor.LiveTarget t in hideTargets ? new List<ExerciseAssessmentMonitor.LiveTarget>() : assessment.LiveTargets)
             {
                 bool closing = t.TcpaMin > 0;
                 targets.AppendLine($"{t.Id}: D {ScenarioText.Num(t.RangeNm, 2)} мили, пеленг {ScenarioText.Num(t.BearingDeg)}°" +

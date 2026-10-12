@@ -6,7 +6,7 @@
 // (ShipNavigation.RudderOrdered, с учётом знака штурвала) и хват штурвала,
 // положение телеграфа и хват рычага, звучание гудка, пресет погоды, время суток (B4) — и через
 // ControlActionDetector (Core) публикует перекладки руля, команды телеграфу,
-// гудки, смены погоды и времени суток. Органы управления о шине не знают.
+// гудки (C4: тип звука и сигнала), смены погоды, времени суток и видимости (C4). Органы управления о шине не знают.
 //
 // Порядок −87: после шага модели (−90) и ScenarioRunner (−88) — у действия
 // то же время упражнения, что у событий маршрута этого шага.
@@ -35,6 +35,8 @@ public class BridgeActionMonitor : MonoBehaviour
     public float helmSettleSeconds = 1f;
     [Tooltip("Команда телеграфу: положение стоит столько секунд (или рычаг отпущен)")]
     public float telegraphSettleSeconds = 0.5f;
+    [Tooltip("Допуск длительности звука гудка (правило 32: продолжительный 4–6 с, короткий ≈ 1 с), с — C4")]
+    public float blastToleranceS = (float)SoundSignals.DefaultToleranceS;
 
     private readonly ControlActionDetector detector = new ControlActionDetector();
     private double clock;
@@ -91,6 +93,7 @@ public class BridgeActionMonitor : MonoBehaviour
         detector.HelmStillDeg = helmStillDeg;
         detector.HelmSettleSeconds = helmSettleSeconds;
         detector.TelegraphSettleSeconds = telegraphSettleSeconds;
+        detector.BlastToleranceS = blastToleranceS;
     }
 
     private ControlState Read()
@@ -106,7 +109,8 @@ public class BridgeActionMonitor : MonoBehaviour
             TelegraphByCode = telegraph != null && telegraph.LastChangeFromCode,
             HornSounding = horn != null && horn.IsSounding,
             WeatherPreset = weather != null ? (int)weather.CurrentPresetId : (int)WeatherPresetId.Moderate,
-            TimeOfDay = weather != null ? (int)weather.CurrentTimeOfDay : (int)global::TimeOfDay.Day
+            TimeOfDay = weather != null ? (int)weather.CurrentTimeOfDay : (int)global::TimeOfDay.Day,
+            VisibilityOverrideM = weather != null ? weather.VisibilityOverrideM : 0.0
         };
     }
 }

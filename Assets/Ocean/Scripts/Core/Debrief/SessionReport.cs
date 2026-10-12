@@ -162,7 +162,7 @@ public static class SessionReport
         if (reason.Length > 0) h.Append($"<p><b>{H(char.ToUpperInvariant(reason[0]) + reason.Substring(1))}.</b></p>\n");
         h.Append("<table class=\"keep\"><thead><tr><th>Группа критериев</th><th>Вес группы</th><th>Балл группы</th></tr></thead><tbody>\n");
         AssessmentSettings set = m.assessment_settings ?? AssessmentSettings.Default();
-        foreach (AssessmentGroup g in new[] { AssessmentGroup.Encounters, AssessmentGroup.Reaction, AssessmentGroup.Route })
+        foreach (AssessmentGroup g in AssessmentCatalog.ScoredGroups)
         {
             bool has = r.GroupScores.TryGetValue(g, out double gs);
             h.Append($"<tr><td>{H(AssessmentCatalog.GroupTitle(g))}</td><td class=\"num\">{G(set.GroupWeight(g))}</td><td class=\"num\">{(has ? ScenarioText.Num(gs, 1) : "не оценивалась")}</td></tr>\n");
@@ -271,7 +271,11 @@ public static class SessionReport
         Fig(pc, "Курс по времени; отметки — начало манёвра для расхождения с целью");
         var ps = new SvgPlot { Title = "Скорость", XLabel = "Время, мин", YLabel = "Скорость, уз" };
         ps.Add("скорость", SvgPlot.Dash.Solid, speed);
-        Fig(ps, "Скорость по времени");
+        // C4: безопасная скорость сценария (ограниченная видимость, F3, F4)
+        double safe = s.Meta != null && s.Meta.scenario != null ? s.Meta.scenario.safe_speed_kn : 0.0;
+        if (safe > 0 && speed.Count > 1)
+            ps.Add("безопасная", SvgPlot.Dash.Dashed, new List<Vector2> { new Vector2(speed[0].x, (float)safe), new Vector2(speed[speed.Count - 1].x, (float)safe) });
+        Fig(ps, safe > 0 ? "Скорость по времени; штрих — безопасная скорость сценария (ограниченная видимость)" : "Скорость по времени");
         var px = new SvgPlot { Title = "Боковое отклонение от линии пути", XLabel = "Время, мин", YLabel = "XTE, м (> 0 — правее)" };
         px.Add("XTE", SvgPlot.Dash.Solid, xte);
         // обе границы коридора — одна линия легенды (разрыв между ними)

@@ -29,12 +29,21 @@
 //   HelmEnded            Value — итоговый заданный руль, °;  Value2 — длительность перекладки, с
 //   TelegraphChanged     Index — положение (TelegraphOrder), Value — новый SF; Value2 — прежний SF;
 //                        ByInstructor — положение поставлено кодом (не рукой)
-//   HornStarted / HornEnded   Value (у HornEnded) — длительность звучания, с
+//   HornStarted / HornEnded   Value (у HornEnded) — длительность звучания, с;
+//                        Index (у HornEnded, C4) — тип звука по правилу 32 (BlastKind)
 //   WeatherChanged       Index — новый пресет (WeatherPresetId), Value — прежний пресет
 //   TimeOfDayChanged (B4) Index — новое время суток (TimeOfDay), Value — прежнее
 // Оценка (C2, источник — ExerciseAssessmentMonitor; публикуются через 0,2 с — на следующем срезе):
 //   TargetDetected       Subject — id цели, Index — номер цели, Value — дистанция, мили; Value2 — дистанция обнаружения, мили
 //   EncounterStarted     Subject — id цели, Index — ситуация (EncounterSituation), Value — CPA, мили; Value2 — TCPA, мин
+// Ограниченная видимость и звуковые сигналы (C4):
+//   VisibilityChanged    Value — видимость, заданная сценарием / инструктором, м (0 — по погоде); Value2 — прежняя
+//   SoundSignal          свой сигнал (группа звуков, источник — ControlActionDetector): Index — SoundSignalKind,
+//                        Subject — запись звуками («— —»), Value — число звуков, Value2 — длительность сигнала, с;
+//                        офлайн-оценка его не читает, а пересчитывает по HornEnded
+//   TargetSoundSignal    туманный сигнал цели дошёл до своего судна (источник — TrafficController):
+//                        Subject — id цели, Index — SoundSignalKind, Value — дистанция в момент подачи, м;
+//                        Value2 — курсовой угол цели, ° (0…360)
 // XTE > 0 — судно правее линии пути.
 // ============================================================
 using System;
@@ -65,7 +74,11 @@ public enum ExerciseEventType
     // Оценка (C2, источник — ExerciseAssessmentMonitor): для разбора и окна инструктора;
     // офлайн-оценка их не читает, а пересчитывает
     TargetDetected,
-    EncounterStarted
+    EncounterStarted,
+    // Ограниченная видимость и звуковые сигналы (C4)
+    VisibilityChanged,
+    SoundSignal,
+    TargetSoundSignal
 }
 
 public enum ScenarioEndReason
@@ -136,7 +149,14 @@ public struct ExerciseEvent
             case ExerciseEventType.HelmEnded: return $"Руль переложен на {ScenarioText.Rudder(Value)} за {ScenarioText.Num(Value2, 1)} с";
             case ExerciseEventType.TelegraphChanged: return $"Телеграф: «{Subject}»{(ByInstructor ? " (инструктор)" : "")}";
             case ExerciseEventType.HornStarted: return "Гудок";
-            case ExerciseEventType.HornEnded: return $"Гудок окончен, {ScenarioText.Num(Value, 1)} с";
+            case ExerciseEventType.HornEnded:
+                return $"Гудок окончен, {ScenarioText.Num(Value, 1)} с" + (Index >= 0 ? $" — {SoundSignals.BlastTitle((BlastKind)Index)} звук" : "");
+            case ExerciseEventType.VisibilityChanged:
+                return Value > 0 ? $"Видимость {ScenarioText.Num(Value / 1852.0, 2)} мили ({ScenarioText.Num(Value)} м)" : "Видимость — по погоде";
+            case ExerciseEventType.SoundSignal:
+                return $"Звуковой сигнал «{Subject}»: {SoundSignals.Title((SoundSignalKind)Index)}";
+            case ExerciseEventType.TargetSoundSignal:
+                return $"Слышен сигнал «{Subject}»: {SoundSignals.Title((SoundSignalKind)Index)}; {ScenarioText.Num(Value / 1852.0, 2)} мили, {ScenarioText.RelativeBearing(Value2)}";
             case ExerciseEventType.WeatherChanged: return $"Погода: {Subject}";
             case ExerciseEventType.TimeOfDayChanged: return $"Время суток: {Subject}";
             case ExerciseEventType.TargetDetected:

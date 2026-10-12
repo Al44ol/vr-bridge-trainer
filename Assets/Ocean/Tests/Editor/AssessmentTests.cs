@@ -356,7 +356,7 @@ public class AssessmentTests
     }
 
     // ─────────── Прогоны сценариев ───────────
-    private static ShipParameters Model45m()
+    internal static ShipParameters Model45m()
     {
         var p = ScriptableObject.CreateInstance<ShipParameters>();
         p.name = "ShipParameters_Model45m";
@@ -368,7 +368,7 @@ public class AssessmentTests
         return p;
     }
 
-    private static ShipParameters Mariner()
+    internal static ShipParameters Mariner()
     {
         var p = ScriptableObject.CreateInstance<ShipParameters>();
         p.name = "ShipParameters_Mariner";

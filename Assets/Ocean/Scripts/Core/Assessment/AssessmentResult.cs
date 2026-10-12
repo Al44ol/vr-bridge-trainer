@@ -200,7 +200,7 @@ public sealed class AssessmentResult
         if (GroupScores.Count > 0)
         {
             var parts = new List<string>();
-            foreach (AssessmentGroup g in new[] { AssessmentGroup.Encounters, AssessmentGroup.Reaction, AssessmentGroup.Route })
+            foreach (AssessmentGroup g in AssessmentCatalog.ScoredGroups)
                 if (GroupScores.TryGetValue(g, out double gs)) parts.Add($"{AssessmentCatalog.GroupTitle(g).ToLowerInvariant()} {Num(gs)}");
             b.AppendLine($"<size=85%><color=#9AA6B2>{string.Join(" · ", parts)}</color></size>");
         }

@@ -26,7 +26,8 @@ public enum AssessmentGroup
     Encounters,   // расхождение с судами (МППСС, правила 8, 9, 13–17)
     Reaction,     // время реакции
     Route,        // маршрут
-    Accidents     // аварии — провал, в балл не входят
+    Accidents,    // аварии — провал, в балл не входят
+    Visibility    // ограниченная видимость (C4): туманные сигналы, безопасная скорость, правило 19
 }
 
 /// <summary>Описание критерия (методика, задаётся в коде).</summary>
@@ -96,6 +97,31 @@ public class AssessmentSettings
     public double passScore = 70.0;
     [UnityEngine.Tooltip("Веса групп: расхождение, время реакции, маршрут")]
     public double weightEncounters = 0.6, weightReaction = 0.1, weightRoute = 0.3;
+
+    // ── Ограниченная видимость (C4). В снимках session.json до C4 этих полей нет (там 0) — тогда
+    //    берутся значения по умолчанию (свойства ниже); группа в таких сессиях и не оценивается.
+    [UnityEngine.Tooltip("Вес группы «Ограниченная видимость» (C4)")]
+    public double weightVisibility = 0.3;
+    [UnityEngine.Tooltip("Ограниченная видимость (правила 19, 35): V меньше, мили")]
+    public double restrictedVisibilityNm = 2.0;
+    [UnityEngine.Tooltip("Допуск длительности звука (правило 32: продолжительный 4–6 с, короткий около 1 с), с")]
+    public double blastToleranceS = SoundSignals.DefaultToleranceS;
+    [UnityEngine.Tooltip("Звуки с паузой не длиннее … с — один сигнал")]
+    public double signalGapS = SoundSignals.DefaultGroupGapS;
+    [UnityEngine.Tooltip("Судно «имеет ход» (правило 35 а, б) при скорости не меньше, уз")]
+    public double makingWayKnots = 0.5;
+    [UnityEngine.Tooltip("Безопасная скорость (F3, F4) оценивается через … с после начала ограниченной видимости (время на сброс хода)")]
+    public double safeSpeedGraceS = 120.0;
+    [UnityEngine.Tooltip("«Минимальный ход, при котором судно удерживается на курсе» (правило 19 д): телеграф не выше SF")]
+    public double minimumSteerageSf = 0.2;
+
+    public double WeightVisibility => weightVisibility > 0 ? weightVisibility : 0.3;
+    public double RestrictedVisibilityNm => restrictedVisibilityNm > 0 ? restrictedVisibilityNm : 2.0;
+    public double BlastToleranceS => blastToleranceS > 0 ? blastToleranceS : 0.0;
+    public double SignalGapS => signalGapS > 0 ? signalGapS : SoundSignals.DefaultGroupGapS;
+    public double MakingWayKnots => makingWayKnots > 0 ? makingWayKnots : 0.5;
+    public double SafeSpeedGraceS => safeSpeedGraceS > 0 ? safeSpeedGraceS : 120.0;
+    public double MinimumSteerageSf => minimumSteerageSf > 0 ? minimumSteerageSf : 0.2;
     public List<CriterionSetting> criteria = new List<CriterionSetting>();
 
     public AssessmentSettings() { }
@@ -134,7 +160,7 @@ public class AssessmentSettings
 
     public double GroupWeight(AssessmentGroup g) =>
         g == AssessmentGroup.Encounters ? weightEncounters : g == AssessmentGroup.Reaction ? weightReaction :
-        g == AssessmentGroup.Route ? weightRoute : 0.0;
+        g == AssessmentGroup.Route ? weightRoute : g == AssessmentGroup.Visibility ? WeightVisibility : 0.0;
 
     /// <summary>Добавить недостающие критерии каталога (после обновления методики).</summary>
     public int AddMissing()
@@ -153,6 +179,11 @@ public static class AssessmentCatalog
     public const string E1 = "E1", E2 = "E2", E3 = "E3", E4 = "E4", E5 = "E5", E6 = "E6", E7 = "E7", E8 = "E8", E9 = "E9";
     public const string R1 = "R1", R2 = "R2", R3 = "R3", R4 = "R4", R5 = "R5", R6 = "R6", R7 = "R7", R8a = "R8a", R8b = "R8b";
     public const string A1 = "A1", A2 = "A2";
+    public const string F1 = "F1", F2 = "F2", F3 = "F3", F4 = "F4", F5 = "F5", F6 = "F6";
+
+    /// <summary>Группы, входящие в балл (порядок вывода).</summary>
+    public static readonly AssessmentGroup[] ScoredGroups =
+        { AssessmentGroup.Encounters, AssessmentGroup.Reaction, AssessmentGroup.Route, AssessmentGroup.Visibility };
 
     private static CriterionInfo C(string code, AssessmentGroup g, string title, string rule, string unit, bool higher,
                                    bool mandatory, double full, double pass, double zero, double weight, string basis) =>
@@ -204,6 +235,19 @@ public static class AssessmentCatalog
           false, 0.25, 0.5, 1, 5, "|d_факт − d_рек|/d_рек; d_рек = R·tg(Δχ/2) + U·δ/ω_δ (п. 8.4)"),
         C(R8a, AssessmentGroup.Route, "В узкости — правее оси", "правило 9 а", "доля времени", true,
           false, 0.9, 0.75, 0.5, 5, "доля времени на участках узкости с XTE ≥ 0; предварительно"),
+        // ── Ограниченная видимость (C4; оценивается только при V < restrictedVisibilityNm) ──
+        C(F1, AssessmentGroup.Visibility, "Туманные сигналы подаются не реже чем через 2 мин", "правило 35 а, б", "с", false,
+          true, 120, 120, 240,  8, "наибольший промежуток без своего сигнала Д или ДД (от начала ограниченной видимости, между сигналами, до конца); 2 мин — норма"),
+        C(F2, AssessmentGroup.Visibility, "Тип туманного сигнала соответствует ходу", "правило 35 а, б", "доля", true,
+          false, 1, 0.75, 0.5, 4, "доля верных среди своих сигналов из продолжительных звуков: Д — имея ход, ДД — без хода; порог доли — предварительный"),
+        C(F3, AssessmentGroup.Visibility, "Безопасная скорость: средняя", "правила 6, 19 б", "доля U_без", false,
+          true, 1, 1.1, 1.5, 8, "U_ср/U_без после времени на сброс хода; U_без — параметр сценария (нормы нет: правило 6 — перечень факторов); зачёт до 1,1 — запаздывание торможения после команды"),
+        C(F4, AssessmentGroup.Visibility, "Безопасная скорость: наибольшая", "правила 6, 19 б", "доля U_без", false,
+          false, 1.1, 1.25, 1.75, 4, "U_max/U_без после времени на сброс хода; пороги — предварительные"),
+        C(F5, AssessmentGroup.Visibility, "Снижение хода, услышав сигнал впереди траверза", "правило 19 д", "с", false,
+          true, 30, 60, 120, 8, "от первого слышимого сигнала невидимой цели впереди траверза до команды «Самый малый вперёд» или ниже; нормы времени нет — предварительно"),
+        C(F6, AssessmentGroup.Visibility, "В тумане — не влево на судно впереди траверза", "правило 19 г", "1 — нет, 0 — нарушение", true,
+          true, 1, 1, 0, 8, "норма (направление): нет перекладки влево на известную, но невидимую цель впереди траверза (кроме обгоняемой) и поворота в сторону цели на траверзе или позади него"),
         // ── Аварии ──
         C(A1, AssessmentGroup.Accidents, "Посадка на мель", "провал", "число", false,
           true, 0, 0, 1, 0, "посадка — провал упражнения независимо от баллов"),
@@ -229,6 +273,7 @@ public static class AssessmentCatalog
             case AssessmentGroup.Encounters: return "Расхождение с судами";
             case AssessmentGroup.Reaction: return "Время реакции";
             case AssessmentGroup.Route: return "Маршрут";
+            case AssessmentGroup.Visibility: return "Ограниченная видимость";
             default: return "Аварии";
         }
     }

@@ -129,6 +129,23 @@ public static class NavigationLights
     public const double ContrastThreshold = 0.05;
     /// <summary>Отображение: сколько десятичных порядков над порогом до полной яркости.</summary>
     public const double DisplayDecades = 2.0;
+    /// <summary>
+    /// Порог освещённости днём, лк (C4; ориентир МАМС для дневного наблюдения огня на фоне неба — сверить
+    /// с первоисточником). Днём огонь виден много ближе, чем ночью: иначе в тумане он «светился» бы
+    /// дальше, чем виден корпус судна.
+    /// </summary>
+    public const double DayThresholdLux = 1e-3;
+
+    /// <summary>
+    /// Порог освещённости по «темноте» (WeatherController.Darkness: 0 день, 0,6 сумерки, 1 ночь):
+    /// при Darkness ≥ 0,5 — ночной T (как в B3, B4); от дня к 0,5 — логарифмически от дневного к ночному.
+    /// </summary>
+    public static double ThresholdFor(double darkness)
+    {
+        if (double.IsNaN(darkness) || darkness >= EnvironmentModel.DarknessForLights) return ThresholdLux;
+        double k = Math.Max(0.0, darkness) / EnvironmentModel.DarknessForLights;
+        return Math.Pow(10.0, Math.Log10(DayThresholdLux) + (Math.Log10(ThresholdLux) - Math.Log10(DayThresholdLux)) * k);
+    }
 
     // ─────────── Правило 22 ───────────
     public static void Ranges(double lengthM, out double mastheadNm, out double sideNm, out double sternNm, out double allRoundNm)
@@ -159,22 +176,28 @@ public static class NavigationLights
     }
 
     /// <summary>Дальность, на которой E = T (мили) — «световая дальность» огня при данном K.</summary>
-    public static double LuminousRangeNm(double intensityCd, double transmissivity)
+    public static double LuminousRangeNm(double intensityCd, double transmissivity) => LuminousRangeNm(intensityCd, transmissivity, ThresholdLux);
+
+    /// <summary>Дальность, на которой E = порогу thresholdLux, мили.</summary>
+    public static double LuminousRangeNm(double intensityCd, double transmissivity, double thresholdLux)
     {
         double lo = 0.001, hi = 60.0;
-        if (Illuminance(intensityCd, hi * MetersPerNm, transmissivity) >= ThresholdLux) return hi;
+        if (Illuminance(intensityCd, hi * MetersPerNm, transmissivity) >= thresholdLux) return hi;
         for (int i = 0; i < 80; i++)
         {
             double mid = 0.5 * (lo + hi);
-            if (Illuminance(intensityCd, mid * MetersPerNm, transmissivity) >= ThresholdLux) lo = mid; else hi = mid;
+            if (Illuminance(intensityCd, mid * MetersPerNm, transmissivity) >= thresholdLux) lo = mid; else hi = mid;
         }
         return 0.5 * (lo + hi);
     }
 
     /// <summary>Уровень яркости на экране 0…1 по отношению E/T.</summary>
-    public static double DisplayLevel(double illuminanceLux)
+    public static double DisplayLevel(double illuminanceLux) => DisplayLevel(illuminanceLux, ThresholdLux);
+
+    /// <summary>Уровень яркости 0…1 по отношению E/T при пороге thresholdLux (C4: днём порог выше).</summary>
+    public static double DisplayLevel(double illuminanceLux, double thresholdLux)
     {
-        double v = illuminanceLux / ThresholdLux;
+        double v = illuminanceLux / thresholdLux;
         if (!(v > 1.0)) return 0.0;
         double l = Math.Log10(v) / DisplayDecades;
         return l > 1.0 ? 1.0 : l;

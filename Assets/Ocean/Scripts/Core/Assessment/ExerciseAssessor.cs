@@ -30,6 +30,16 @@
 // Изменение курса относительно маршрута: Δψ_м(k) = ψ_k − ψ_a − (χ(уч_k) − χ(уч_a)),
 //   срезы в зонах поворота маршрута не учитываются.
 // Формулы и пороги каждого критерия — AssessmentSettings.cs и ThesisNotes, раздел 10.
+//
+// C4 — ограниченная видимость (V < restrictedVisibilityNm; V — по погоде или задана сценарием /
+// инструктором, событие VisibilityChanged):
+//   • цель «видна» — D ≤ дальности визуального обнаружения (DetectionModel без дальности
+//     сценария); «обнаружена» — с ней (например, «по радару»). Опасность, возникшая, когда цель
+//     обнаружена, но не видна, — ситуация RestrictedVisibility (правило 19: привилегированного
+//     судна нет): E1, E2, E8, E9 — как для уступающего, E3–E7 не применяются;
+//   • свои сигналы — по звукам HornEnded (время начала = t − τ), группировка и тип — SoundSignals;
+//   • слышимые сигналы целей — события TargetSoundSignal (TrafficController / ExerciseSimulation);
+//   • F1–F6 — EvaluateVisibility (формулы — там и в ThesisNotes, раздел 12).
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -87,6 +97,11 @@ public sealed class TargetTrack
     public Encounter LastEncounter => Encounter ?? (Done.Count > 0 ? Done[Done.Count - 1] : null);
     public bool Collided;
     public double CollisionTime = double.NaN;
+    /// <summary>Цель видна (C4): D ≤ дальности визуального обнаружения (без дальности, заданной сценарием).</summary>
+    public bool Seen;
+    public double SeenTime = double.NaN;
+    /// <summary>Туманные сигналы цели, дошедшие до своего судна (C4).</summary>
+    public readonly List<HeardRecord> Heard = new List<HeardRecord>();
 
     /// <summary>Наблюдение с временем ≤ t (−1 — нет).</summary>
     public int ObsAt(double t)
@@ -99,6 +114,15 @@ public sealed class TargetTrack
         }
         return ans;
     }
+}
+
+/// <summary>Туманный сигнал цели, услышанный на своём судне (C4).</summary>
+public struct HeardRecord
+{
+    public double Time, DistanceM, QOwnDeg;
+    public SoundSignalKind Kind;
+    /// <summary>В этот момент видимость ограничена / цель уже видна.</summary>
+    public bool Restricted, Seen;
 }
 
 public enum ControlActionKind { Helm, Telegraph }
@@ -144,14 +168,24 @@ public sealed class ExerciseAssessor
     private string firstGrounding = "", firstCollision = "";
     private readonly HashSet<int> passedWaypoints = new HashSet<int>();
     private readonly Dictionary<int, double> turnSpeed = new Dictionary<int, double>();
+    // C4: видимость, заданная сценарием / инструктором (0 — по погоде); видимость ограничена на срезе; свои звуки
+    private double visibilityOverride;
+    private readonly List<bool> ownRestricted = new List<bool>();
+    private readonly List<SoundBlast> blasts = new List<SoundBlast>();
 
     private const double Nm = NavigationLights.MetersPerNm;
+
+    /// <summary>Видимость сейчас, м (по погоде или заданная).</summary>
+    public double Visibility => DetectionModel.Visibility(weather, visibilityOverride);
+    /// <summary>Видимость ограничена (правила 19, 35).</summary>
+    public bool RestrictedVisibility => FogSignals.Restricted(Visibility, S.RestrictedVisibilityNm);
 
     public ExerciseAssessor(AssessmentContext context)
     {
         Context = context ?? new AssessmentContext();
         weather = Context.Weather;
         timeOfDay = Context.TimeOfDay;
+        visibilityOverride = Context.ScenarioVisibilityM;
         foreach (AssessmentTargetInfo t in Context.Targets) targets.Add(new TargetTrack { Info = t });
     }
 
@@ -210,6 +244,22 @@ public sealed class ExerciseAssessor
             case ExerciseEventType.TimeOfDayChanged:
                 if (Enum.IsDefined(typeof(TimeOfDay), e.Index)) timeOfDay = (TimeOfDay)e.Index;
                 break;
+            case ExerciseEventType.VisibilityChanged:
+                visibilityOverride = double.IsNaN(e.Value) ? 0.0 : Math.Max(0.0, e.Value);
+                break;
+            case ExerciseEventType.HornEnded:
+                if (!double.IsNaN(e.Value) && e.Value > 0) blasts.Add(new SoundBlast { Start = e.Time - e.Value, Duration = e.Value });
+                break;
+            case ExerciseEventType.TargetSoundSignal:
+            {
+                TargetTrack ht = Track(e.Subject);
+                ht.Heard.Add(new HeardRecord
+                {
+                    Time = e.Time, DistanceM = e.Value, QOwnDeg = e.Value2, Kind = (SoundSignalKind)Math.Max(0, e.Index),
+                    Restricted = RestrictedVisibility, Seen = ht.Seen
+                });
+                break;
+            }
             case ExerciseEventType.HelmStarted:
                 actions.Add(new ControlAction { Kind = ControlActionKind.Helm, Time = e.Time, Position = e.Position, RudderStart = e.Value });
                 openHelm = actions.Count - 1;
@@ -266,7 +316,9 @@ public sealed class ExerciseAssessor
         int oi = own.Count;
         own.Add(s);
         RememberTurnSpeed(s);
-        double visibility = DetectionModel.Visibility(weather, Context.ScenarioVisibilityM);
+        double visibility = Visibility;
+        bool restricted = FogSignals.Restricted(visibility, S.RestrictedVisibilityNm);
+        ownRestricted.Add(restricted);
         foreach (TargetSample ts in tgts)
         {
             TargetTrack tr = Track(ts.Id);
@@ -287,6 +339,18 @@ public sealed class ExerciseAssessor
                     if (!suppressCallbacks) TargetDetected?.Invoke(tr);
                 }
             }
+            if (!tr.Seen)
+            {
+                // Видна — по дальности визуального обнаружения (без «радара» сценария)
+                double dVis = Context.DetectionRangeNm > 0.0
+                    ? DetectionModel.RangeNm(tr.Info.LengthM, o.QTargetDeg, timeOfDay, visibility, 0.0)
+                    : tr.DetectionRangeNm;
+                if (tr.Detected && o.RangeM <= dVis * Nm)
+                {
+                    tr.Seen = true;
+                    tr.SeenTime = o.Time;
+                }
+            }
 
             Encounter enc = tr.Encounter;
             if (enc != null && enc.Ended && !tr.Collided)
@@ -305,7 +369,7 @@ public sealed class ExerciseAssessor
                 {
                     tr.Encounter = enc = new Encounter
                     {
-                        Situation = EncounterClassifier.Classify(o.QOwnDeg, o.QTargetDeg, S.headOnSectorDeg),
+                        Situation = SituationOf(tr, o, restricted),
                         OnsetObs = tr.Obs.Count - 1, OnsetOwnIndex = oi, OnsetTime = o.Time,
                         OnsetRangeM = o.RangeM, OnsetCpaM = o.CpaM, OnsetTcpaS = o.TcpaS,
                         MinDistanceM = o.RangeM, MinTime = o.Time, MinOwnIndex = oi,
@@ -330,6 +394,11 @@ public sealed class ExerciseAssessor
             }
         }
     }
+
+    /// <summary>Ситуация: при ограниченной видимости и невидимой цели — правило 19 (C4), иначе — по курсовым углам.</summary>
+    private EncounterSituation SituationOf(TargetTrack tr, in TargetObservation o, bool restricted) =>
+        restricted && !tr.Seen ? EncounterSituation.RestrictedVisibility
+                               : EncounterClassifier.Classify(o.QOwnDeg, o.QTargetDeg, S.headOnSectorDeg);
 
     private bool Risk(TargetTrack tr, in TargetObservation o)
     {
@@ -370,7 +439,7 @@ public sealed class ExerciseAssessor
             if ((!enc.TargetTurning || targetSteady) && (!enc.OwnTurning || ownSteady))
             {
                 if (!Risk(tr, b)) return false;
-                enc.Situation = EncounterClassifier.Classify(b.QOwnDeg, b.QTargetDeg, S.headOnSectorDeg);
+                enc.Situation = SituationOf(tr, b, ownRestricted[ownRestricted.Count - 1]);
                 enc.OnsetObs = tr.Obs.Count - 1; enc.OnsetOwnIndex = b.OwnIndex; enc.OnsetTime = b.Time;
                 enc.OnsetRangeM = b.RangeM; enc.OnsetCpaM = b.CpaM; enc.OnsetTcpaS = b.TcpaS;
                 enc.NarrowChannel = NarrowLeg(ownNow.Leg);
@@ -675,7 +744,9 @@ public sealed class ExerciseAssessor
                 EvaluateEncounter(r, tr, e, n > 1 ? $"{tr.Info.Id} ({k + 1})" : tr.Info.Id, final, aborted);
             }
         }
+        ExcludeRestrictedManoeuvres(final);
         EvaluateRoute(r, final, aborted);
+        EvaluateVisibility(r, final);
 
         Add(r, AssessmentCatalog.A1, "", groundings, groundings > 0 ? $"посадка на мель «{firstGrounding}»" : "нет");
         Add(r, AssessmentCatalog.A2, "", collisions, collisions > 0 ? $"столкновение с «{firstCollision}»" : "нет");
@@ -732,7 +803,9 @@ public sealed class ExerciseAssessor
             return;
         }
 
-        bool giveWayActive = sit == EncounterSituation.HeadOn || sit == EncounterSituation.CrossingGiveWay;
+        // Правило 19 (C4): привилегированного судна нет — действия оцениваются как у уступающего
+        bool giveWayActive = sit == EncounterSituation.HeadOn || sit == EncounterSituation.CrossingGiveWay
+                             || sit == EncounterSituation.RestrictedVisibility;
         ControlAction act = FirstManoeuvre(e.OnsetTime, end);
         ControlAction helm = FirstManoeuvre(e.OnsetTime, end, helmOnly: true);
         if (act != null)
@@ -919,5 +992,228 @@ public sealed class ExerciseAssessor
                 Add(r, AssessmentCatalog.R7, name, Math.Abs(toGo - dRec) / dRec,
                     $"перекладка за {AssessmentResult.Num(toGo)} м до точки, рекомендуется {AssessmentResult.Num(dRec)} м ({(Math.Abs(toGo - dRec) <= 0.1 * dRec ? "в рекомендуемой точке" : toGo > dRec ? "раньше" : "позже")})");
         }
+    }
+
+    // ─────────── Ограниченная видимость (C4) ───────────
+    /// <summary>Свои сигналы: звуки HornEnded с типом по допуску оценки, сгруппированные паузой.</summary>
+    public List<SoundSignal> OwnSignals()
+    {
+        var list = new List<SoundBlast>(blasts.Count);
+        foreach (SoundBlast b in blasts)
+            list.Add(new SoundBlast { Start = b.Start, Duration = b.Duration, Kind = SoundSignals.Classify(b.Duration, S.BlastToleranceS) });
+        return SoundSignals.Group(list, S.SignalGapS);
+    }
+
+    /// <summary>Промежутки времени с ограниченной видимостью по срезам.</summary>
+    private List<(double from, double to)> RestrictedSpans(bool final)
+    {
+        var spans = new List<(double, double)>();
+        double start = double.NaN;
+        for (int k = 0; k < own.Count; k++)
+        {
+            bool rv = ownRestricted[k];
+            if (rv && double.IsNaN(start)) start = own[k].Time;
+            if (!rv && !double.IsNaN(start)) { spans.Add((start, own[k].Time)); start = double.NaN; }
+        }
+        if (!double.IsNaN(start)) spans.Add((start, final && !double.IsNaN(EndTime) ? Math.Max(EndTime, Time) : Time));
+        return spans;
+    }
+
+    private static int SpanOf(List<(double from, double to)> spans, double t)
+    {
+        for (int i = 0; i < spans.Count; i++) if (t >= spans[i].from - 1e-9 && t <= spans[i].to + 1e-9) return i;
+        return -1;
+    }
+
+    private bool MakingWayAt(double t)
+    {
+        int k = OwnIndexAt(t);
+        return k >= 0 && Math.Abs(own[k].SpeedKnots) >= S.MakingWayKnots;
+    }
+
+    private void EvaluateVisibility(AssessmentResult r, bool final)
+    {
+        List<(double from, double to)> spans = RestrictedSpans(final);
+        if (spans.Count == 0) return;
+        double now = final && !double.IsNaN(EndTime) ? Math.Max(EndTime, Time) : Time;
+        double total = 0;
+        foreach (var sp in spans) total += sp.to - sp.from;
+        List<SoundSignal> signals = OwnSignals();
+
+        // F1 — наибольший промежуток без своего туманного сигнала (Д или ДД) в ограниченную видимость:
+        //      от начала, между сигналами, до конца (правило 35: не реже чем через 2 мин)
+        double maxGap = 0, gapFrom = spans[0].from;
+        int fogCount = 0;
+        foreach (var sp in spans)
+        {
+            double prev = sp.from;
+            foreach (SoundSignal sig in signals)
+            {
+                if (!SoundSignals.IsUnderwayFogSignal(sig.Kind) || sig.Start < sp.from - 1e-9 || sig.Start > sp.to + 1e-9) continue;
+                fogCount++;
+                if (sig.Start - prev > maxGap) { maxGap = sig.Start - prev; gapFrom = prev; }
+                prev = sig.Start;
+            }
+            if (sp.to - prev > maxGap) { maxGap = sp.to - prev; gapFrom = prev; }
+        }
+        Add(r, AssessmentCatalog.F1, "", maxGap,
+            $"наибольший промежуток {AssessmentResult.Num(maxGap)} с (с t = {ScenarioText.Clock(gapFrom)}); сигналов «—» / «— —»: {fogCount}; ограниченная видимость {AssessmentResult.Num(total)} с");
+
+        // F2 — тип сигнала соответствует ходу (правило 35 а, б): среди своих сигналов с продолжительными
+        //      или неопределёнными звуками (попытки туманного сигнала)
+        int attempts = 0, correct = 0;
+        string wrong = "";
+        foreach (SoundSignal sig in signals)
+        {
+            if (SpanOf(spans, sig.Start) < 0) continue;
+            bool attempt = false;
+            foreach (SoundBlast b in sig.Blasts) if (b.Kind != BlastKind.Short) attempt = true;
+            if (!attempt) continue;
+            attempts++;
+            bool way = MakingWayAt(sig.Start);
+            bool ok = (sig.Kind == SoundSignalKind.FogMakingWay && way) || (sig.Kind == SoundSignalKind.FogNotMakingWay && !way);
+            if (ok) correct++;
+            else if (wrong.Length == 0)
+                wrong = $"; t = {ScenarioText.Clock(sig.Start)} «{sig.Pattern}» ({DescribeBlasts(sig)}) — {(way ? "имея ход, нужен «—»" : "без хода, нужен «— —»")}";
+        }
+        if (attempts == 0) Skip(r, AssessmentCatalog.F2, "", "своих сигналов из продолжительных звуков не было");
+        else Add(r, AssessmentCatalog.F2, "", (double)correct / attempts, $"верных {correct} из {attempts}{wrong}");
+
+        // F3, F4 — безопасная скорость (правила 6, 19 б): средняя и наибольшая после времени на сброс хода
+        double safe = Context.SafeSpeedKnots;
+        if (safe <= 0) { Skip(r, AssessmentCatalog.F3, "", "безопасная скорость в сценарии не задана"); Skip(r, AssessmentCatalog.F4, "", "безопасная скорость в сценарии не задана"); }
+        else
+        {
+            double sum = 0, max = 0, tMax = double.NaN;
+            int n = 0;
+            for (int k = 0; k < own.Count; k++)
+            {
+                if (!ownRestricted[k]) continue;
+                int si = SpanOf(spans, own[k].Time);
+                if (si < 0 || own[k].Time < spans[si].from + S.SafeSpeedGraceS - 1e-9) continue;
+                double u = Math.Abs(own[k].SpeedKnots);
+                sum += u; n++;
+                if (u > max) { max = u; tMax = own[k].Time; }
+            }
+            if (n == 0)
+            {
+                string why = $"ограниченная видимость короче времени на сброс хода ({AssessmentResult.Num(S.SafeSpeedGraceS)} с)";
+                if (final) { Skip(r, AssessmentCatalog.F3, "", why); Skip(r, AssessmentCatalog.F4, "", why); }
+            }
+            else
+            {
+                double mean = sum / n;
+                Add(r, AssessmentCatalog.F3, "", mean / safe,
+                    $"средняя {AssessmentResult.Num(mean, 1)} уз при безопасной {AssessmentResult.Num(safe, 1)} уз (после {AssessmentResult.Num(S.SafeSpeedGraceS)} с на сброс хода)");
+                Add(r, AssessmentCatalog.F4, "", max / safe,
+                    $"наибольшая {AssessmentResult.Num(max, 1)} уз в t = {ScenarioText.Clock(tMax)} при безопасной {AssessmentResult.Num(safe, 1)} уз");
+            }
+        }
+
+        foreach (TargetTrack tr in targets)
+        {
+            // F5 — услышав сигнал невидимого судна впереди траверза, снизить ход до минимального (правило 19 д)
+            HeardRecord? first = null;
+            foreach (HeardRecord h in tr.Heard)
+                if (h.Restricted && !h.Seen && Math.Abs(EncounterClassifier.Signed(h.QOwnDeg)) < 90.0) { first = h; break; }
+            if (first != null)
+            {
+                HeardRecord h = first.Value;
+                string heard = $"сигнал услышан в t = {ScenarioText.Clock(h.Time)}, {AssessmentResult.Num(h.DistanceM / Nm, 2)} мили, {ScenarioText.RelativeBearing(h.QOwnDeg)}";
+                int k = OwnIndexAt(h.Time);
+                double minSf = S.MinimumSteerageSf + 1e-6;
+                if (k >= 0 && own[k].TelegraphSf <= minSf)
+                    Add(r, AssessmentCatalog.F5, tr.Info.Id, 0.0, $"{heard}; ход уже не выше «{ScenarioText.Telegraph(ScenarioText.OrderFromSpeedFactor(own[k].TelegraphSf))}»");
+                else
+                {
+                    ControlAction slow = null;
+                    foreach (ControlAction a in actions)
+                        if (a.Kind == ControlActionKind.Telegraph && a.Time >= h.Time - 1e-9 && a.SfNew <= minSf) { slow = a; break; }
+                    if (slow != null)
+                        Add(r, AssessmentCatalog.F5, tr.Info.Id, slow.Time - h.Time, $"{heard}; через {AssessmentResult.Num(slow.Time - h.Time)} с — {Describe(slow)}");
+                    else
+                    {
+                        double observed = now - h.Time;
+                        CriterionSetting set = S.Get(AssessmentCatalog.F5);
+                        if (observed >= set.pass)
+                            Add(r, AssessmentCatalog.F5, tr.Info.Id, Math.Max(observed, set.zero), $"{heard}; ход не снижен до «Самый малый вперёд» ({AssessmentResult.Num(observed)} с после сигнала)");
+                        else if (final)
+                            Skip(r, AssessmentCatalog.F5, tr.Info.Id, $"{heard}; упражнение закончилось через {AssessmentResult.Num(observed)} с");
+                    }
+                }
+            }
+
+            // F6 — правило 19 г: с момента, когда о цели известно (слышна или обнаружена, но не видна), до того,
+            //      как она видна, — не поворачивать влево на судно впереди траверза (кроме обгоняемого) и
+            //      не поворачивать в сторону судна на траверзе или позади него
+            if (!KnownUnseen(tr, now, out double known, out double until)) continue;
+            int helms = 0;
+            string violation = "";
+            foreach (ControlAction a in actions)
+            {
+                if (a.Kind != ControlActionKind.Helm || a.Time < known - 1e-9 || a.Time >= until - 1e-9 || !IsManoeuvre(a)) continue;
+                int ka = OwnIndexAt(a.Time);
+                if (ka < 0 || !ownRestricted[ka]) continue;
+                int oi = tr.ObsAt(a.Time);
+                if (oi < 0) continue;
+                TargetObservation o = tr.Obs[oi];
+                helms++;
+                double q = EncounterClassifier.Signed(o.QOwnDeg), rd = FinalRudder(a);
+                bool forward = Math.Abs(q) < 90.0;
+                bool overtaking = EncounterClassifier.Classify(o.QOwnDeg, o.QTargetDeg, S.headOnSectorDeg) == EncounterSituation.Overtaking;
+                bool bad = forward ? rd < 0 && !overtaking : Math.Sign(rd) == Math.Sign(q);
+                if (bad && violation.Length == 0)
+                    violation = forward
+                        ? $"перекладка влево ({Describe(a)}) в t = {ScenarioText.Clock(a.Time)} на невидимую цель впереди траверза ({ScenarioText.RelativeBearing(o.QOwnDeg)})"
+                        : $"поворот в сторону невидимой цели на траверзе или позади ({Describe(a)}, цель {ScenarioText.RelativeBearing(o.QOwnDeg)}) в t = {ScenarioText.Clock(a.Time)}";
+            }
+            if (helms == 0) Skip(r, AssessmentCatalog.F6, tr.Info.Id, "перекладок, пока цель не видна, не было");
+            else Add(r, AssessmentCatalog.F6, tr.Info.Id, violation.Length > 0 ? 0 : 1,
+                     violation.Length > 0 ? violation : $"перекладок, пока цель не видна: {helms}, ни одной на цель");
+        }
+    }
+
+    /// <summary>
+    /// Промежуток, когда о цели известно, но её не видно (ограниченная видимость): от первого слышимого
+    /// сигнала или обнаружения «не глазами» до момента, когда цель видна (или до now).
+    /// </summary>
+    private bool KnownUnseen(TargetTrack tr, double now, out double known, out double until)
+    {
+        known = double.NaN;
+        foreach (HeardRecord hr in tr.Heard)
+            if (hr.Restricted && !hr.Seen) { known = hr.Time; break; }
+        if (tr.Detected && (!tr.Seen || tr.DetectTime < tr.SeenTime - 1e-9))
+        {
+            int kd = OwnIndexAt(tr.DetectTime);
+            if (kd >= 0 && ownRestricted[kd] && (double.IsNaN(known) || tr.DetectTime < known)) known = tr.DetectTime;
+        }
+        until = tr.Seen ? tr.SeenTime : now;
+        return !double.IsNaN(known) && known < until - 1e-9;
+    }
+
+    /// <summary>
+    /// Манёвры по правилу 19 (перекладки, пока известная цель не видна) маршрутные критерии не учитывают —
+    /// как манёвры расхождения (до возврата в коридор, не дольше routeReturnAllowanceMin).
+    /// </summary>
+    private void ExcludeRestrictedManoeuvres(bool final)
+    {
+        double now = final && !double.IsNaN(EndTime) ? Math.Max(EndTime, Time) : Time;
+        foreach (TargetTrack tr in targets)
+        {
+            if (!KnownUnseen(tr, now, out double known, out double until)) continue;
+            foreach (ControlAction a in actions)
+                if (a.Kind == ControlActionKind.Helm && a.Time >= known - 1e-9 && a.Time < until - 1e-9 && IsManoeuvre(a))
+                {
+                    ExcludeFromRoute(a.Time, until);
+                    break;
+                }
+        }
+    }
+
+    private static string DescribeBlasts(SoundSignal s)
+    {
+        var parts = new List<string>();
+        foreach (SoundBlast b in s.Blasts) parts.Add($"{AssessmentResult.Num(b.Duration, 1)} с");
+        return string.Join(", ", parts);
     }
 }

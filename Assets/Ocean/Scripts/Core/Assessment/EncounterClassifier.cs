@@ -19,6 +19,9 @@
 //      с которой цель видит своё судно.
 // 22,5° — норма (правило 13 б); α (по умолчанию 6°) — параметр: правило 14 б
 // говорит «в створе или почти в створе» без числа (ThesisNotes, раздел 10).
+// C4: если при ограниченной видимости опасность возникла, когда цель обнаружена (например,
+// дальность обнаружения задана сценарием — «по радару»), но не видна, ситуация — RestrictedVisibility
+// (правило 19: привилегированного судна нет); её назначает ExerciseAssessor, не геометрия.
 // ============================================================
 using System;
 
@@ -29,7 +32,8 @@ public enum EncounterSituation
     CrossingGiveWay,  // пересечение, цель справа — уступить дорогу, правила 15, 16
     CrossingStandOn,  // пересечение, цель слева — сохранять курс и скорость, правило 17
     Overtaking,       // своё судно обгоняет, правило 13
-    Overtaken         // цель обгоняет своё судно, правила 13, 17
+    Overtaken,        // цель обгоняет своё судно, правила 13, 17
+    RestrictedVisibility   // C4: ограниченная видимость, цель обнаружена, но не видна — правило 19 (нет привилегированного судна)
 }
 
 public static class EncounterClassifier
@@ -65,7 +69,8 @@ public static class EncounterClassifier
 
     /// <summary>Своё судно уступает дорогу (иначе — привилегированное).</summary>
     public static bool GiveWay(EncounterSituation s) =>
-        s == EncounterSituation.HeadOn || s == EncounterSituation.CrossingGiveWay || s == EncounterSituation.Overtaking;
+        s == EncounterSituation.HeadOn || s == EncounterSituation.CrossingGiveWay || s == EncounterSituation.Overtaking
+        || s == EncounterSituation.RestrictedVisibility;   // правило 19: действовать должны оба
 
     public static string Title(EncounterSituation s)
     {
@@ -76,6 +81,7 @@ public static class EncounterClassifier
             case EncounterSituation.CrossingStandOn: return "пересечение курсов, цель слева";
             case EncounterSituation.Overtaking: return "обгон: своё судно обгоняет";
             case EncounterSituation.Overtaken: return "обгон: цель обгоняет своё судно";
+            case EncounterSituation.RestrictedVisibility: return "ограниченная видимость, цель не видна";
             default: return "нет опасности";
         }
     }
@@ -89,6 +95,7 @@ public static class EncounterClassifier
             case EncounterSituation.CrossingStandOn: return "сохранять курс и скорость (правило 17)";
             case EncounterSituation.Overtaking: return "держаться в стороне от обгоняемого (правило 13)";
             case EncounterSituation.Overtaken: return "сохранять курс и скорость (правила 13, 17)";
+            case EncounterSituation.RestrictedVisibility: return "заблаговременно разойтись, не поворачивать влево на судно впереди траверза (правило 19 г)";
             default: return "";
         }
     }

@@ -4,8 +4,19 @@
 // Генерирует звук сирены/гудка без внешних аудиофайлов.
 // Присоединяется к кнопке гудка на мостике.
 // Вызов: horn.PlayHorn() — из XR Interactable события.
+//
+// C4: гудок звучит, ПОКА КНОПКУ ДЕРЖАТ (holdToSound): нажатие (selectEntered → PlayHorn,
+// как раньше, в сцене) — начало, отпускание (selectExited → StopHorn, подписка в коде) — конец.
+// Так обучающийся подаёт короткий (около 1 с) и продолжительный (4–6 с) звуки правила 32 и
+// сигналы из них (правила 34, 35); длительность и тип пишет BridgeActionMonitor (HornEnded,
+// SoundSignal). Звук — зацикленный отрезок (HornSynth.Loop) с нарастанием attackSeconds
+// и спадом releaseSeconds громкостью источника; тембр и частота — прежние.
+// IsSounding — от нажатия до отпускания (спад после отпускания в длительность не входит).
+// holdToSound = false — прежний режим: фиксированные duration секунд.
 // ============================================================
 using UnityEngine;
+using UnityEngine.XR.Interaction.Toolkit;
+using UnityEngine.XR.Interaction.Toolkit.Interactables;
 
 [RequireComponent(typeof(AudioSource))]
 public class ShipHorn : MonoBehaviour
@@ -14,18 +25,32 @@ public class ShipHorn : MonoBehaviour
     [Tooltip("Основная частота гудка (Гц). Типичный грузовой судовой гудок: 130-350 Гц")]
     public float frequency = 180f;
 
-    [Tooltip("Длительность звука в секундах")]
+    [Tooltip("Длительность звука в секундах (только при выключенном «Звучит, пока держат»)")]
     public float duration = 3f;
 
     [Tooltip("Громкость (0..1)")]
     [Range(0f, 1f)]
     public float volume = 0.7f;
 
+    [Header("Звучит, пока держат (C4)")]
+    [Tooltip("Гудок звучит, пока кнопку держат (правило 32: короткий ≈ 1 с, продолжительный 4–6 с)")]
+    public bool holdToSound = true;
+    [Tooltip("Нарастание звука, с")]
+    public float attackSeconds = 0.12f;
+    [Tooltip("Спад после отпускания, с")]
+    public float releaseSeconds = 0.3f;
+    [Tooltip("Защита: гудок выключается сам через … с (0 — без ограничения)")]
+    public float maxBlastSeconds = 30f;
+
     private AudioSource audioSource;
-    private AudioClip hornClip;
+    private AudioClip hornClip, loopClip;
+    private XRBaseInteractable interactable;
+    private bool held;
+    private float heldTime;
+    private float gain;
 
     /// <summary>Гудок звучит (запись действий C1: начало/конец, длительность).</summary>
-    public bool IsSounding => audioSource != null && audioSource.isPlaying;
+    public bool IsSounding => holdToSound ? held : audioSource != null && audioSource.isPlaying;
 
     void Awake()
     {
@@ -36,6 +61,38 @@ public class ShipHorn : MonoBehaviour
         audioSource.playOnAwake = false;
 
         GenerateHornClip();
+        loopClip = HornSynth.Loop(frequency, volume);
+        interactable = GetComponent<XRBaseInteractable>();
+    }
+
+    void OnEnable()
+    {
+        if (interactable != null) interactable.selectExited.AddListener(OnReleased);
+    }
+
+    void OnDisable()
+    {
+        if (interactable != null) interactable.selectExited.RemoveListener(OnReleased);
+        held = false;
+        gain = 0f;
+        if (audioSource != null && holdToSound) audioSource.Stop();
+    }
+
+    private void OnReleased(SelectExitEventArgs args) => StopHorn();
+
+    void Update()
+    {
+        if (!holdToSound || audioSource == null) return;
+        if (held)
+        {
+            heldTime += Time.deltaTime;
+            if (maxBlastSeconds > 0f && heldTime >= maxBlastSeconds) held = false;
+        }
+        float target = held ? 1f : 0f;
+        float rate = held ? 1f / Mathf.Max(attackSeconds, 1e-3f) : 1f / Mathf.Max(releaseSeconds, 1e-3f);
+        gain = Mathf.MoveTowards(gain, target, rate * Time.deltaTime);
+        audioSource.volume = gain;
+        if (!held && gain <= 0f && audioSource.isPlaying) audioSource.Stop();
     }
 
     /// <summary>
@@ -87,20 +144,43 @@ public class ShipHorn : MonoBehaviour
 
     /// <summary>
     /// Воспроизвести гудок. Вызывается из XR Interactable или кнопки.
+    /// В режиме «пока держат» — начало звука (конец — StopHorn при отпускании).
     /// </summary>
     public void PlayHorn()
     {
+        if (holdToSound)
+        {
+            if (held) return;
+            held = true;
+            heldTime = 0f;
+            if (audioSource.clip != loopClip || !audioSource.isPlaying)
+            {
+                audioSource.clip = loopClip;
+                audioSource.loop = true;
+                audioSource.volume = gain;
+                audioSource.Play();
+            }
+            return;
+        }
         if (!audioSource.isPlaying)
         {
+            audioSource.clip = hornClip;
+            audioSource.loop = false;
+            audioSource.volume = 1f;
             audioSource.Play();
         }
     }
 
     /// <summary>
-    /// Остановить гудок (если зажимная кнопка).
+    /// Остановить гудок (если зажимная кнопка). В режиме «пока держат» — отпускание: спад releaseSeconds.
     /// </summary>
     public void StopHorn()
     {
+        if (holdToSound)
+        {
+            held = false;
+            return;
+        }
         audioSource.Stop();
     }
 }

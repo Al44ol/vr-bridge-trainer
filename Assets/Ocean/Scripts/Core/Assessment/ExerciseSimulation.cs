@@ -31,6 +31,8 @@ public sealed class SimManoeuvre
     /// <summary>Новое смещение от оси в узкости, м (NaN — не менять): обгон с другого борта, возврат к правой стороне.</summary>
     public double OffsetM = double.NaN;
     public string Label = "";
+    /// <summary>C4: id цели — манёвр через Time с после первого услышанного туманного сигнала этой цели.</summary>
+    public string AfterHeard = "";
 }
 
 public sealed class ExerciseSimulation
@@ -47,6 +49,13 @@ public sealed class ExerciseSimulation
     public double TrackPlotStep = 2.0;
     /// <summary>Упреждение поворота: доля расчётного d_упр (1 — по формуле п. 8.4; 0 — поворот в точке).</summary>
     public double WheelOverFactor = 1.0;
+    /// <summary>C4: свои туманные сигналы в ограниченную видимость — интервал, с (0 — не подавать); первый — через FogSignalFirstS.</summary>
+    public double FogSignalIntervalS;
+    public double FogSignalFirstS = 5.0;
+    /// <summary>Длительность продолжительного звука, с (правило 32: 4…6 с).</summary>
+    public double FogBlastS = 5.0;
+    /// <summary>Туманные сигналы целей (C4) — тот же класс, что в сцене (TrafficController).</summary>
+    public readonly FogSignalSystem TargetSignals = new FogSignalSystem();
 
     // Результаты
     public AssessmentResult LiveResult;
@@ -103,9 +112,22 @@ public sealed class ExerciseSimulation
         SimManoeuvre active = null;
         double holdCourse = 0, activeEnd = 0;
         int nextManoeuvre = 0;
-        var manoeuvres = new List<SimManoeuvre>(Manoeuvres);
+        var manoeuvres = new List<SimManoeuvre>();
+        var onHeard = new List<SimManoeuvre>();
+        foreach (SimManoeuvre mv in Manoeuvres) (string.IsNullOrEmpty(mv.AfterHeard) ? manoeuvres : onHeard).Add(mv);
         manoeuvres.Sort((a, b) => a.Time.CompareTo(b.Time));
         double helmEndAt = double.NaN;
+
+        // C4: ограниченная видимость (видимость сценария не меняется), свои туманные сигналы, сигналы целей
+        bool restricted = FogSignals.Restricted(DetectionModel.Visibility(s.weather, s.visibilityMeters), 2.0);
+        double nextFog = FogSignalIntervalS > 0 ? FogSignalFirstS : double.NaN;
+        var blastPlan = new List<(double start, double end)>();
+        double blastStart = double.NaN;
+        var parser = new SoundSignalParser();
+        var sources = new List<FogSignalSource>();
+        var heard = new List<HeardSignal>();
+        var heardIds = new HashSet<string>();
+        TargetSignals.Reset();
 
         t = 0;
         Publish(new ExerciseEvent(ExerciseEventType.ExerciseStarted) { Subject = s.title });
@@ -166,6 +188,52 @@ public sealed class ExerciseSimulation
             {
                 Publish(new ExerciseEvent(ExerciseEventType.HelmEnded) { Value = m.Ordered, Value2 = 3.0 });
                 helmEndAt = double.NaN;
+            }
+
+            // Свои туманные сигналы: «—» имея ход, «— —» без хода (правило 35 а, б)
+            if (restricted && !double.IsNaN(nextFog) && t >= nextFog - 1e-9)
+            {
+                blastPlan.Add((t, t + FogBlastS));
+                if (Math.Abs(m.U) / ShipParameters.KnotsToMs < 0.5) blastPlan.Add((t + FogBlastS + FogSignals.PauseS, t + 2 * FogBlastS + FogSignals.PauseS));
+                nextFog += FogSignalIntervalS;
+            }
+            if (double.IsNaN(blastStart) && blastPlan.Count > 0 && t >= blastPlan[0].start - 1e-9)
+            {
+                blastStart = t;
+                Publish(new ExerciseEvent(ExerciseEventType.HornStarted));
+            }
+            else if (!double.IsNaN(blastStart) && t >= blastPlan[0].end - 1e-9)
+            {
+                double duration = t - blastStart;
+                BlastKind kind = parser.AddBlast(blastStart, duration);
+                Publish(new ExerciseEvent(ExerciseEventType.HornEnded) { Value = duration, Index = (int)kind });
+                blastPlan.RemoveAt(0);
+                blastStart = double.NaN;
+            }
+            if (parser.TryComplete(t, !double.IsNaN(blastStart), out SoundSignal sig))
+                Publish(new ExerciseEvent(ExerciseEventType.SoundSignal) { Index = (int)sig.Kind, Subject = sig.Pattern, Value = sig.Blasts.Count, Value2 = sig.End - sig.Start });
+
+            // Туманные сигналы целей: событие — когда звук дошёл; манёвры «после сигнала»
+            sources.Clear();
+            foreach (TrafficVessel v in vessels)
+                sources.Add(new FogSignalSource { Id = v.TargetId, Index = v.Index, Position = v.Position, SpeedKnots = v.SpeedKnots, LengthM = v.Model.Parameters.length });
+            TargetSignals.Update(t, restricted, Pos, m.Psi * 180.0 / Math.PI, sources, heard);
+            foreach (HeardSignal h in heard)
+            {
+                Publish(new ExerciseEvent(ExerciseEventType.TargetSoundSignal) { Subject = h.Id, Index = (int)h.Kind, Value = h.DistanceM, Value2 = h.QOwnDeg });
+                if (!heardIds.Add(h.Id)) continue;
+                foreach (SimManoeuvre mv in onHeard)
+                {
+                    if (mv.AfterHeard != h.Id) continue;
+                    var due = new SimManoeuvre
+                    {
+                        Time = t + mv.Time, CourseChangeDeg = mv.CourseChangeDeg, HoldSeconds = mv.HoldSeconds,
+                        SpeedFactor = mv.SpeedFactor, OffsetM = mv.OffsetM, Label = mv.Label
+                    };
+                    int at = nextManoeuvre;
+                    while (at < manoeuvres.Count && manoeuvres[at].Time <= due.Time) at++;
+                    manoeuvres.Insert(at, due);
+                }
             }
 
             foreach (RouteEvent e in route.Update(Pos, t, Dt))
@@ -338,6 +406,8 @@ public static class DemoAssessmentRuns
 {
     public static readonly string[] B3Variants = { "none", "correct", "port", "late" };
     public static readonly string[] B2Variants = { "wheelover", "nowheelover" };
+    /// <summary>C4-01 (туман): правильно; без сигналов; не снизил ход по сигналу; поворот влево на сигнал.</summary>
+    public static readonly string[] C4Variants = { "fog_correct", "fog_nosignals", "fog_noslow", "fog_port" };
 
     public static string Title(string variant)
     {
@@ -349,9 +419,16 @@ public static class DemoAssessmentRuns
             case "late": return "манёвр T2 поздно (150 с)";
             case "wheelover": return "поворот с упреждением";
             case "nowheelover": return "поворот без упреждения";
+            case "fog_correct": return "правильные действия в тумане";
+            case "fog_nosignals": return "без туманных сигналов";
+            case "fog_noslow": return "не снизил ход, услышав сигнал";
+            case "fog_port": return "поворот влево на сигнал";
             default: return variant;
         }
     }
+
+    /// <summary>C4-01 «правильно»: снова «Малый вперёд» через … с после первого сигнала T1 (T1 прошла).</summary>
+    public const double FogResumeAfterHeardS = 480;
 
     public static void Configure(ExerciseSimulation sim, string variant)
     {
@@ -370,6 +447,21 @@ public static class DemoAssessmentRuns
                 break;
             case "nowheelover":
                 sim.WheelOverFactor = 0;
+                break;
+            // C4-01: сразу «Малый вперёд» (безопасная скорость), туманный сигнал «—» каждые 100 с
+            case "fog_correct":
+            case "fog_nosignals":
+            case "fog_noslow":
+            case "fog_port":
+                if (variant != "fog_nosignals") sim.FogSignalIntervalS = 100;
+                sim.Manoeuvres.Add(new SimManoeuvre { Time = 10, SpeedFactor = 0.4, Label = "«Малый вперёд» — безопасная скорость" });
+                if (variant == "fog_correct" || variant == "fog_nosignals")
+                {
+                    sim.Manoeuvres.Add(new SimManoeuvre { AfterHeard = "T1", Time = 20, SpeedFactor = 0.2, Label = "сигнал T1 впереди траверза — «Самый малый вперёд»" });
+                    sim.Manoeuvres.Add(new SimManoeuvre { AfterHeard = "T1", Time = FogResumeAfterHeardS, SpeedFactor = 0.4, Label = "T1 прошла — «Малый вперёд»" });
+                }
+                if (variant == "fog_port")
+                    sim.Manoeuvres.Add(new SimManoeuvre { AfterHeard = "T1", Time = 20, CourseChangeDeg = -30, HoldSeconds = 240, Label = "сигнал T1 — влево 30°" });
                 break;
         }
     }

@@ -21,7 +21,10 @@
 //   считаются (в track.csv они есть). TelegraphChanged: Index — новое
 //   положение, Value — новый SF, Value2 — прежний SF; ByInstructor —
 //   положение поставлено кодом (съём с мели инструктором, B1).
-// Гудок: начало / конец звучания → HornStarted / HornEnded (Value — длительность, с).
+// Гудок: начало / конец звучания → HornStarted / HornEnded (Value — длительность, с;
+//   C4: Index — тип звука по правилу 32, BlastKind). Звуки с паузами ≤ 3 с — один сигнал:
+//   когда пауза кончилась, → SoundSignal (Index — SoundSignalKind, Subject — «— —»), SoundSignals.
+// Видимость (C4): смена видимости, заданной сценарием / инструктором → VisibilityChanged (Value — новая, м).
 // Погода: смена пресета → WeatherChanged (Index — новый, Value — прежний пресет).
 // Время суток (B4): смена → TimeOfDayChanged (Index — новое, Value — прежнее).
 // Пороги — предварительные, задаются в инспекторе монитора.
@@ -45,6 +48,8 @@ public struct ControlState
     public int WeatherPreset;
     /// <summary>Время суток — номер TimeOfDay (B4; 0 — день).</summary>
     public int TimeOfDay;
+    /// <summary>Видимость, заданная сценарием или инструктором, м (0 — по погоде; C4).</summary>
+    public double VisibilityOverrideM;
 }
 
 public sealed class ControlActionDetector
@@ -53,6 +58,12 @@ public sealed class ControlActionDetector
     public double HelmStillDeg = 0.2;
     public double HelmSettleSeconds = 1.0;
     public double TelegraphSettleSeconds = 0.5;
+    /// <summary>Допуск длительности звука (правило 32), с — предварительный.</summary>
+    public double BlastToleranceS = SoundSignals.DefaultToleranceS;
+    /// <summary>Пауза, после которой сигнал закончен, с.</summary>
+    public double SignalGapS = SoundSignals.DefaultGroupGapS;
+    private readonly SoundSignalParser signals = new SoundSignalParser();
+    private double visibility;
 
     private readonly List<ExerciseEvent> events = new List<ExerciseEvent>();
 
@@ -79,6 +90,8 @@ public sealed class ControlActionDetector
         hornStart = time;
         weather = s.WeatherPreset;
         timeOfDay = s.TimeOfDay;
+        visibility = s.VisibilityOverrideM;
+        signals.Reset();
     }
 
     public IReadOnlyList<ExerciseEvent> Update(double time, in ControlState s)
@@ -89,6 +102,7 @@ public sealed class ControlActionDetector
         Horn(time, s);
         Weather(s);
         DayTime(s);
+        Visibility(s);
         return events;
     }
 
@@ -143,14 +157,35 @@ public sealed class ControlActionDetector
 
     private void Horn(double time, in ControlState s)
     {
-        if (s.HornSounding == horn) return;
-        horn = s.HornSounding;
-        if (horn)
+        if (s.HornSounding != horn)
         {
-            hornStart = time;
-            events.Add(new ExerciseEvent(ExerciseEventType.HornStarted));
+            horn = s.HornSounding;
+            if (horn)
+            {
+                hornStart = time;
+                events.Add(new ExerciseEvent(ExerciseEventType.HornStarted));
+            }
+            else
+            {
+                signals.ToleranceS = BlastToleranceS;
+                double duration = time - hornStart;
+                BlastKind kind = signals.AddBlast(hornStart, duration);
+                events.Add(new ExerciseEvent(ExerciseEventType.HornEnded) { Value = duration, Index = (int)kind });
+            }
         }
-        else events.Add(new ExerciseEvent(ExerciseEventType.HornEnded) { Value = time - hornStart });
+        signals.GroupGapS = SignalGapS;
+        if (signals.TryComplete(time, horn, out SoundSignal sig))
+            events.Add(new ExerciseEvent(ExerciseEventType.SoundSignal)
+            {
+                Index = (int)sig.Kind, Subject = sig.Pattern, Value = sig.Blasts.Count, Value2 = sig.End - sig.Start
+            });
+    }
+
+    private void Visibility(in ControlState s)
+    {
+        if (Math.Abs(s.VisibilityOverrideM - visibility) < 0.5) return;
+        events.Add(new ExerciseEvent(ExerciseEventType.VisibilityChanged) { Value = s.VisibilityOverrideM, Value2 = visibility });
+        visibility = s.VisibilityOverrideM;
     }
 
     private void Weather(in ControlState s)

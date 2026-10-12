@@ -16,6 +16,9 @@
 //     доля силы света по сектору → освещённость по закону Алларда → уровень
 //     яркости (NavLightField). Огонь виден, только если над ним нет корпуса
 //     своего судна (ZTest шейдера).
+//   • C4: туманный сигнал — AudioSource на мачте (у топового огня), 3D-звук без затухания Unity
+//     (громкость по дистанции задаёт FogSignals.Loudness), без эффекта Доплера, фильтр нижних частот
+//     по дистанции; клип — HornSynth.Signal (частота по длине судна, Приложение III).
 // ============================================================
 using System.Collections.Generic;
 using UnityEngine;
@@ -55,6 +58,37 @@ public class TrafficShipView : MonoBehaviour
         seakeeping = new SeakeepingModel(p) { SamplesAlong = SamplesAlong, SamplesAcross = SamplesAcross };
         seakeepingActive = false;
         Place();
+    }
+
+    private AudioSource whistle;
+    private AudioLowPassFilter whistleFilter;
+
+    /// <summary>Туманный сигнал с мачты (C4): громкость 0…1 и частота среза фильтра — по дистанции.</summary>
+    public void PlaySignal(SoundSignalKind kind, float frequencyHz, float loudness, float lowPassHz)
+    {
+        if (loudness <= 0f) return;
+        if (whistle == null)
+        {
+            var go = new GameObject("FogWhistle");
+            go.transform.SetParent(transform, false);
+            float h = 10f, fwd = 0f;
+            foreach (NavLight l in Lights)
+                if (l.Kind == NavLightKind.MastheadForward) { h = (float)l.Height; fwd = (float)l.Forward; break; }
+            go.transform.localPosition = new Vector3(0f, h, fwd);
+            whistle = go.AddComponent<AudioSource>();
+            whistle.playOnAwake = false;
+            whistle.spatialBlend = 1f;
+            whistle.dopplerLevel = 0f;
+            whistle.spread = 0f;
+            whistle.rolloffMode = AudioRolloffMode.Custom;
+            whistle.SetCustomCurve(AudioSourceCurveType.CustomRolloff, AnimationCurve.Constant(0f, 1f, 1f));
+            whistle.maxDistance = 20000f;
+            whistleFilter = go.AddComponent<AudioLowPassFilter>();
+        }
+        whistleFilter.cutoffFrequency = lowPassHz;
+        whistle.clip = HornSynth.Signal(frequencyHz, kind);
+        whistle.volume = Mathf.Clamp01(loudness);
+        whistle.Play();
     }
 
     void OnDestroy()

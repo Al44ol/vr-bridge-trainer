@@ -62,6 +62,12 @@ public static class DebriefText
         { AssessmentCatalog.R7, "Перекладка руля на поворот не вовремя" },
         { AssessmentCatalog.R8a, "В узкости судно держалось левее оси" },
         { AssessmentCatalog.R8b, "Расхождение в узкости не у правой стороны" },
+        { AssessmentCatalog.F1, "Пропуск туманного сигнала: промежуток между сигналами больше 2 минут" },
+        { AssessmentCatalog.F2, "Туманный сигнал не соответствует ходу судна" },
+        { AssessmentCatalog.F3, "Средняя скорость в ограниченную видимость выше безопасной" },
+        { AssessmentCatalog.F4, "Скорость в ограниченную видимость превышала безопасную" },
+        { AssessmentCatalog.F5, "Услышав туманный сигнал судна впереди траверза, ход не снижен до минимального" },
+        { AssessmentCatalog.F6, "Поворот на невидимое судно в ограниченную видимость" },
         { AssessmentCatalog.A1, "Посадка на мель" },
         { AssessmentCatalog.A2, "Столкновение" }
     };
@@ -156,7 +162,8 @@ public static class DebriefText
         b.Append(e.TargetId).Append(": ").Append(EncounterClassifier.Title(e.Situation));
         if (!double.IsNaN(e.ActionTime) && !string.IsNullOrEmpty(e.Action))
             b.Append(" — манёвр через ").Append(ScenarioText.Num(Math.Max(0, e.ActionTime - e.OnsetTime))).Append(" с (").Append(e.Action).Append(')');
-        else if (e.Complete && (e.Situation == EncounterSituation.HeadOn || e.Situation == EncounterSituation.CrossingGiveWay))
+        else if (e.Complete && (e.Situation == EncounterSituation.HeadOn || e.Situation == EncounterSituation.CrossingGiveWay
+                                 || e.Situation == EncounterSituation.RestrictedVisibility))
             b.Append(" — манёвра не было");
         if (e.Collided) b.Append("; столкновение");
         else if (e.Complete && !double.IsNaN(e.MinDistanceM))
@@ -183,7 +190,7 @@ public static class DebriefText
     {
         var parts = new List<string>();
         if (r != null)
-            foreach (AssessmentGroup g in new[] { AssessmentGroup.Encounters, AssessmentGroup.Reaction, AssessmentGroup.Route })
+            foreach (AssessmentGroup g in AssessmentCatalog.ScoredGroups)
                 if (r.GroupScores.TryGetValue(g, out double gs)) parts.Add($"{AssessmentCatalog.GroupTitle(g).ToLowerInvariant()} {ScenarioText.Num(gs)}");
         return string.Join(" · ", parts);
     }

@@ -42,6 +42,12 @@ public static class WeatherVisibility
     /// <summary>Метеорологическая видимость, м, по плотности тумана ExponentialSquared.</summary>
     public static double FromFogDensity(double density) => density > 1e-9 ? FogCoefficient / density : double.PositiveInfinity;
 
+    /// <summary>
+    /// Плотность тумана ExponentialSquared для видимости V, м (C4): ρ = √(−ln 0,05)/V.
+    /// На дистанции V предмет закрыт туманом на 95 % (f = e^(−(ρV)²) = 0,05), на V/2 — на 53 %.
+    /// </summary>
+    public static float DensityFor(double visibilityM) => visibilityM > 1.0 ? (float)(FogCoefficient / visibilityM) : 0f;
+
     public static double VisibilityM(WeatherPresetId w) => FromFogDensity(FogDensity(w));
 }
 
