@@ -138,7 +138,7 @@ XR Origin — дочерний объект Ship, игрок качается в
 - `EncounterSummary.TargetKey` — id цели в targets.csv (`TargetId` — подпись, «T3 (2)»).
 - Редактор: Session Replay → «Отчёт (report.html)», «Сводка по папке…»; `Tools/VR Bridge/Sessions Summary…` → `ThesisData/Summary/<дата>/`; `Tools/VR Bridge/Debrief Report` → `ThesisData/Debrief/<дата>/` (прогоны с report.html, схемы SVG, сводка). Окно D1 — через `SessionReport.BuildForFolder`.
 - Тесты: `DebriefTests` (11); всего 169 до C4. Подробно — ThesisNotes, раздел 11.
-- 12.10.2026, по проверке в шлеме: вкладка «Схема» ставила Unity на паузу (нет `CanvasRenderer` — базовый `Graphic` в этой uGUI его не требует → `[RequireComponent]`), затем вешала Unity (бесконечный цикл штриховки → `MapGeometry.DashRuns`, тест `Geometry_DashRuns_TerminateAtRoundingEdge`).
+- 12.10.2026, по проверке в шлеме: вкладка «Схема» ставила Unity на паузу (нет `CanvasRenderer` — базовый `Graphic` в этой uGUI его не требует → `[RequireComponent]`), затем вешала Unity (бесконечный цикл штриховки → `MapGeometry.DashRuns`, тест `Geometry_DashRuns_TerminateAtRoundingEdge`). После исправлений проверено в шлеме, 190/190 — C3 закрыт. Номера разделов report.html — сквозные (`SessionReport.NumberSections`).
 
 ## Ограниченная видимость и туманные сигналы (запрос 12, C4)
 - Видимость сценария (`visibilityMeters`) / инструктора (меню A «Обстановка» → «Видимость: < по погоде / 4 / 2 / 1 / 0,5 / 0,25 мили >») → `WeatherController.SetVisibility`: плотность тумана ρ = 1,73/V (`WeatherVisibility.DensityFor`) заменяет пресет; 0 — по погоде (как до C4). Событие `VisibilityChanged`. Пресеты не менялись; пресет «Туман» и слой тумана на небе — после просмотра в шлеме.
@@ -148,7 +148,7 @@ XR Origin — дочерний объект Ship, игрок качается в
 - Оценка: группа `Visibility` (вес 0,3) — F1 интервал своих сигналов ≤ 120 с (обяз.), F2 тип по ходу, F3/F4 безопасная скорость (`ScenarioDefinition.safeSpeedKnots`), F5 «Самый малый вперёд» после сигнала цели впереди траверза (19 д), F6 не влево на невидимую цель (19 г). Цель «видна» (`TargetTrack.Seen`) ≠ «обнаружена» (радар сценария); опасность с невидимой целью — `EncounterSituation.RestrictedVisibility` (нет привилегированного). Перекладки, пока известная цель не видна, маршрутом не штрафуются.
 - `ScenarioDefinition.hideTargetsOnPlotter` (session.json `hide_targets`) — CPA/TCPA не показываются в «Текущем балле» (и на планшете D2); `safe_speed_kn` — в session.json, линия на графике скорости report.html.
 - Сценарий `Scenario_C4-01_Fog.asset` (Setup C4 Fog): день, штиль, 926 м, U_без 6 уз, старт (0, −3000) «Средний вперёд», маршрут до входа в фарватер; T1 — Mariner справа, CPA 0, TCPA 6 мин, CPA_доп 0,2 мили. Прогоны `DemoAssessmentRuns.C4Variants` (правильно 100 / без сигналов 85,7 / не снизил 77 / влево 69,9).
-- Тесты: `FogTests` (21); всего 190 (с тестом штриховки схемы). Подробно — ThesisNotes, раздел 12.
+- Тесты: `FogTests` (21); всего 190 (с тестом штриховки схемы). Проверено в шлеме (корпус цели выходит из тумана около V) — C4 закрыт 12.10.2026. Подробно — ThesisNotes, раздел 12.
 
 ## Качка на волнах (запрос 4)
 - Поле волн — чистый класс `Core/Seakeeping/OceanWaveField` (единый источник для шейдера и C#). `OceanWaves` заполняет его (`ConfigureField`) и шлёт те же значения в шейдер. Фазы θ продвигаются в **FixedUpdate**; в кадре — перенос на время отображения `OceanWaves.RenderTimeOffset` = −(1 − α)·Δt (та же α, что в ShipNavigation).

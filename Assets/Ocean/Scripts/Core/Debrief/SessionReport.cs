@@ -19,6 +19,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 using UnityEngine;
 
 public sealed class ReportOptions
@@ -82,7 +83,14 @@ public static class SessionReport
          .Append(H(opt.AssessmentSource));
         if (opt.CompareWithRecorded && r != null) h.Append(" · ").Append(H(CompareText(s.Folder, r)));
         h.Append(" · VR-тренажёр судоводительского мостика</p>\n</body>\n</html>\n");
-        return h.ToString();
+        return NumberSections(h.ToString());
+    }
+
+    /// <summary>Сквозные номера разделов: пустые разделы (нет сближений, траектории) пропускаются без дыр в нумерации.</summary>
+    private static string NumberSections(string html)
+    {
+        int n = 0;
+        return Regex.Replace(html, "<h2>", _ => $"<h2>{++n}. ");
     }
 
     /// <summary>Сверка с assessment.csv, записанным в шлеме.</summary>
@@ -124,7 +132,7 @@ public static class SessionReport
     // ─────────── Разделы ───────────
     private static void Meta(StringBuilder h, RecordedSession s, SessionMeta m, SessionScenario sc)
     {
-        h.Append("<h2>1. Сведения о сессии</h2>\n<table class=\"meta\">\n");
+        h.Append("<h2>Сведения о сессии</h2>\n<table class=\"meta\">\n");
         Row(h, "Обучающийся (ID)", string.IsNullOrEmpty(m.trainee_id) ? "не указан" : m.trainee_id);
         Row(h, "Сценарий", $"{sc.id} «{sc.title}»");
         Row(h, "Начало", Date(m.start_local));
@@ -150,7 +158,7 @@ public static class SessionReport
 
     private static void Outcome(StringBuilder h, AssessmentResult r, SessionMeta m)
     {
-        h.Append("<h2>2. Итог</h2>\n");
+        h.Append("<h2>Итог</h2>\n");
         if (r == null)
         {
             h.Append("<p>Оценка не выполнялась: в записи нет траектории.</p>\n");
@@ -174,7 +182,7 @@ public static class SessionReport
     private static void Violations(StringBuilder h, AssessmentResult r)
     {
         if (r == null) return;
-        h.Append("<h2>3. Нарушения и замечания</h2>\n");
+        h.Append("<h2>Нарушения и замечания</h2>\n");
         List<DebriefViolation> list = DebriefText.Violations(r);
         if (list.Count == 0) { h.Append("<p>Нарушений нет.</p>\n"); return; }
         h.Append("<ul class=\"viol\">\n");
@@ -186,7 +194,7 @@ public static class SessionReport
     private static void Maps(StringBuilder h, DebriefMapData map)
     {
         if (map == null || map.Views.Count == 0) return;
-        h.Append("<h2>4. Схема траектории</h2>\n");
+        h.Append("<h2>Схема траектории</h2>\n");
         for (int i = 0; i < map.Views.Count; i++)
         {
             DebriefMapView v = map.Views[i];
@@ -198,7 +206,7 @@ public static class SessionReport
     private static void Encounters(StringBuilder h, AssessmentResult r)
     {
         if (r == null || r.Encounters.Count == 0) return;
-        h.Append("<h2>5. Сближения с судами</h2>\n<table>\n<thead><tr><th>Цель</th><th>Ситуация</th><th>Обнаружена</th><th>Опасность</th>" +
+        h.Append("<h2>Сближения с судами</h2>\n<table>\n<thead><tr><th>Цель</th><th>Ситуация</th><th>Обнаружена</th><th>Опасность</th>" +
                  "<th>Манёвр</th><th>Наименьшая дистанция</th></tr></thead><tbody>\n");
         foreach (EncounterSummary e in r.Encounters)
         {
@@ -216,7 +224,7 @@ public static class SessionReport
     private static void Criteria(StringBuilder h, AssessmentResult r)
     {
         if (r == null) return;
-        h.Append("<h2>6. Критерии</h2>\n<table>\n<thead><tr><th></th><th>Код</th><th>Критерий</th><th>Объект</th><th>Значение</th><th>Порог зачёта</th>" +
+        h.Append("<h2>Критерии</h2>\n<table>\n<thead><tr><th></th><th>Код</th><th>Критерий</th><th>Объект</th><th>Значение</th><th>Порог зачёта</th>" +
                  "<th>Балл</th><th>Пояснение</th></tr></thead><tbody>\n");
         foreach (CriterionRow c in DebriefText.Rows(r))
         {
@@ -231,7 +239,7 @@ public static class SessionReport
     private static void Plots(StringBuilder h, RecordedSession s, AssessmentResult r)
     {
         if (s.Track.Count < 2) return;
-        h.Append("<h2>7. Графики</h2>\n");
+        h.Append("<h2>Графики</h2>\n");
         int step = Math.Max(1, s.Track.Count / 1500);
         var course = new List<Vector2>(); var speed = new List<Vector2>();
         var xte = new List<Vector2>(); var limP = new List<Vector2>(); var limN = new List<Vector2>();
@@ -292,7 +300,7 @@ public static class SessionReport
     private static void Events(StringBuilder h, RecordedSession s)
     {
         if (s.Events.Count == 0) return;
-        h.Append("<h2>8. Журнал событий</h2>\n<table>\n<thead><tr><th>Время</th><th>Событие</th><th>Курс, °</th><th>Скорость, уз</th></tr></thead><tbody>\n");
+        h.Append("<h2>Журнал событий</h2>\n<table>\n<thead><tr><th>Время</th><th>Событие</th><th>Курс, °</th><th>Скорость, уз</th></tr></thead><tbody>\n");
         foreach (ExerciseEvent e in s.Events)
             h.Append($"<tr><td class=\"num\">{ScenarioText.Clock(e.Time)}</td><td>{H(e.Describe())}</td>" +
                      $"<td class=\"num\">{ScenarioText.Num(e.HeadingDeg % 360.0, 1)}</td><td class=\"num\">{ScenarioText.Num(e.SpeedKnots, 1)}</td></tr>\n");
