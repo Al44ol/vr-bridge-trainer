@@ -35,7 +35,9 @@ public static class SetupFastBoat
     /// <summary>Рулевая стойка — на этой доле длины от транца.</summary>
     private const float ConsoleStation = 0.4f;
     /// <summary>Запас объёма стойки по горизонтали и вверх, м.</summary>
-    private const float ZoneMargin = 0.3f, ZoneTopMargin = 0.4f;
+    private const float ZoneMargin = 0.35f, ZoneTopMargin = 0.4f;
+    /// <summary>Часть тумбы в плане не больше, м (пол, пульты у окон — больше).</summary>
+    private const float MaxPartFootprint = 0.9f;
 
     [MenuItem("Tools/VR Bridge/Setup Fast Boat")]
     private static void Run()
@@ -89,8 +91,7 @@ public static class SetupFastBoat
         log.AppendLine($"  + модель {MeshPath}: {mesh.vertexCount} вершин, {mesh.subMeshCount} подмеша");
 
         // ── 3. Стойка: объём органов управления (в системе Ship) ──
-        float floorY = rig != null ? ship.InverseTransformPoint(rig.position).y : ship.InverseTransformPoint(wheel.transform.position).y - 1f;
-        if (rig == null) log.AppendLine("  ! XR Origin не найден — пол принят на 1 м ниже штурвала");
+        float floorY = FindFloor(ship, rig, wheel.transform, log);
         var controls = new List<Transform> { wheel.transform };
         Transform grip = FindDeep(ship, "WheelGrip");
         if (grip != null) controls.Add(grip);
@@ -204,27 +205,36 @@ public static class SetupFastBoat
         if (floorAboveWater < DeckHeight || floorAboveWater > 30f)
             log.AppendLine("  ! высота пола над водой странная — проверить ShipMotion.pivotLocal (центр качки на ватерлинии)");
 
-        // Стойка из модели мостика и что скрыть
+        // Стойка из модели мостика и что скрыть. Часть модели — тумба, если: середина в плане внутри объёма
+        // органов управления с запасом, в плане не больше MaxPartFootprint (пол, пульты у окон — больше),
+        // сверху не выше органов управления + запас, снизу — от пола (столб может уходить ниже пола игрока).
+        // 12.10.2026: прежнее правило «целиком внутри объёма» отсеяло столб тумбы (Cylinder.1526, 1,29 м).
+        ShipTypeSwitcher old = ship.GetComponent<ShipTypeSwitcher>();
+        var forceKeep = new HashSet<Renderer>(old != null && old.forceKeep != null ? old.forceKeep : new Renderer[0]);
+        var forceHide = new HashSet<Renderer>(old != null && old.forceHide != null ? old.forceHide : new Renderer[0]);
         var kept = new List<Renderer>();
         var hide = new List<Renderer>();
         var nearMiss = new List<string>();
         Vector3 zMin = zone.Min - new Vector3(ZoneMargin, 0f, ZoneMargin), zMax = zone.Max + new Vector3(ZoneMargin, ZoneTopMargin, ZoneMargin);
-        zMin.y = floorY - 0.15f;
+        zMin.y = floorY - 0.8f;
         foreach (Renderer r in ship.GetComponentsInChildren<Renderer>(true))
         {
             if (IsUnder(r.transform, keepRoots)) continue;
+            if (forceKeep.Contains(r)) { kept.Add(r); continue; }
+            if (forceHide.Contains(r)) { hide.Add(r); continue; }
             if (bridgeModel != null && r.transform.IsChildOf(bridgeModel))
             {
                 var b = new LocalBox();
                 b.AddRenderer(r, ship);
-                if (b.Valid && Inside(b, zMin, zMax)) { kept.Add(r); continue; }
+                if (b.Valid && IsConsolePart(b, zMin, zMax)) { kept.Add(r); continue; }
                 if (b.Valid && NearZone(b, zMin, zMax, 1f))
-                    nearMiss.Add($"{r.name} ({Size(b)})");
+                    nearMiss.Add($"{r.name} ({Size(b)}, y {b.Min.y:F2}…{b.Max.y:F2}, {Offset(b, zMin, zMax):F2} м от стойки)");
             }
             hide.Add(r);
         }
-        log.AppendLine($"  стойка из модели мостика: {kept.Count} частей — " + string.Join(", ", kept.ConvertAll(r => $"{r.name} ({Size(BoxOf(r, ship))})")));
-        if (kept.Count == 0) log.AppendLine("  ! ни одной части модели не попало в объём стойки — на катере органы управления будут без тумбы; добавить вручную в keptConsole и убрать из hideOnBoat");
+        log.AppendLine($"  стойка из модели мостика: {kept.Count} частей — " + string.Join(", ", kept.ConvertAll(r => { LocalBox b = BoxOf(r, ship); return $"{r.name} ({Size(b)}, y {b.Min.y:F2}…{b.Max.y:F2})"; })));
+        if (forceKeep.Count + forceHide.Count > 0) log.AppendLine($"  ручная правка: оставить {forceKeep.Count}, скрыть {forceHide.Count}");
+        if (kept.Count == 0) log.AppendLine("  ! ни одной части модели не попало в объём стойки — выделить тумбу в Scene View и Tools/VR Bridge/Fast Boat: оставить выделенное");
         if (nearMiss.Count > 0) log.AppendLine($"  рядом со стойкой, но скрываются ({nearMiss.Count}): " + string.Join(", ", nearMiss));
         log.AppendLine($"  на катере скрываются рендеров: {hide.Count} (только рендеры, коллайдеры остаются)");
 
@@ -284,6 +294,98 @@ public static class SetupFastBoat
         Debug.Log(log.ToString());
     }
 
+    // ─────────── Ручная правка стойки ───────────
+    // Выделить в Scene View / Hierarchy части модели мостика (или их родителя) и выбрать пункт:
+    // рендеры переносятся между hideOnBoat и keptConsole и запоминаются (forceKeep / forceHide) —
+    // повторный Setup Fast Boat правку не теряет. После правки — Ctrl+S.
+    private const string KeepMenu = "Tools/VR Bridge/Fast Boat — оставить выделенное на катере";
+    private const string HideMenu = "Tools/VR Bridge/Fast Boat — скрыть выделенное на катере";
+    private const string PreviewMenu = "Tools/VR Bridge/Fast Boat — предпросмотр стойки (Scene View)";
+    private static bool previewing;
+
+    [MenuItem(KeepMenu)] private static void KeepSelected() => MoveSelected(true);
+    [MenuItem(HideMenu)] private static void HideSelected() => MoveSelected(false);
+    [MenuItem(KeepMenu, true)] private static bool ValidateKeep() => Selection.gameObjects.Length > 0 && !EditorApplication.isPlaying;
+    [MenuItem(HideMenu, true)] private static bool ValidateHide() => Selection.gameObjects.Length > 0 && !EditorApplication.isPlaying;
+
+    private static void MoveSelected(bool keep)
+    {
+        ShipTypeSwitcher sw = FindInScene<ShipTypeSwitcher>(SceneManager.GetActiveScene());
+        if (sw == null) { Debug.LogWarning("[Fast Boat] ShipTypeSwitcher не найден — сначала Setup Fast Boat."); return; }
+        var picked = new List<Renderer>();
+        foreach (GameObject g in Selection.gameObjects)
+            foreach (Renderer r in g.GetComponentsInChildren<Renderer>(true))
+                if (r.transform.IsChildOf(sw.transform) && (sw.boatRoot == null || !r.transform.IsChildOf(sw.boatRoot.transform)) && !picked.Contains(r))
+                    picked.Add(r);
+        if (picked.Count == 0) { Debug.LogWarning("[Fast Boat] В выделении нет рендеров судна."); return; }
+
+        Undo.RecordObject(sw, keep ? "Fast Boat: оставить" : "Fast Boat: скрыть");
+        var hide = new List<Renderer>(sw.hideOnBoat);
+        var kept = new List<Renderer>(sw.keptConsole);
+        var fk = new List<Renderer>(sw.forceKeep ?? new Renderer[0]);
+        var fh = new List<Renderer>(sw.forceHide ?? new Renderer[0]);
+        foreach (Renderer r in picked)
+        {
+            (keep ? hide : kept).Remove(r);
+            (keep ? fh : fk).Remove(r);
+            List<Renderer> to = keep ? kept : hide, force = keep ? fk : fh;
+            if (!to.Contains(r)) to.Add(r);
+            if (!force.Contains(r)) force.Add(r);
+        }
+        sw.hideOnBoat = hide.ToArray();
+        sw.keptConsole = kept.ToArray();
+        sw.forceKeep = fk.ToArray();
+        sw.forceHide = fh.ToArray();
+        EditorUtility.SetDirty(sw);
+        EditorSceneManager.MarkSceneDirty(sw.gameObject.scene);
+        if (previewing) { previewing = false; TogglePreview(); }
+        Debug.Log($"[Fast Boat] {(keep ? "Оставлено на катере" : "Скрыто на катере")}: {picked.Count} — " +
+                  string.Join(", ", picked.ConvertAll(r => r.name)) + ". Сохраните сцену (Ctrl+S).");
+    }
+
+    // Предпросмотр: в Scene View скрыть то, что скрывается на катере (видимость Scene View — не сохраняется в сцену)
+    [MenuItem(PreviewMenu)]
+    private static void TogglePreview()
+    {
+        ShipTypeSwitcher sw = FindInScene<ShipTypeSwitcher>(SceneManager.GetActiveScene());
+        if (sw == null) { Debug.LogWarning("[Fast Boat] ShipTypeSwitcher не найден — сначала Setup Fast Boat."); return; }
+        var objs = new List<GameObject>();
+        foreach (Renderer r in sw.hideOnBoat) if (r != null) objs.Add(r.gameObject);
+        foreach (Renderer r in sw.keptConsole) if (r != null) SceneVisibilityManager.instance.Show(r.gameObject, false);
+        previewing = !previewing;
+        if (previewing) SceneVisibilityManager.instance.Hide(objs.ToArray(), false);
+        else SceneVisibilityManager.instance.Show(objs.ToArray(), false);
+        Menu.SetChecked(PreviewMenu, previewing);
+        Debug.Log(previewing
+            ? $"[Fast Boat] Предпросмотр: в Scene View скрыто {objs.Count} рендеров мостика — видна стойка (катер в редакторе выключен). Лишнее/недостающее — выделить и «Fast Boat — скрыть/оставить выделенное»."
+            : "[Fast Boat] Предпросмотр выключен.");
+    }
+
+    // ─────────── Пол ───────────
+    // Пол, на котором игрок стоит в Play Mode: у XR Rig гравитация, он опускается на ближайший коллайдер
+    // под собой. Положение XR Origin в сцене может быть выше (12.10.2026: 0,14 м — палуба катера вышла
+    // выше настоящего пола, стойка оказалась «низко»). Луч вниз в точке игрока, мимо коллайдеров самого Rig.
+    private static float FindFloor(Transform ship, Transform rig, Transform wheel, StringBuilder log)
+    {
+        Vector3 at = rig != null ? rig.position : wheel.position;
+        float rigY = ship.InverseTransformPoint(at).y;
+        Physics.SyncTransforms();
+        Vector3 from = new Vector3(at.x, Mathf.Max(at.y, wheel.position.y) + 1f, at.z);
+        RaycastHit[] hits = Physics.RaycastAll(from, Vector3.down, 6f, ~0, QueryTriggerInteraction.Ignore);
+        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+        foreach (RaycastHit h in hits)
+        {
+            if (rig != null && h.collider.transform.IsChildOf(rig)) continue;
+            if (!h.collider.transform.IsChildOf(ship)) continue;
+            float y = ship.InverseTransformPoint(h.point).y;
+            if (y > rigY + 0.3f) continue;   // не пол, а что-то над игроком (подволок, панель)
+            log.AppendLine($"  пол под игроком: y = {y:F2} (Ship, коллайдер «{h.collider.name}»); XR Origin в сцене — y = {rigY:F2}");
+            return y;
+        }
+        log.AppendLine($"  ! коллайдер пола под игроком не найден — пол по XR Origin, y = {rigY:F2}");
+        return rigY;
+    }
+
     // ─────────── Объёмы в системе Ship ───────────
     private struct LocalBox
     {
@@ -329,9 +431,23 @@ public static class SetupFastBoat
         return b;
     }
 
-    // Часть целиком внутри объёма стойки (с запасом)
-    private static bool Inside(LocalBox b, Vector3 min, Vector3 max) =>
-        b.Min.x >= min.x && b.Max.x <= max.x && b.Min.z >= min.z && b.Max.z <= max.z && b.Min.y >= min.y && b.Max.y <= max.y;
+    // Часть тумбы: середина в плане — в объёме стойки, в плане небольшая, по высоте — от пола до верха органов управления
+    private static bool IsConsolePart(LocalBox b, Vector3 min, Vector3 max)
+    {
+        Vector3 c = 0.5f * (b.Min + b.Max), s = b.Max - b.Min;
+        return c.x >= min.x && c.x <= max.x && c.z >= min.z && c.z <= max.z
+            && s.x <= MaxPartFootprint && s.z <= MaxPartFootprint
+            && b.Min.y >= min.y && b.Max.y <= max.y;
+    }
+
+    // Расстояние в плане от середины части до объёма стойки, м
+    private static float Offset(LocalBox b, Vector3 min, Vector3 max)
+    {
+        Vector3 c = 0.5f * (b.Min + b.Max);
+        float dx = Mathf.Max(0f, Mathf.Max(min.x - c.x, c.x - max.x));
+        float dz = Mathf.Max(0f, Mathf.Max(min.z - c.z, c.z - max.z));
+        return Mathf.Sqrt(dx * dx + dz * dz);
+    }
 
     private static bool NearZone(LocalBox b, Vector3 min, Vector3 max, float d) =>
         b.Max.x >= min.x - d && b.Min.x <= max.x + d && b.Max.z >= min.z - d && b.Min.z <= max.z + d && b.Min.y <= max.y + d;

@@ -13,7 +13,12 @@
 //   • высота — судно вместе с игроком опускается (ShipMotion.SetHullFrame): палуба ≈ 1,2 м
 //     над водой вместо ≈ 5 м у мостика; центр качки — мидель катера на ватерлинии;
 //   • контуры корпуса для шейдера воды (вода внутри не рисуется, след, бурун) — коробки катера;
-//   • отсветы своих огней — на места огней катера (мачта, борта).
+//   • отсветы своих огней — на места огней катера (мачта, борта);
+//   • гашение волн у борта (материал воды) — слабее: у мостика 25 % в полосе 8 м, с низкой палубы
+//     катера это видно как ровный «срез» воды, а катер качается на полных волнах; у катера — 90 % в 2 м.
+//     Материал — общий ассет: при выходе из Play Mode значения мостика возвращаются.
+// Ручная правка стойки — Tools/VR Bridge/Fast Boat — оставить / скрыть выделенное (forceKeep / forceHide),
+// предпросмотр — Tools/VR Bridge/Fast Boat — предпросмотр стойки (Scene View).
 // Списки и положения заполняет Tools/VR Bridge/Setup Fast Boat (их можно править в инспекторе).
 // Исходное состояние каждого рендера и объекта запоминается при запуске и возвращается при
 // обратном переключении — то, что было выключено в сцене, выключенным и остаётся.
@@ -62,6 +67,18 @@ public class ShipTypeSwitcher : MonoBehaviour
     public GameObject[] deactivateOnBoat = new GameObject[0];
     [Tooltip("Справочно: части модели мостика, оставленные как рулевая стойка")]
     public Renderer[] keptConsole = new Renderer[0];
+    [Tooltip("Ручная правка (Tools/VR Bridge/Fast Boat: оставить выделенное) — Setup Fast Boat всегда оставляет")]
+    public Renderer[] forceKeep = new Renderer[0];
+    [Tooltip("Ручная правка (Tools/VR Bridge/Fast Boat: скрыть выделенное) — Setup Fast Boat всегда скрывает")]
+    public Renderer[] forceHide = new Renderer[0];
+
+    [Header("Вода у борта на катере")]
+    [Tooltip("Материал воды (пусто — ShipMotion.oceanMaterial). Гашение волн у борта подобрано под мостик " +
+             "(25 % в полосе 8 м): с низкой палубы катера гладкая полоса видна как «срез», а катер качается на полных волнах")]
+    public Material oceanMaterial;
+    [Range(0f, 1f)] public float boatHullDampMin = 0.9f;
+    [Tooltip("Ширина полосы гашения у катера, м")]
+    public float boatHullDampWidth = 2f;
 
     [Header("Отсветы своих огней")]
     public Light[] ownLightGlows = new Light[0];
@@ -80,6 +97,9 @@ public class ShipTypeSwitcher : MonoBehaviour
     public const string BoatIdSuffix = "-FB";
     public const string BoatTitleSuffix = " (катер)";
 
+    private static readonly int HullDampMinId = Shader.PropertyToID("_HullDampMin");
+    private static readonly int HullDampWidthId = Shader.PropertyToID("_HullDampWidth");
+    private float bridgeDampMin = -1f, bridgeDampWidth = -1f;   // < 0 — не запомнены (нет материала)
     private bool[] hideWasEnabled = new bool[0];
     private bool[] deactivateWasActive = new bool[0];
     private Vector3[] glowBridgePositions = new Vector3[0];
@@ -113,6 +133,13 @@ public class ShipTypeSwitcher : MonoBehaviour
             if (ownLightGlows[i] != null) glowBridgePositions[i] = ownLightGlows[i].transform.localPosition;
 
         if (boatRoot != null) boatRoot.SetActive(false);   // при запуске — модель 45 м, как до запроса 15
+
+        if (oceanMaterial == null && motion != null) oceanMaterial = motion.oceanMaterial;
+        if (oceanMaterial != null && oceanMaterial.HasProperty(HullDampMinId) && oceanMaterial.HasProperty(HullDampWidthId))
+        {
+            bridgeDampMin = oceanMaterial.GetFloat(HullDampMinId);
+            bridgeDampWidth = oceanMaterial.GetFloat(HullDampWidthId);
+        }
     }
 
     void OnEnable()
@@ -126,6 +153,14 @@ public class ShipTypeSwitcher : MonoBehaviour
     {
         BridgeMenu.Unregister(menuCommand);
         menuCommand = null;
+        SetWaterDamping(false);   // материал воды — общий ассет: после Play Mode — как у мостика
+    }
+
+    private void SetWaterDamping(bool boat)
+    {
+        if (oceanMaterial == null || bridgeDampMin < 0f) return;
+        oceanMaterial.SetFloat(HullDampMinId, boat ? boatHullDampMin : bridgeDampMin);
+        oceanMaterial.SetFloat(HullDampWidthId, boat ? boatHullDampWidth : bridgeDampWidth);
     }
 
     void OnDestroy()
@@ -194,6 +229,7 @@ public class ShipTypeSwitcher : MonoBehaviour
             water.bowTip = boat ? boatBowBox : bridgeBowBox;
         }
         if (motion != null) motion.SetHullFrame(boat ? boatPivot : bridgePivot, boat ? boatVerticalOffset : 0f);
+        SetWaterDamping(boat);
 
         for (int i = 0; i < ownLightGlows.Length; i++)
         {
