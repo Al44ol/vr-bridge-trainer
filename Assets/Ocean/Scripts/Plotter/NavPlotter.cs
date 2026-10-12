@@ -470,7 +470,7 @@ public class NavPlotter : MonoBehaviour
         int k = PlotterMath.NearestByCpa(cpas);
         if (k < 0)
         {
-            string none = ExerciseTargets.All.Count == 0 ? "других судов нет" : cpas.Count == 0 ? "цели не обнаружены" : "опасных целей нет";
+            string none = ExerciseTargets.All.Count == 0 ? "других судов нет" : cpas.Count == 0 ? "цели не обнаружены" : "сближающихся целей нет";
             b.Append($"<size=85%><color=#9AA6B2>{none}</color></size>");
             return b.ToString().TrimEnd();
         }
@@ -590,8 +590,9 @@ public class NavPlotter : MonoBehaviour
         // Столбец: кнопки и данные
         column = MakeRect(root, "Column", new Vector2(1f, 0.5f), new Vector2(Width - MapSize, Height), new Vector2(1f, 0.5f), Vector2.zero);
         float w = Width - MapSize - 2f * Pad, half = (w - Gap) * 0.5f, y = -Pad;
-        Button(column, Pad, y, half, "−", () => StepRange(-1), null, () => rangeIndex > 0 && !routeMode ? ButtonColor : NeutralColor);
-        Button(column, Pad + half + Gap, y, half, "+", () => StepRange(+1), null, () => rangeIndex < PlotterMath.RangesNm.Length - 1 || routeMode ? ButtonColor : NeutralColor);
+        // «−» — мельче (шкала больше), «+» — крупнее (шкала меньше), как масштаб карты
+        Button(column, Pad, y, half, "−", () => StepRange(+1), null, () => rangeIndex < PlotterMath.RangesNm.Length - 1 || routeMode ? ButtonColor : NeutralColor);
+        Button(column, Pad + half + Gap, y, half, "+", () => StepRange(-1), null, () => rangeIndex > 0 || routeMode ? ButtonColor : NeutralColor);
         y -= ButtonH + Gap;
         Button(column, Pad, y, w, "", ToggleHeadUp, () => headUp ? "Курс вверх" : "Север вверх", () => headUp ? ActiveColor : ButtonColor);
         y -= ButtonH + Gap;
