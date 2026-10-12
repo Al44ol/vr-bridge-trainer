@@ -170,7 +170,12 @@ XR Origin — дочерний объект Ship, игрок качается в
 ## Графики в разборе (запрос 17)
 - Core `Core/Debrief/DebriefPlots.cs`: `DebriefPlots.Build(RecordedSession, AssessmentResult)` → 4 `DebriefPlot` (курс / скорость / XTE / руль; ряды, отметки манёвров, аварий, вводных, **паузы**), `PlotAxes` — диапазоны и деления осей (их же берёт `SvgPlot.Render`). `SessionReport` рисует раздел «Графики» по ним (`ToSvg`); `DebriefBuild.Plots` — для панели. report.html без паузы — бит в бит прежний (14 прогонов сверены).
 - Сцена: `Scripts/Scenarios/DebriefPlotGraphic.cs` (MaskableGraphic, как схема); `ScenarioPanel` — 4-я вкладка «Графики», один график на поле `mapHeight`, листание «< курс · 1 / 4 >». На планшете графиков нет (решение пользователя). Setup не нужен.
-- Тесты: `DebriefTests` +2 (`Plots_SeriesFromTrack_BreaksMarksSafeSpeed`, `Plots_ReportAndPanelSameSeriesAndAxes`); всего 218. Подробно — ThesisNotes, раздел 17.
+- Тесты: `DebriefTests` +2 (`Plots_SeriesFromTrack_BreaksMarksSafeSpeed`, `Plots_ReportAndPanelSameSeriesAndAxes`); всего 218. Проверено в шлеме — закрыт 12.10.2026. Подробно — ThesisNotes, раздел 17 (итог — 17.8).
+
+## Сборка (после запроса 17)
+- Пока только PC (Windows) — пробная сборка для проверки окна инструктора, PiP и замера вне редактора; инструкция — `Docs/Build.md`. В сборке: сессии — `Документы/VRBridgeTrainer/Sessions`; замеры — `<папка сборки>/ThesisData/Performance` (путь от `Application.dataPath`); лог — `%USERPROFILE%/AppData/LocalLow/DefaultCompany/VR_BridgeTrainer_1/Player.log`; список сценариев — сохранённый в сцене (`ScenarioLibrarySync` работает только при входе в Play Mode).
+- Уровень качества: редактор играет на «Low» (`Performance URP Config`), а по умолчанию для Windows стоял «Ultra» (`Quality URP Config`, VSync) — для сборки выставить «Low», чтобы сборка совпадала с замерами в редакторе.
+- Автономная версия (Quest 3, Android) — запрос 20 в Plan.md (черновик).
 
 ## Быстроходный катер (запрос 15)
 - Core: `ShipPresets.FillFastBoat` (единственный источник значений: L 18 м, 35 уз, B 4,8, d 1,1, K'/T' 1,0/1,2, руль 10 °/с; источники — `ShipParameters_Sources.md`), `Scenarios/ScenarioVariants` (копия сценария на другом судне: id «-FB», начальная скорость v₀·U_уст'(SF)/U_уст(SF), исходник для перезапуска, кэш).
