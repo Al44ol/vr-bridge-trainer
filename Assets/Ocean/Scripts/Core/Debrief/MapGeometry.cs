@@ -116,6 +116,35 @@ public static class MapGeometry
     }
 
     /// <summary>Триангуляция простого многоугольника («уши»): тройки индексов вершин.</summary>
+    /// <summary>
+    /// Штрихи на отрезке длины len (штрих dash, пробел gap): интервалы [s0; s1] от начала отрезка.
+    /// phase — положение в периоде на входе (переносится на следующий отрезок ломаной); хранится
+    /// в пределах периода, шаг не меньше 10⁻⁶ периода. Прежний цикл копил фазу без приведения,
+    /// и при phase % period = dash − 2·10⁻¹⁴ шаг переставал сдвигать позицию — бесконечный цикл,
+    /// Unity зависал при открытии вкладки «Схема» (C4-01, 12.10.2026).
+    /// </summary>
+    public static void DashRuns(double len, double dash, double gap, ref double phase, List<(double s0, double s1)> runs)
+    {
+        runs.Clear();
+        double period = dash + gap;
+        if (!(len > 0) || !(dash > 0) || !(period > 0) || double.IsInfinity(len)) return;
+        double minStep = 1e-6 * period;
+        phase %= period;
+        if (phase < 0) phase += period;
+        double s = 0;
+        while (s < len)
+        {
+            bool on = phase < dash;
+            double run = Math.Max(minStep, on ? dash - phase : period - phase);
+            run = Math.Min(run, len - s);
+            if (on) runs.Add((s, s + run));
+            s += run;
+            phase += run;
+            if (phase >= period - minStep) phase = 0;
+            else if (on && phase >= dash - minStep) phase = dash;
+        }
+    }
+
     public static List<int> Triangulate(IList<WorldPosition> poly)
     {
         var tri = new List<int>();

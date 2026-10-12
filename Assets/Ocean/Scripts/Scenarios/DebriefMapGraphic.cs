@@ -162,6 +162,8 @@ public class DebriefMapGraphic : MaskableGraphic
         }
     }
 
+    private readonly List<(double s0, double s1)> dashRuns = new List<(double s0, double s1)>();
+
     private void Polyline(VertexHelper vh, List<WorldPosition> pts, float width, Color c, bool dashed = false)
     {
         List<WorldPosition> dec = MapGeometry.Decimate(pts, 1.5 / scale);
@@ -171,16 +173,11 @@ public class DebriefMapGraphic : MaskableGraphic
             WorldPosition a = dec[i - 1], b = dec[i];
             if (!dashed) { Segment(vh, a, b, width, c); continue; }
             double de = b.East - a.East, dn = b.North - a.North, len = Math.Sqrt(de * de + dn * dn);
-            double s = 0;
-            while (s < len)
-            {
-                double period = dash + gap, inPeriod = phase % period;
-                double run = inPeriod < dash ? Math.Min(dash - inPeriod, len - s) : Math.Min(period - inPeriod, len - s);
-                if (inPeriod < dash)
-                    Segment(vh, new WorldPosition(a.East + de * s / len, a.North + dn * s / len),
-                                new WorldPosition(a.East + de * (s + run) / len, a.North + dn * (s + run) / len), width, c);
-                s += run; phase += run;
-            }
+            // Штрихи — MapGeometry.DashRuns (фаза в пределах периода; прежний цикл зацикливался, C4)
+            MapGeometry.DashRuns(len, dash, gap, ref phase, dashRuns);
+            foreach ((double s0, double s1) in dashRuns)
+                Segment(vh, new WorldPosition(a.East + de * s0 / len, a.North + dn * s0 / len),
+                            new WorldPosition(a.East + de * s1 / len, a.North + dn * s1 / len), width, c);
         }
     }
 

@@ -321,6 +321,36 @@ public class DebriefTests
 
     // ─────────── Геометрия ───────────
     [Test]
+    public void Geometry_DashRuns_TerminateAtRoundingEdge()
+    {
+        // Случай из шлема (C4-01, вид «весь маршрут»): штрих 41,58 м, пробел 29,7 м, ось фарватера 3500 м —
+        // прежний цикл на s = 326,7 м получал шаг 2·10⁻¹⁴ м и не заканчивался (Unity зависал)
+        var runs = new List<(double s0, double s1)>();
+        double phase = 0;
+        MapGeometry.DashRuns(3500, 41.58, 29.7, ref phase, runs);
+        double period = 41.58 + 29.7, on = 0;
+        foreach (var r in runs) { Assert.Greater(r.s1, r.s0); on += r.s1 - r.s0; }
+        Assert.AreEqual(Math.Ceiling(3500 / period), runs.Count, 1, "штрих на каждый период");
+        Assert.AreEqual(41.58 / period, on / 3500, 0.01, "доля штриха");
+        Assert.GreaterOrEqual(phase, 0); Assert.Less(phase, period, "фаза — в пределах периода");
+
+        // Перебор масштабов и длин: всегда конечное число штрихов
+        for (int k = 1; k <= 400; k++)
+        {
+            double scale = 0.01 + k * 0.0123, dash = 7 / scale, gap = 5 / scale;
+            phase = 0;
+            int total = 0;
+            foreach (double len in new[] { 3500.0, 2700.0, 1234.567, 0.3, 1e-9 })
+            {
+                MapGeometry.DashRuns(len, dash, gap, ref phase, runs);
+                total += runs.Count;
+                Assert.LessOrEqual(runs.Count, len / (dash + gap) + 2);
+            }
+            Assert.Greater(total, 0);
+        }
+    }
+
+    [Test]
     public void Geometry_ClipTriangulateDecimate()
     {
         var r = new MapRect(0, 0, 100, 100);
