@@ -13,6 +13,8 @@
 //   • в шлеме — итог оценки в реальном времени (по C2 он бит в бит равен
 //     оценке по записи), отчёт пишется в фоновом потоке (DebriefBuild);
 //   • для старой сессии — офлайн-оценка SessionAssessment (BuildForFolder).
+// Запрос 17: ряды графиков — DebriefPlots (общие с вкладкой «Графики» в шлеме),
+// добавлена отметка паузы.
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -238,69 +240,18 @@ public static class SessionReport
 
     private static void Plots(StringBuilder h, RecordedSession s, AssessmentResult r)
     {
-        if (s.Track.Count < 2) return;
+        // Ряды и отметки — DebriefPlots (запрос 17): те же графики на вкладке «Графики» в шлеме
+        List<DebriefPlot> plots = DebriefPlots.Build(s, r);
+        if (plots.Count == 0) return;
         h.Append("<h2>Графики</h2>\n");
-        int step = Math.Max(1, s.Track.Count / 1500);
-        var course = new List<Vector2>(); var speed = new List<Vector2>();
-        var xte = new List<Vector2>(); var limP = new List<Vector2>(); var limN = new List<Vector2>();
-        var rudO = new List<Vector2>(); var rudA = new List<Vector2>();
-        double prevHdg = double.NaN; int prevLeg = int.MinValue;
-        for (int i = 0; i < s.Track.Count; i += step)
-        {
-            TrackSample t = s.Track[i];
-            float x = (float)(t.Time / 60.0);
-            if (!double.IsNaN(prevHdg) && Math.Abs(t.HeadingDeg - prevHdg) > 180) course.Add(new Vector2(x, float.NaN));   // 359° → 1°: разрыв
-            course.Add(new Vector2(x, (float)t.HeadingDeg));
-            prevHdg = t.HeadingDeg;
-            speed.Add(new Vector2(x, (float)t.SpeedKnots));
-            if (t.Leg != prevLeg && prevLeg != int.MinValue) { xte.Add(new Vector2(x, float.NaN)); limP.Add(new Vector2(x, float.NaN)); limN.Add(new Vector2(x, float.NaN)); }
-            prevLeg = t.Leg;
-            if (!double.IsNaN(t.XteM)) xte.Add(new Vector2(x, (float)t.XteM));
-            if (!double.IsNaN(t.XteLimitM) && t.XteLimitM > 0) { limP.Add(new Vector2(x, (float)t.XteLimitM)); limN.Add(new Vector2(x, (float)-t.XteLimitM)); }
-            rudO.Add(new Vector2(x, (float)t.RudderOrderedDeg));
-            rudA.Add(new Vector2(x, (float)t.RudderActualDeg));
-        }
-
-        int fig = 0;
-        void Fig(SvgPlot p, string caption)
-        {
-            p.ClipId = "plot" + (fig++);
-            p.Height = 300;
-            if (r != null)
-                foreach (EncounterSummary e in r.Encounters)
-                    if (!double.IsNaN(e.ActionTime)) p.AddMark((float)(e.ActionTime / 60.0), e.TargetId);
-            foreach (ExerciseEvent e in s.Events)
-            {
-                if (e.Type == ExerciseEventType.Grounded || e.Type == ExerciseEventType.Collision) p.AddMark((float)(e.Time / 60.0), e.Type == ExerciseEventType.Grounded ? "мель" : "столкн.");
-                // D1: вводные инструктора
-                else if (e.Type == ExerciseEventType.EngineFailure || e.Type == ExerciseEventType.SteeringFailure)
-                    p.AddMark((float)(e.Time / 60.0), e.Type == ExerciseEventType.EngineFailure ? "отказ ГД" : "отказ руля");
-            }
-            h.Append("<figure>\n").Append(p.Render()).Append($"<figcaption>{H(caption)}</figcaption>\n</figure>\n");
-        }
-
-        var pc = new SvgPlot { Title = "Курс", XLabel = "Время, мин", YLabel = "Курс, °" };
-        pc.Add("курс", SvgPlot.Dash.Solid, course);
-        Fig(pc, "Курс по времени; отметки — начало манёвра для расхождения с целью");
-        var ps = new SvgPlot { Title = "Скорость", XLabel = "Время, мин", YLabel = "Скорость, уз" };
-        ps.Add("скорость", SvgPlot.Dash.Solid, speed);
-        // C4: безопасная скорость сценария (ограниченная видимость, F3, F4)
-        double safe = s.Meta != null && s.Meta.scenario != null ? s.Meta.scenario.safe_speed_kn : 0.0;
-        if (safe > 0 && speed.Count > 1)
-            ps.Add("безопасная", SvgPlot.Dash.Dashed, new List<Vector2> { new Vector2(speed[0].x, (float)safe), new Vector2(speed[speed.Count - 1].x, (float)safe) });
-        Fig(ps, safe > 0 ? "Скорость по времени; штрих — безопасная скорость сценария (ограниченная видимость)" : "Скорость по времени");
-        var px = new SvgPlot { Title = "Боковое отклонение от линии пути", XLabel = "Время, мин", YLabel = "XTE, м (> 0 — правее)" };
-        px.Add("XTE", SvgPlot.Dash.Solid, xte);
-        // обе границы коридора — одна линия легенды (разрыв между ними)
-        var lim = new List<Vector2>(limP) { new Vector2(float.NaN, float.NaN) };
-        lim.AddRange(limN);
-        px.Add("± XTE доп.", SvgPlot.Dash.Dashed, lim);
-        Fig(px, "Боковое отклонение XTE и допуск коридора по участкам");
-        var pr = new SvgPlot { Title = "Руль", XLabel = "Время, мин", YLabel = "Руль, ° (> 0 — ПБ)" };
-        pr.Add("заданный", SvgPlot.Dash.Solid, rudO);
-        pr.Add("фактический", SvgPlot.Dash.Dashed, rudA);
-        Fig(pr, "Заданный и фактический угол руля");
+        for (int i = 0; i < plots.Count; i++)
+            h.Append("<figure>\n").Append(plots[i].ToSvg(PlotClipId(i), PlotHeight).Render())
+             .Append($"<figcaption>{H(plots[i].Caption)}</figcaption>\n</figure>\n");
     }
+
+    /// <summary>Высота графика в report.html, пикселей SVG (ширина — SvgPlot.Width).</summary>
+    public const float PlotHeight = 300;
+    public static string PlotClipId(int index) => "plot" + index;
 
     private static void Events(StringBuilder h, RecordedSession s)
     {

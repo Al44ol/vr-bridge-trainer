@@ -9,6 +9,8 @@
 // графиков не изменился: новые возможности включаются только явно —
 //   • точка с NaN разрывает линию (курс 359° → 1°);
 //   • AddMark — вертикальная отметка момента (действие, сближение).
+// Запрос 17: диапазоны и деления осей — PlotAxes (DebriefPlots.cs), общий
+// расчёт с графиками разбора в шлеме; вывод SVG не изменился.
 // ============================================================
 using System.Collections.Generic;
 using System.Globalization;
@@ -43,30 +45,11 @@ public sealed class SvgPlot
         const float ml = 80, mr = 20, mt = 40, mb = 60;
         float pw = Width - ml - mr, ph = Height - mt - mb;
 
-        // Диапазоны (точки с NaN — разрывы линии, в диапазон не входят)
-        float x0 = float.MaxValue, x1 = float.MinValue, y0 = float.MaxValue, y1 = float.MinValue;
-        foreach (var s in series)
-        foreach (Vector2 p in s.pts)
-        {
-            if (float.IsNaN(p.x) || float.IsNaN(p.y)) continue;
-            x0 = Mathf.Min(x0, p.x); x1 = Mathf.Max(x1, p.x);
-            y0 = Mathf.Min(y0, p.y); y1 = Mathf.Max(y1, p.y);
-        }
-        if (x0 > x1) { x0 = 0; x1 = 1; y0 = 0; y1 = 1; }
-        if (x1 - x0 < 1e-6f) { x0 -= 1; x1 += 1; }
-        if (y1 - y0 < 1e-6f) { y0 -= 1; y1 += 1; }
-        float xs = NiceStep(x1 - x0), ys = NiceStep(y1 - y0);
-        x0 = Mathf.Floor(x0 / xs) * xs; x1 = Mathf.Ceil(x1 / xs) * xs;
-        y0 = Mathf.Floor(y0 / ys) * ys; y1 = Mathf.Ceil(y1 / ys) * ys;
-        if (EqualAspect)
-        {
-            // Одинаковый масштаб по осям: расширяем меньший диапазон
-            float k = Mathf.Max((x1 - x0) / pw, (y1 - y0) / ph);
-            float cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-            x0 = cx - k * pw / 2; x1 = cx + k * pw / 2;
-            y0 = cy - k * ph / 2; y1 = cy + k * ph / 2;
-            xs = ys = NiceStep(Mathf.Max(x1 - x0, y1 - y0));
-        }
+        // Диапазоны (точки с NaN — разрывы линии, в диапазон не входят) — PlotAxes, общий с графиками в шлеме (запрос 17)
+        var all = new List<List<Vector2>>(series.Count);
+        foreach (var s in series) all.Add(s.pts);
+        PlotAxes ax = PlotAxes.Compute(all, EqualAspect, pw, ph);
+        float x0 = ax.X0, x1 = ax.X1, y0 = ax.Y0, y1 = ax.Y1, xs = ax.XStep, ys = ax.YStep;
 
         float X(float v) => ml + (v - x0) / (x1 - x0) * pw;
         float Y(float v) => mt + ph - (v - y0) / (y1 - y0) * ph;
@@ -77,12 +60,12 @@ public sealed class SvgPlot
         sb.AppendLine("<rect width=\"100%\" height=\"100%\" fill=\"white\"/>");
 
         // Сетка и подписи делений
-        for (float v = Mathf.Ceil(x0 / xs) * xs; v <= x1 + xs * 1e-3f; v += xs)
+        foreach (float v in PlotAxes.Ticks(x0, x1, xs))
         {
             sb.AppendLine($"<line x1=\"{N(X(v))}\" y1=\"{N(mt)}\" x2=\"{N(X(v))}\" y2=\"{N(mt + ph)}\" stroke=\"#c8c8c8\" stroke-width=\"0.5\"/>");
             sb.AppendLine($"<text x=\"{N(X(v))}\" y=\"{N(mt + ph + 18)}\" text-anchor=\"middle\">{Tick(v, xs)}</text>");
         }
-        for (float v = Mathf.Ceil(y0 / ys) * ys; v <= y1 + ys * 1e-3f; v += ys)
+        foreach (float v in PlotAxes.Ticks(y0, y1, ys))
         {
             sb.AppendLine($"<line x1=\"{N(ml)}\" y1=\"{N(Y(v))}\" x2=\"{N(ml + pw)}\" y2=\"{N(Y(v))}\" stroke=\"#c8c8c8\" stroke-width=\"0.5\"/>");
             sb.AppendLine($"<text x=\"{N(ml - 6)}\" y=\"{N(Y(v) + 5)}\" text-anchor=\"end\">{Tick(v, ys)}</text>");

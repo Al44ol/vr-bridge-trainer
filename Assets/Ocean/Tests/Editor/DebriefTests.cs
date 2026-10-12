@@ -412,4 +412,139 @@ public class DebriefTests
         Assert.AreEqual(1, Count(s, "<polyline"));
         Assert.AreEqual(0, Count(s, "stroke-width=\"0.8\" stroke-dasharray=\"2,3\""), "отметок нет");
     }
+
+    // ─────────── Графики разбора (запрос 17) ───────────
+    private static List<List<Vector2>> RunsOf(List<Vector2> pts)
+    {
+        var runs = new List<List<Vector2>>();
+        var cur = new List<Vector2>();
+        foreach (Vector2 p in pts)
+        {
+            if (float.IsNaN(p.x) || float.IsNaN(p.y)) { if (cur.Count > 1) runs.Add(cur); cur = new List<Vector2>(); continue; }
+            cur.Add(p);
+        }
+        if (cur.Count > 1) runs.Add(cur);
+        return runs;
+    }
+
+    [Test]
+    public void Plots_SeriesFromTrack_BreaksMarksSafeSpeed()
+    {
+        string dir = NewDir();
+        try
+        {
+            // B3-01 «правильно»: четыре графика, разрывы курса и XTE, отметки манёвров
+            ExerciseSimulation sim = AssessmentTests.B3Run("correct", dir);
+            RecordedSession s = SessionReader.Load(dir);
+            List<DebriefPlot> plots = DebriefPlots.Build(s, sim.LiveResult);
+            CollectionAssert.AreEqual(new[] { "course", "speed", "xte", "rudder" }, plots.ConvertAll(p => p.Key));
+            int step = Math.Max(1, s.Track.Count / DebriefPlots.MaxPoints);
+            int legChanges = 0, sampled = 0;
+            for (int i = 0, prev = int.MinValue; i < s.Track.Count; i += step, sampled++)
+            {
+                if (prev != int.MinValue && s.Track[i].Leg != prev) legChanges++;
+                prev = s.Track[i].Leg;
+            }
+            foreach (List<Vector2> run in RunsOf(plots[0].Series[0].Points))
+                for (int i = 1; i < run.Count; i++) Assert.LessOrEqual(Mathf.Abs(run[i].y - run[i - 1].y), 180f, "курс: переход 359° → 0° — разрыв, а не линия через весь график");
+            Assert.AreEqual(sampled, plots[1].Series[0].Points.Count, "скорость: точка на строку траектории (шаг прореживания)");
+            Assert.LessOrEqual(sampled, DebriefPlots.MaxPoints * 2);
+            Assert.AreEqual(legChanges, plots[2].Series[0].Points.FindAll(p => float.IsNaN(p.y)).Count, "XTE: разрыв на каждой смене участка");
+            Assert.AreEqual(2, plots[2].Series.Count, "XTE и допуск");
+            Assert.AreEqual(1, plots[1].Series.Count, "B3-01 без безопасной скорости");
+            int manoeuvres = sim.LiveResult.Encounters.FindAll(e => !double.IsNaN(e.ActionTime)).Count;
+            Assert.Greater(manoeuvres, 0);
+            foreach (DebriefPlot p in plots)
+            {
+                List<PlotMark> m = p.Marks.FindAll(x => x.Kind == PlotMarkKind.Manoeuvre);
+                Assert.AreEqual(manoeuvres, m.Count, $"{p.Key}: отметки манёвров");
+                EncounterSummary e0 = sim.LiveResult.Encounters.Find(e => !double.IsNaN(e.ActionTime));
+                Assert.IsTrue(m.Exists(x => Mathf.Abs(x.X - (float)(e0.ActionTime / 60.0)) < 1e-4f && x.Label == e0.TargetId), "отметка — в момент действия, подпись — цель");
+            }
+            Delete(dir); dir = NewDir();
+
+            // C4-01: линия безопасной скорости
+            ExerciseSimulation fog = new ExerciseSimulation { Scenario = FogTests.DemoC4(), RecordFolder = dir };
+            DemoAssessmentRuns.Configure(fog, "fog_correct");
+            fog.Run();
+            List<DebriefPlot> fp = DebriefPlots.Build(SessionReader.Load(dir), fog.LiveResult);
+            PlotSeries safe = fp[1].Series.Find(x => x.Label == "безопасная");
+            Assert.IsNotNull(safe, "C4-01: безопасная скорость");
+            Assert.AreEqual((float)FogTests.DemoC4().safeSpeedKnots, safe.Points[0].y, 1e-4f);
+            Assert.AreEqual(SvgPlot.Dash.Dashed, safe.Dash);
+            Delete(dir); dir = NewDir();
+
+            // B2-01 с отказом руля: отметка вводной; пауза (вставлена в запись) — отметка на всех графиках и в report.html
+            var b2 = new ExerciseSimulation { Scenario = AssessmentTests.DemoB2(), RecordFolder = dir };
+            DemoAssessmentRuns.Configure(b2, "steer_fast");
+            b2.Run();
+            RecordedSession bs = SessionReader.Load(dir);
+            var opt = new ReportOptions { AssessmentSource = "проверка", Generated = new DateTime(2026, 10, 13, 12, 0, 0) };
+            string noPause = SessionReport.Build(bs, b2.LiveResult, DebriefMap.Build(bs, b2.LiveResult), opt);
+            Assert.AreEqual(0, Count(noPause, ">пауза</text>"));
+            List<DebriefPlot> bp = DebriefPlots.Build(bs, b2.LiveResult);
+            foreach (DebriefPlot p in bp)
+                Assert.IsTrue(p.Marks.Exists(x => x.Kind == PlotMarkKind.Failure && x.Label == "отказ руля" &&
+                                                  Mathf.Abs(x.X - (float)(DemoAssessmentRuns.FailureTime / 60.0)) < 1e-4f), $"{p.Key}: вводная");
+            bs.Events.Add(new ExerciseEvent(ExerciseEventType.ExercisePaused) { Time = 120, InExercise = true, ByInstructor = true });
+            foreach (DebriefPlot p in DebriefPlots.Build(bs, b2.LiveResult))
+                Assert.AreEqual(1, p.Marks.FindAll(x => x.Kind == PlotMarkKind.Pause && Mathf.Abs(x.X - 2f) < 1e-5f && x.Label == "пауза").Count, $"{p.Key}: пауза");
+            string withPause = SessionReport.Build(bs, b2.LiveResult, DebriefMap.Build(bs, b2.LiveResult), opt);
+            Assert.AreEqual(4, Count(withPause, ">пауза</text>"), "пауза — на каждом из 4 графиков отчёта");
+        }
+        finally { Delete(dir); }
+    }
+
+    [Test]
+    public void Plots_ReportAndPanelSameSeriesAndAxes()
+    {
+        string dir = NewDir();
+        try
+        {
+            ExerciseSimulation sim = AssessmentTests.B3Run("port", dir);
+            var build = new DebriefBuild(dir, sim.LiveResult);
+            build.Run();
+            Assert.AreEqual("", build.Error);
+            Assert.AreEqual(4, build.Plots.Count, "графики для панели построены вместе с отчётом");
+            string html = File.ReadAllText(build.ReportPath);
+            int at = html.IndexOf("Графики</h2>", StringComparison.Ordinal);   // номер раздела ставит NumberSections
+            Assert.GreaterOrEqual(at, 0, "раздел «Графики»");
+            string section = html.Substring(at);
+            string[] figs = section.Split(new[] { "<figure>" }, StringSplitOptions.RemoveEmptyEntries);
+            Assert.AreEqual(1 + 4, figs.Length, "заголовок раздела + 4 графика");
+            for (int i = 0; i < build.Plots.Count; i++)
+            {
+                DebriefPlot p = build.Plots[i];
+                string svg = figs[i + 1];
+                StringAssert.Contains($"<clipPath id=\"{SessionReport.PlotClipId(i)}\">", svg);
+                StringAssert.Contains($">{SvgPlot.Xml(p.Title)}</text>", svg);
+                StringAssert.Contains($"<figcaption>{p.Caption}</figcaption>", svg);
+
+                // Ряды: число отрезков (между разрывами) и точек в каждом — как в описании для шлема
+                var expected = new List<int>();
+                foreach (PlotSeries s in p.Series) foreach (List<Vector2> run in RunsOf(s.Points)) expected.Add(run.Count);
+                var actual = new List<int>();
+                foreach (Match m in Regex.Matches(svg, "<polyline [^>]*points=\"([^\"]*)\""))
+                    actual.Add(m.Groups[1].Value.Trim().Split(' ').Length);
+                CollectionAssert.AreEqual(expected, actual, $"{p.Key}: отрезки и точки рядов");
+
+                // Деления осей — общий расчёт PlotAxes (у панели — то же поле без равного масштаба)
+                PlotAxes ax = p.Axes(600f, 400f);
+                var xt = new List<string>(); foreach (float v in ax.XTicks()) xt.Add(SvgPlot.Tick(v, ax.XStep));
+                var yt = new List<string>(); foreach (float v in ax.YTicks()) yt.Add(SvgPlot.Tick(v, ax.YStep));
+                var xs = new List<string>();
+                foreach (Match m in Regex.Matches(svg, "<text x=\"[^\"]+\" y=\"258\" text-anchor=\"middle\">([^<]*)</text>")) xs.Add(m.Groups[1].Value);
+                var ys = new List<string>();
+                foreach (Match m in Regex.Matches(svg, "text-anchor=\"end\">([^<]*)</text>")) ys.Add(m.Groups[1].Value);
+                Assert.Greater(xt.Count, 1); Assert.Greater(yt.Count, 1);
+                CollectionAssert.AreEqual(xt, xs, $"{p.Key}: деления X");
+                CollectionAssert.AreEqual(yt, ys, $"{p.Key}: деления Y");
+
+                // Отметки: по одной на каждую отметку описания в пределах оси
+                int marks = p.Marks.FindAll(m => m.X >= ax.X0 && m.X <= ax.X1).Count;
+                Assert.AreEqual(marks, Count(svg, "stroke-width=\"0.8\" stroke-dasharray=\"2,3\""), $"{p.Key}: отметки");
+            }
+        }
+        finally { Delete(dir); }
+    }
 }

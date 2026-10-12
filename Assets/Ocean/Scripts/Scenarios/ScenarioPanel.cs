@@ -29,6 +29,9 @@
 //     весь маршрут и окна сближений, переключатель «< … >». Схема и report.html
 //     строятся в фоне после закрытия записи (ExerciseRecorder.LastDebrief) —
 //     до готовности «Схема строится…», затем панель обновляется сама.
+// Запрос 17: вкладка «Графики» — курс, скорость, XTE, руль по времени по записи
+//   (DebriefPlotGraphic; те же ряды, что в report.html — DebriefPlots), по одному
+//   графику на всё поле схемы, листание «< курс / скорость / XTE / руль >».
 // Команды меню: «Выбор сценария…», «Начать упражнение», «Брифинг»/«Результаты»,
 // «Перезапустить сценарий» (инстр.), «Завершить досрочно» (инстр.); недоступные
 // по фазе — скрыты. Отладочные команды B1 остаются в группе «Отладка» (внизу).
@@ -45,7 +48,7 @@ using UnityEngine.UI;
 public class ScenarioPanel : MonoBehaviour
 {
     private enum Mode { Hidden, Selection, Briefing, Results, Keypad, CurrentScore }
-    private enum DebriefTab { Summary, Criteria, Map }
+    private enum DebriefTab { Summary, Criteria, Map, Plots }
 
     public ScenarioRunner runner;
     [Tooltip("Запись упражнения (C1): ID обучающегося, папка сессии. Пусто — найти")]
@@ -99,7 +102,7 @@ public class ScenarioPanel : MonoBehaviour
     private string keypadBuffer = "";
     private bool placeAtAnchor;
     private DebriefTab tab;
-    private int criteriaPage, mapView;
+    private int criteriaPage, mapView, plotView;
     private bool waitingDebrief;
 
     public bool IsOpen => canvas != null && canvas.enabled;
@@ -239,6 +242,7 @@ public class ScenarioPanel : MonoBehaviour
         tab = DebriefTab.Summary;
         criteriaPage = 0;
         mapView = 0;
+        plotView = 0;
         ShowDebrief();
     }
 
@@ -254,12 +258,14 @@ public class ScenarioPanel : MonoBehaviour
         ButtonRow(ref y, ButtonHeight,
             Tab("Итог", DebriefTab.Summary),
             Tab("Критерии", DebriefTab.Criteria),
-            Tab("Схема", DebriefTab.Map));
+            Tab("Схема", DebriefTab.Map),
+            Tab("Графики", DebriefTab.Plots));
         y -= 4f;
         switch (tab)
         {
             case DebriefTab.Criteria: CriteriaTab(a, ref y); break;
             case DebriefTab.Map: MapTab(ref y); break;
+            case DebriefTab.Plots: PlotsTab(ref y); break;
             default: SummaryTab(r, a, ref y); break;
         }
         y -= Gap;
@@ -382,6 +388,77 @@ public class ScenarioPanel : MonoBehaviour
                 (map.Views[mapView].Key == "all" ? "Весь маршрут" : $"Сближение с {map.Views[mapView].Key}", NeutralColor, () => { mapView = (mapView + 1) % n; ShowDebrief(); }),
                 (">", ButtonColor, () => { mapView = (mapView + 1) % n; ShowDebrief(); }));
         }
+    }
+
+    // Запрос 17: графики по записи — один на всё поле схемы, листание
+    private void PlotsTab(ref float y)
+    {
+        DebriefBuild d = CurrentDebrief();
+        if (d == null || !d.Done || d.Plots == null)
+        {
+            bool pending = DebriefPending(d);
+            if (pending) waitingDebrief = true;
+            string why = pending ? "Графики строятся…"
+                : d == null ? "Графики строятся по записи упражнения — запись или разбор выключены (ExerciseRecorder)."
+                : $"Графики не построены: {d.Error}";
+            Text(why, 17f, MutedColor, ref y);
+            return;
+        }
+        List<DebriefPlot> plots = d.Plots;
+        if (plots.Count == 0) { Text("Графиков нет: в записи меньше двух строк траектории.", 17f, MutedColor, ref y); return; }
+        int n = plots.Count;
+        plotView = Mathf.Clamp(plotView, 0, n - 1);
+        DebriefPlot p = plots[plotView];
+        float w = Width - 2f * Pad;
+        var go = new GameObject("DebriefPlot", typeof(RectTransform), typeof(CanvasRenderer));
+        go.transform.SetParent(background, false);
+        RectTransform rt = Top0(go, w, mapHeight, y);
+        var g = go.AddComponent<DebriefPlotGraphic>();
+        g.SetPlot(p);
+        foreach (DebriefPlotGraphic.Label l in g.Labels()) PlotLabel(rt, l);
+        y -= mapHeight + 6f;
+
+        // Легенда: ряды (сплошная / штрих) и виды отметок, которые есть на графике
+        var leg = new StringBuilder();
+        for (int i = 0; i < p.Series.Count; i++)
+        {
+            if (i > 0) leg.Append("   ");
+            leg.Append($"<color=#{ColorUtility.ToHtmlStringRGB(DebriefPlotGraphic.SeriesColor(p, i))}>{(p.Series[i].Dash == SvgPlot.Dash.Solid ? "——" : "– –")}</color> {p.Series[i].Label}");
+        }
+        var kinds = new List<string>();
+        void Kind(PlotMarkKind k, string text)
+        {
+            if (p.Marks.Exists(m => m.Kind == k)) kinds.Add($"<color=#{ColorUtility.ToHtmlStringRGB(DebriefPlotGraphic.MarkColor(k))}>¦</color> {text}");
+        }
+        Kind(PlotMarkKind.Manoeuvre, "начало манёвра (цель)");
+        Kind(PlotMarkKind.Accident, "авария");
+        Kind(PlotMarkKind.Failure, "вводная");
+        Kind(PlotMarkKind.Pause, "пауза");
+        if (kinds.Count > 0) leg.Append("\n").Append(string.Join(" · ", kinds));
+        Text(leg.ToString(), 14f, MutedColor, ref y);
+        ButtonRow(ref y, ButtonHeight,
+            ("<", ButtonColor, () => { plotView = (plotView + n - 1) % n; ShowDebrief(); }),
+            ($"{p.ShortTitle} · {plotView + 1} / {n}", NeutralColor, () => { plotView = (plotView + 1) % n; ShowDebrief(); }),
+            (">", ButtonColor, () => { plotView = (plotView + 1) % n; ShowDebrief(); }));
+    }
+
+    private void PlotLabel(RectTransform parent, DebriefPlotGraphic.Label l)
+    {
+        var go = new GameObject("Label", typeof(RectTransform));
+        go.transform.SetParent(parent, false);
+        var tmp = go.AddComponent<TextMeshProUGUI>();
+        tmp.text = l.Text;
+        tmp.fontSize = l.Size;
+        tmp.color = l.Color;
+        tmp.alignment = l.Pivot.x < 0.25f ? TextAlignmentOptions.Left : l.Pivot.x > 0.75f ? TextAlignmentOptions.Right : TextAlignmentOptions.Center;
+        tmp.textWrappingMode = TextWrappingModes.NoWrap;
+        tmp.raycastTarget = false;
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);   // начало координат графики — её точка привязки (верх, центр)
+        rt.pivot = l.Pivot;
+        rt.sizeDelta = new Vector2(l.Rotation != 0f ? 360f : 200f, l.Size + 6f);
+        rt.anchoredPosition = l.Local;
+        rt.localRotation = Quaternion.Euler(0f, 0f, l.Rotation);
     }
 
     /// <summary>Разбор текущего упражнения (не предыдущего: запись может закрыться позже показа панели).</summary>
