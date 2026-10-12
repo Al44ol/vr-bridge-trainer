@@ -21,6 +21,9 @@
 //   События ExercisePaused / ExerciseResumed (длительность паузы по часам). Конец упражнения
 //   на паузе сначала снимает паузу.
 //
+// Запрос 15: Load берёт сценарий для выбранного типа судна (ShipTypeSwitcher.VariantFor): на катере —
+//   копия «-FB» с пересчитанной начальной скоростью; Restart загружает тот же исходник заново.
+//
 // Runner не содержит интерфейса: VR-панель и команды меню — ScenarioPanel,
 // вывод событий в консоль — ExerciseConsoleLog (отдельный подписчик шины).
 // ============================================================
@@ -104,6 +107,9 @@ public class ScenarioRunner : MonoBehaviour
     {
         if (scenario == null) return;
         if (CurrentPhase == Phase.Running) End(ScenarioEndReason.Aborted, true);
+        // Запрос 15: на катере — вариант сценария «-FB» (исходный ассет не меняется)
+        ShipTypeSwitcher ship = ShipTypeSwitcher.Instance;
+        scenario = ship != null ? ship.VariantFor(scenario) : ScenarioVariants.SourceOf(scenario);
 
         foreach (string p in scenario.Validate())
             Debug.LogWarning($"[Сценарий] «{scenario.title}»: {p}", scenario);
@@ -251,7 +257,10 @@ public class ScenarioRunner : MonoBehaviour
     // ─────────── Начальные условия ───────────
     private void ApplyScenario(ScenarioDefinition s)
     {
-        if (navigation != null && s.shipParameters != null) navigation.parameters = s.shipParameters;
+        // Судно сценария; без него — судно выбранного типа (запрос 15), иначе — назначенное в сцене
+        ShipParameters ship = s.shipParameters != null ? s.shipParameters
+            : ShipTypeSwitcher.Instance != null ? ShipTypeSwitcher.Instance.ActiveParameters : null;
+        if (navigation != null && ship != null) navigation.parameters = ship;
         if (waterArea != null && s.waterArea != null && waterArea.area != s.waterArea)
         {
             waterArea.area = s.waterArea;

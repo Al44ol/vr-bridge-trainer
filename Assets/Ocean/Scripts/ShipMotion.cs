@@ -22,6 +22,8 @@
 //
 // Комфорт (против укачивания): общий множитель comfortScale и мягкие пределы
 // крена и дифферента max·tanh(x/max) — только для отображения.
+// Запрос 15: SetHullFrame — другой центр качки и сдвиг судна по вертикали (катер: палуба
+// ≈ 1,2 м над водой вместо ≈ 5 м у мостика); задаёт ShipTypeSwitcher.
 // ============================================================
 using UnityEngine;
 
@@ -53,6 +55,9 @@ public class ShipMotion : MonoBehaviour
     [Range(2, 9)] public int samplesAlong = 5;
     [Tooltip("Точек поперёк корпуса (от ЛБ до ПБ)")]
     [Range(2, 5)] public int samplesAcross = 3;
+    [Tooltip("Сдвиг судна по вертикали относительно исходной позиции, м (запрос 15: катер — палуба ниже мостика; " +
+             "задаёт ShipTypeSwitcher)")]
+    public float verticalOffset;
 
     [Header("Комфорт (укачивание)")]
     [Tooltip("Общий множитель амплитуды качки: 1 — как в модели, 0 — без качки")]
@@ -119,12 +124,39 @@ public class ShipMotion : MonoBehaviour
     /// <summary>Модель качки (физика без комфорта); null в синусоидальном режиме.</summary>
     public SeakeepingModel Model => model;
 
+    private bool started;
+
     void Start()
     {
-        initialPosition = transform.localPosition;
-        initialRotation = transform.localRotation;
+        CaptureInitial();
         if (navigation == null) navigation = GetComponentInParent<ShipNavigation>();
         lastMode = mode;
+    }
+
+    private void CaptureInitial()
+    {
+        if (started) return;
+        started = true;
+        initialPosition = transform.localPosition;
+        initialRotation = transform.localRotation;
+    }
+
+    // Исходная позиция со сдвигом по вертикали (катер, запрос 15)
+    private Vector3 BasePosition => initialPosition + Vector3.up * verticalOffset;
+
+    /// <summary>
+    /// Запрос 15: сменить центр качки (ватерлиния другого корпуса) и сдвиг судна по вертикали.
+    /// Качка начинается заново с равновесия — без рывка от старого состояния.
+    /// </summary>
+    public void SetHullFrame(Vector3 pivot, float offset)
+    {
+        CaptureInitial();
+        pivotLocal = pivot;
+        verticalOffset = offset;
+        model = null;
+        heavePrev = rollPrev = pitchPrev = 0.0;
+        transform.localPosition = BasePosition;
+        transform.localRotation = initialRotation;
     }
 
     private ShipParameters Parameters =>
@@ -171,7 +203,7 @@ public class ShipMotion : MonoBehaviour
         if (mode != lastMode)
         {
             lastMode = mode;
-            transform.localPosition = initialPosition;
+            transform.localPosition = BasePosition;
             transform.localRotation = initialRotation;
         }
 
@@ -219,7 +251,7 @@ public class ShipMotion : MonoBehaviour
         // Поворот вокруг центра качки + вертикальное смещение
         Vector3 pivot = initialRotation * pivotLocal;
         transform.localRotation = q * initialRotation;
-        transform.localPosition = initialPosition + pivot - q * pivot + up * heaveM;
+        transform.localPosition = BasePosition + pivot - q * pivot + up * heaveM;
     }
 
     private Vector3 BowLocalAxis
@@ -303,7 +335,7 @@ public class ShipMotion : MonoBehaviour
         transform.localRotation = initialRotation * rocking;
 
         // Применяем вертикальное смещение
-        Vector3 pos = initialPosition;
+        Vector3 pos = BasePosition;
         pos.y += heave;
         transform.localPosition = pos;
 

@@ -87,6 +87,31 @@
 T_z = T_θ = 7 с, ζ 0,1/0,25/0,25) — **заглушки**. Если понадобятся: KCS — GM = 0,6 м [7, табл. I],
 C_B = 0,651 [8, табл. 1], C_WP — нет данных.
 
+## ShipParameters_FastBoat — быстроходный катер (запрос 15, тестовое судно)
+
+Создаёт `Tools/VR Bridge/Setup Fast Boat`; значения — единственный источник `ShipPresets.FillFastBoat` (Core).
+Прототипа нет: открытый катер с центральной рулевой стойкой, L ≈ 18 м. Почти все значения — **допущения** (З),
+выбранные так, чтобы катер был заметно быстрее и поворотливее судна сцены. Катер — для отладки сценариев
+и демонстрации, **не для оценки** (ThesisNotes, раздел 15).
+
+| Поле | Значение | Тип | Источник / обоснование |
+|---|---|---|---|
+| `length` | 18 м | **З** | Типичный патрульный / рабочий катер |
+| `serviceSpeedKnots` | 35 уз | **З** | Fn = V/√(gL) = 18,0/√(9,81·18) ≈ 1,36 — режим глиссирования (Fn > ≈ 1,0–1,2 [10]) |
+| `accelerationTimeConstant` / `decelerationTimeConstant` | 10 / 15 с | **З** | 95 % хода за ≈ 3τ = 30 с; гашение хода быстрее, чем у водоизмещающего судна |
+| `asternFactor` | 0,4 | **З** | Задний ход катера слабый |
+| `nomotoKPrime` / `nomotoTPrime` | 1,0 / 1,2 | **З** | D(35°) = 2L/(K'·δ) ≈ 59 м ≈ 3,3 L; T = T'·L/U ≈ 1,2 с на полном ходу |
+| `rudderRate` | 10 °/с | **З** | Гидравлический привод: борт на борт (70°) ≈ 7 с; требование СОЛАС II-1/29 (28 с) к катеру не относится |
+| `beam` / `draft` | 4,8 / 1,1 м | **З** | L/B ≈ 3,75 — типично для глиссирующих корпусов [10] |
+| `metacentricHeight` | 1,2 м | **З** | Широкий мелкосидящий корпус — большая начальная остойчивость |
+| `blockCoefficient` / `waterplaneCoefficient` | 0,42 / 0,72 | **З** | Острые обводы с V-образным днищем |
+| `rollPeriod` | ≈ 4,1 с | В | T_φ = 2·C·B/√GM, C = 0,373 + 0,023·B/d − 0,043·L/100 = 0,466 (IS Code 2008, ч. A, 2.3.4) |
+| `heavePeriod` = `pitchPeriod` | ≈ 2,3 с | В | T_z = 2π·√(2·C_B·d/(C_WP·g)) (Journée & Massie, 2001) |
+| `rollDamping` / `heaveDamping`, `pitchDamping` | 0,15 / 0,30 | **З** | Скулы и брызгоотбойники — затухание больше, чем у судна |
+
+**Ограничение.** Модель манёвренности (Номото 1-го порядка) и качки (звенья 2-го порядка) построены для
+водоизмещающих судов. Подъём корпуса на глиссировании, ходовой дифферент, крен на циркуляции, «дельфинирование»
+и удары днища о волну [10, 11] не моделируются: на 35 уз катер движется как «маленькое быстрое судно».
 ## Литература
 
 1. Fossen T.I. Marine Systems Simulator (MSS), `CRAFT/SHIP/models/mariner.m` (авт. T. Lauvdal, 1994; ред. 2001–2024). https://github.com/cybergalactic/MSS
@@ -98,3 +123,5 @@ C_B = 0,651 [8, табл. 1], C_WP — нет данных.
 7. Nath A., Peng H., Qiu W. Numerical Analysis and Validation of Turning Circle and Zig-Zag Maneuvers of KRISO Container Ship in Calm Sea Using Body Force Method. Proc. CSME/CFDSC/CSR 2025, Montréal, paper 409. https://espace2.etsmtl.ca/32469/
 8. Yun H., Choi W., Min G. et al. CFD analysis of container ship manoeuvring performance under different trim conditions. Ocean Engineering, 2025, 341, 122489. doi:10.1016/j.oceaneng.2025.122489
 9. SIMMAN 2014. KCS free model tests in deep water — model test specification. https://simman2014.dk/wp-content/uploads/2015/07/KCS-free-deep.pdf
+10. Faltinsen O.M. Hydrodynamics of High-Speed Marine Vehicles. Cambridge University Press, 2005.
+11. Savitsky D. Hydrodynamic Design of Planing Hulls. Marine Technology, 1964, 1(1), pp. 71–95.

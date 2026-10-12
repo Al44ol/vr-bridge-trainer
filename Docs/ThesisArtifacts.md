@@ -22,6 +22,7 @@
 | Разбор и отчёт | 🖥 `Debrief Report` | `ThesisData/Debrief/<дата>/` | схемы разбора каждого прогона (`*_map0…N.svg`: весь маршрут + окно на каждое сближение), `report.html` прогонов, сводка | разд. 11, табл. 11.1–11.3 |
 | Педагогический эксперимент: сводка по обучающимся | 🖥 `Sessions Summary…` или Session Replay → «Сводка по папке…» | `ThesisData/Summary/<дата>/` | `sessions_summary.csv` — строка на сессию: ID, сценарий, дата, итог, значения всех критериев (для статистики) | п. 11.7, табл. 11.2 |
 | Производительность | 🎮 меню Y → «Замер» | `ThesisData/Performance/` | `frametiming_summary.csv` (строка на замер, условия в `note`), `frametiming_<режим>_<дата>.csv` — покадрово (CPU, GPU, draw calls) | п. 1.1, 7.7, 9.2, 13.10, 13.16; табл. 1.1, 7.7, 9.2, 13.2 |
+| Тестовое судно: быстроходный катер (запрос 15) | 🖥 `Manoeuvring Trials` и `Seakeeping Trials` с ассетом `ShipParameters_FastBoat` | `ThesisData/Trials/ShipParameters_FastBoat_<дата>/`, `ThesisData/Seakeeping/ShipParameters_FastBoat_<дата>/` | те же CSV и SVG, что у судна сцены — для табл. 15.1 (циркуляция, зигзаг, разгон катера); прогон B2-01 на катере — в выводе теста `B2Run_OnBoat_ArrivesAndIsAssessed` | разд. 15, табл. 15.1 |
 | Записи упражнений | 🎮 каждое упражнение | `ThesisData/Sessions/<дата>_<сценарий>_<ID>/` (в .gitignore) | `track.csv` (5 Гц), `targets.csv`, `events.csv`, `session.json`, `assessment.csv`, `report.html` | разд. 7, табл. 7.1–7.4; п. 10.10, 11.6 |
 
 ---
@@ -55,7 +56,7 @@
 | Замер кадра | `FrameTimingCapture` | FrameTimingManager + ProfilerRecorder | п. 1.1, 13.16 |
 
 ### 2.6. Автоматические тесты
-Unity Test Runner → EditMode (сейчас **200**): `TestResults.xml` — подтверждение корректности модулей для главы 3 (по классам — таблицы «Новые EditMode-тесты» в каждом разделе ThesisNotes).
+Unity Test Runner → EditMode (сейчас **204**): `TestResults.xml` — подтверждение корректности модулей для главы 3 (по классам — таблицы «Новые EditMode-тесты» в каждом разделе ThesisNotes).
 
 ### 2.7. Источники значений параметров
 `Assets/Ocean/Settings/ShipParameters_Sources.md` — откуда взято каждое значение ShipParameters (Mariner, KCS, Model45m, допущения).
