@@ -19,7 +19,7 @@
 // ExerciseEventType.Collision в шину (Subject — id цели); ScenarioRunner
 // завершает упражнение, если условие включено. Цель ставит «Стоп», звук удара
 // и тряска камеры — как при посадке на мель. Физики удара нет.
-// Отладка (меню A, «Отладка», вне упражнения): «Проверка огней: облёт цели» —
+// Отладка (меню A, «Отладка»; облёт — только вне упражнения): «Проверка огней: облёт цели» —
 // неподвижная цель в 0,3 мили, своё судно на паузе переставляется по кругу
 // шагами 15° раз в 3 с носом на цель (в консоли — какие огни должны быть видны);
 // «Огни, цель: < 0,25 / 0,5 / 1 / 3 / 6 миль >» (стрелки — ближе/дальше) — неподвижная цель прямо по носу,
@@ -108,11 +108,12 @@ public class TrafficController : MonoBehaviour
         menuCommands.Add(BridgeMenu.Register("Отладка",
             () => orbit != null ? "Проверка огней: остановить облёт" : "Проверка огней: облёт цели",
             ToggleOrbit, () => CanDebug, instructorOnly: true));
-        // «< цель: 3 мили >» — стрелками ближе/дальше; левее 1 мили — цели нет
+        // «< цель: 3 мили >» — стрелками ближе/дальше; левее 0,25 мили — цели нет. С C4 — и во время упражнения:
+        // цель не записывается, не оценивается и не участвует в столкновениях (проверка видимости в тумане)
         menuCommands.Add(BridgeMenu.RegisterStepper("Отладка",
             () => debugDistanceIndex < 0 ? "Огни, цель: нет" : $"Огни, цель: {DebugDistanceTitles[debugDistanceIndex]}",
             () => SetDebugDistance(debugDistanceIndex - 1), () => SetDebugDistance(debugDistanceIndex + 1),
-            () => CanDebug && orbit == null, instructorOnly: true));
+            () => navigation != null && navigation.Model != null && orbit == null, instructorOnly: true));
         Subscribe();
     }
 

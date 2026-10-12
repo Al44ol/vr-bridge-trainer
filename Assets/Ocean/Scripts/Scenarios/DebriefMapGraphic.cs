@@ -14,6 +14,9 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
+// CanvasRenderer — явно: в uGUI этой версии его требует Image, но не базовый Graphic; без него
+// XRI-лучи UI бросали MissingComponentException каждый кадр (Error Pause при открытии «Схемы», C4)
+[RequireComponent(typeof(CanvasRenderer))]
 public class DebriefMapGraphic : MaskableGraphic
 {
     public struct Label

@@ -357,7 +357,7 @@ public class ScenarioPanel : MonoBehaviour
         DebriefMapData map = d.Map;
         mapView = Mathf.Clamp(mapView, 0, map.Views.Count - 1);
         float w = Width - 2f * Pad;
-        var go = new GameObject("DebriefMap", typeof(RectTransform));
+        var go = new GameObject("DebriefMap", typeof(RectTransform), typeof(CanvasRenderer));
         go.transform.SetParent(background, false);
         RectTransform rt = Top0(go, w, mapHeight, y);
         var g = go.AddComponent<DebriefMapGraphic>();

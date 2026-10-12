@@ -1,0 +1,1010 @@
+﻿{
+    "format": "VRBridge.Session",
+    "format_version": 1,
+    "session_id": "20261011_120000_B3-01_sim",
+    "trainee_id": "sim",
+    "completed": true,
+    "end_reason": "Arrived",
+    "end_reason_ru": "прибытие в конечную точку",
+    "by_instructor": false,
+    "start_local": "2026-10-11T12:00:00+03:00",
+    "start_utc": "2026-10-11T09:00:00Z",
+    "end_local": "",
+    "end_utc": "",
+    "duration_s": 1570.38,
+    "wall_duration_s": 0.0,
+    "app": {
+        "product": "",
+        "version": "",
+        "unity_version": "",
+        "platform": "",
+        "is_editor": false,
+        "git_commit": ""
+    },
+    "scenario": {
+        "id": "B3-01",
+        "title": "Расхождение с судами на подходе и в фарватере",
+        "asset": "",
+        "water_area": "WaterArea_Demo",
+        "weather": "Night",
+        "time_of_day": "Night",
+        "visibility_m": 0.0,
+        "time_limit_s": 1800.0,
+        "end_conditions": "All",
+        "detection_range_nm": 0.0,
+        "safe_speed_kn": 0.0,
+        "hide_targets": false,
+        "initial": {
+            "x_e_m": 0.0,
+            "y_n_m": -2500.0,
+            "heading_deg": 0.0,
+            "speed_kn": 15.0,
+            "rudder_deg": 0.0,
+            "telegraph": "FullAhead",
+            "telegraph_sf": 1.0
+        },
+        "route": [
+            {
+                "name": "Старт",
+                "x_e_m": 0.0,
+                "y_n_m": -2500.0,
+                "xte_limit_m": 250.0,
+                "narrow_channel": false
+            },
+            {
+                "name": "Вход в фарватер",
+                "x_e_m": 0.0,
+                "y_n_m": -300.0,
+                "xte_limit_m": 250.0,
+                "narrow_channel": false
+            },
+            {
+                "name": "Поворот",
+                "x_e_m": 0.0,
+                "y_n_m": 3200.0,
+                "xte_limit_m": 150.0,
+                "narrow_channel": true
+            },
+            {
+                "name": "Выход из фарватера",
+                "x_e_m": 3031.088913245535,
+                "y_n_m": 4950.0,
+                "xte_limit_m": 150.0,
+                "narrow_channel": true
+            }
+        ],
+        "traffic": [
+            {
+                "id": "T1",
+                "name": "Встречный сухогруз",
+                "type": "Cargo",
+                "parameters": "ShipParameters_Mariner",
+                "placement": "Absolute",
+                "motion": "Route",
+                "lights": "PowerDrivenUnderway",
+                "length_m": 160.929993,
+                "beam_m": 23.16,
+                "service_speed_kn": 15.001633,
+                "x_e_m": 1209.038106,
+                "y_n_m": 4001.961524,
+                "heading_deg": 240.0,
+                "speed_kn": 12.0,
+                "cpa_nm": 0.0,
+                "tcpa_min": 0.0,
+                "meeting_side": "",
+                "meeting_x_e_m": 0.0,
+                "meeting_y_n_m": 0.0,
+                "path": [
+                    {
+                        "x_e_m": -90.0,
+                        "y_n_m": 3251.961524
+                    },
+                    {
+                        "x_e_m": -90.0,
+                        "y_n_m": -300.0
+                    },
+                    {
+                        "x_e_m": -90.0,
+                        "y_n_m": -3600.0
+                    }
+                ],
+                "required_cpa_nm": 0.05
+            },
+            {
+                "id": "T2",
+                "name": "Танкер, пересекающий справа",
+                "type": "Tanker",
+                "parameters": "ShipParameters_Mariner",
+                "placement": "MeetingPoint",
+                "motion": "Route",
+                "lights": "PowerDrivenUnderway",
+                "length_m": 160.929993,
+                "beam_m": 23.16,
+                "service_speed_kn": 15.001633,
+                "x_e_m": 1234.665585,
+                "y_n_m": -648.001623,
+                "heading_deg": 270.0,
+                "speed_kn": 10.0,
+                "cpa_nm": 0.0,
+                "tcpa_min": 4.0,
+                "meeting_side": "Starboard",
+                "meeting_x_e_m": 0.0,
+                "meeting_y_n_m": -648.001623,
+                "path": [
+                    {
+                        "x_e_m": -617.332792,
+                        "y_n_m": -648.001623
+                    },
+                    {
+                        "x_e_m": -900.0,
+                        "y_n_m": -1300.0
+                    },
+                    {
+                        "x_e_m": -900.0,
+                        "y_n_m": -4500.0
+                    }
+                ],
+                "required_cpa_nm": 0.0
+            },
+            {
+                "id": "T3",
+                "name": "Малое судно впереди",
+                "type": "Small",
+                "parameters": "ShipParameters_Model45m",
+                "placement": "Absolute",
+                "motion": "Route",
+                "lights": "PowerDrivenUnderway",
+                "length_m": 45.0,
+                "beam_m": 8.71,
+                "service_speed_kn": 15.0,
+                "x_e_m": 80.0,
+                "y_n_m": 1200.0,
+                "heading_deg": 0.0,
+                "speed_kn": 6.0,
+                "cpa_nm": 0.0,
+                "tcpa_min": 0.0,
+                "meeting_side": "",
+                "meeting_x_e_m": 0.0,
+                "meeting_y_n_m": 0.0,
+                "path": [
+                    {
+                        "x_e_m": 80.0,
+                        "y_n_m": 3153.811978
+                    },
+                    {
+                        "x_e_m": 3071.088913,
+                        "y_n_m": 4880.717968
+                    },
+                    {
+                        "x_e_m": 5669.165125,
+                        "y_n_m": 6380.717968
+                    }
+                ],
+                "required_cpa_nm": 0.05
+            }
+        ],
+        "area": {
+            "name": "WaterArea_Demo",
+            "aids": [
+                {
+                    "name": "Красный №2",
+                    "type": "LateralPort",
+                    "x_e_m": -185.2,
+                    "y_n_m": -300.0
+                },
+                {
+                    "name": "Красный №4",
+                    "type": "LateralPort",
+                    "x_e_m": -185.2,
+                    "y_n_m": 421.385
+                },
+                {
+                    "name": "Красный №6",
+                    "type": "LateralPort",
+                    "x_e_m": -185.2,
+                    "y_n_m": 1142.77
+                },
+                {
+                    "name": "Красный №8",
+                    "type": "LateralPort",
+                    "x_e_m": -185.2,
+                    "y_n_m": 1864.155
+                },
+                {
+                    "name": "Красный №10",
+                    "type": "LateralPort",
+                    "x_e_m": -185.2,
+                    "y_n_m": 2585.54
+                },
+                {
+                    "name": "Красный №12",
+                    "type": "LateralPort",
+                    "x_e_m": -185.2,
+                    "y_n_m": 3306.925
+                },
+                {
+                    "name": "Красный №14",
+                    "type": "LateralPort",
+                    "x_e_m": 439.538,
+                    "y_n_m": 3667.618
+                },
+                {
+                    "name": "Красный №16",
+                    "type": "LateralPort",
+                    "x_e_m": 1064.276,
+                    "y_n_m": 4028.31
+                },
+                {
+                    "name": "Красный №18",
+                    "type": "LateralPort",
+                    "x_e_m": 1689.013,
+                    "y_n_m": 4389.003
+                },
+                {
+                    "name": "Красный №20",
+                    "type": "LateralPort",
+                    "x_e_m": 2313.751,
+                    "y_n_m": 4749.695
+                },
+                {
+                    "name": "Красный №22",
+                    "type": "LateralPort",
+                    "x_e_m": 2938.489,
+                    "y_n_m": 5110.388
+                },
+                {
+                    "name": "Зелёный №1",
+                    "type": "LateralStarboard",
+                    "x_e_m": 185.2,
+                    "y_n_m": -300.0
+                },
+                {
+                    "name": "Зелёный №3",
+                    "type": "LateralStarboard",
+                    "x_e_m": 185.2,
+                    "y_n_m": 378.615
+                },
+                {
+                    "name": "Зелёный №5",
+                    "type": "LateralStarboard",
+                    "x_e_m": 185.2,
+                    "y_n_m": 1057.23
+                },
+                {
+                    "name": "Зелёный №7",
+                    "type": "LateralStarboard",
+                    "x_e_m": 185.2,
+                    "y_n_m": 1735.845
+                },
+                {
+                    "name": "Зелёный №9",
+                    "type": "LateralStarboard",
+                    "x_e_m": 185.2,
+                    "y_n_m": 2414.46
+                },
+                {
+                    "name": "Зелёный №11",
+                    "type": "LateralStarboard",
+                    "x_e_m": 185.2,
+                    "y_n_m": 3093.075
+                },
+                {
+                    "name": "Зелёный №13",
+                    "type": "LateralStarboard",
+                    "x_e_m": 772.898,
+                    "y_n_m": 3432.382
+                },
+                {
+                    "name": "Зелёный №15",
+                    "type": "LateralStarboard",
+                    "x_e_m": 1360.596,
+                    "y_n_m": 3771.69
+                },
+                {
+                    "name": "Зелёный №17",
+                    "type": "LateralStarboard",
+                    "x_e_m": 1948.293,
+                    "y_n_m": 4110.997
+                },
+                {
+                    "name": "Зелёный №19",
+                    "type": "LateralStarboard",
+                    "x_e_m": 2535.991,
+                    "y_n_m": 4450.305
+                },
+                {
+                    "name": "Зелёный №21",
+                    "type": "LateralStarboard",
+                    "x_e_m": 3123.689,
+                    "y_n_m": 4789.612
+                },
+                {
+                    "name": "Осевой «Вход»",
+                    "type": "SafeWater",
+                    "x_e_m": -80.0,
+                    "y_n_m": -800.0
+                },
+                {
+                    "name": "Южный «Северная»",
+                    "type": "CardinalSouth",
+                    "x_e_m": -50.0,
+                    "y_n_m": 3650.0
+                },
+                {
+                    "name": "Северный «Поворот»",
+                    "type": "CardinalNorth",
+                    "x_e_m": 850.0,
+                    "y_n_m": 3080.0
+                },
+                {
+                    "name": "Восточный «Западная»",
+                    "type": "CardinalEast",
+                    "x_e_m": -470.0,
+                    "y_n_m": 300.0
+                },
+                {
+                    "name": "Западный «Банка»",
+                    "type": "CardinalWest",
+                    "x_e_m": 420.0,
+                    "y_n_m": 1050.0
+                },
+                {
+                    "name": "Отдельной опасности «Камень»",
+                    "type": "IsolatedDanger",
+                    "x_e_m": 450.0,
+                    "y_n_m": -1500.0
+                }
+            ],
+            "shoals": [
+                {
+                    "name": "Отмель Северная",
+                    "depth_m": 2.0,
+                    "points": [
+                        {
+                            "x_e_m": -950.0,
+                            "y_n_m": 3820.0
+                        },
+                        {
+                            "x_e_m": -600.0,
+                            "y_n_m": 3740.0
+                        },
+                        {
+                            "x_e_m": -200.0,
+                            "y_n_m": 3730.0
+                        },
+                        {
+                            "x_e_m": 150.0,
+                            "y_n_m": 3780.0
+                        },
+                        {
+                            "x_e_m": 300.0,
+                            "y_n_m": 3900.0
+                        },
+                        {
+                            "x_e_m": 250.0,
+                            "y_n_m": 4150.0
+                        },
+                        {
+                            "x_e_m": -100.0,
+                            "y_n_m": 4330.0
+                        },
+                        {
+                            "x_e_m": -600.0,
+                            "y_n_m": 4350.0
+                        },
+                        {
+                            "x_e_m": -950.0,
+                            "y_n_m": 4150.0
+                        }
+                    ]
+                },
+                {
+                    "name": "Отмель у поворота",
+                    "depth_m": 2.5,
+                    "points": [
+                        {
+                            "x_e_m": 480.0,
+                            "y_n_m": 2250.0
+                        },
+                        {
+                            "x_e_m": 900.0,
+                            "y_n_m": 2180.0
+                        },
+                        {
+                            "x_e_m": 1350.0,
+                            "y_n_m": 2350.0
+                        },
+                        {
+                            "x_e_m": 1450.0,
+                            "y_n_m": 2700.0
+                        },
+                        {
+                            "x_e_m": 1200.0,
+                            "y_n_m": 2950.0
+                        },
+                        {
+                            "x_e_m": 800.0,
+                            "y_n_m": 2980.0
+                        },
+                        {
+                            "x_e_m": 500.0,
+                            "y_n_m": 2800.0
+                        },
+                        {
+                            "x_e_m": 420.0,
+                            "y_n_m": 2500.0
+                        }
+                    ]
+                },
+                {
+                    "name": "Отмель Западная",
+                    "depth_m": 2.5,
+                    "points": [
+                        {
+                            "x_e_m": -1250.0,
+                            "y_n_m": -150.0
+                        },
+                        {
+                            "x_e_m": -800.0,
+                            "y_n_m": -250.0
+                        },
+                        {
+                            "x_e_m": -560.0,
+                            "y_n_m": 100.0
+                        },
+                        {
+                            "x_e_m": -600.0,
+                            "y_n_m": 600.0
+                        },
+                        {
+                            "x_e_m": -900.0,
+                            "y_n_m": 850.0
+                        },
+                        {
+                            "x_e_m": -1250.0,
+                            "y_n_m": 500.0
+                        }
+                    ]
+                },
+                {
+                    "name": "Банка Восточная",
+                    "depth_m": 6.0,
+                    "points": [
+                        {
+                            "x_e_m": 520.0,
+                            "y_n_m": 650.0
+                        },
+                        {
+                            "x_e_m": 900.0,
+                            "y_n_m": 600.0
+                        },
+                        {
+                            "x_e_m": 1150.0,
+                            "y_n_m": 900.0
+                        },
+                        {
+                            "x_e_m": 1100.0,
+                            "y_n_m": 1350.0
+                        },
+                        {
+                            "x_e_m": 750.0,
+                            "y_n_m": 1500.0
+                        },
+                        {
+                            "x_e_m": 500.0,
+                            "y_n_m": 1200.0
+                        }
+                    ]
+                },
+                {
+                    "name": "Камень",
+                    "depth_m": 1.5,
+                    "points": [
+                        {
+                            "x_e_m": 450.0,
+                            "y_n_m": -1465.0
+                        },
+                        {
+                            "x_e_m": 474.749,
+                            "y_n_m": -1475.251
+                        },
+                        {
+                            "x_e_m": 485.0,
+                            "y_n_m": -1500.0
+                        },
+                        {
+                            "x_e_m": 474.749,
+                            "y_n_m": -1524.749
+                        },
+                        {
+                            "x_e_m": 450.0,
+                            "y_n_m": -1535.0
+                        },
+                        {
+                            "x_e_m": 425.251,
+                            "y_n_m": -1524.749
+                        },
+                        {
+                            "x_e_m": 415.0,
+                            "y_n_m": -1500.0
+                        },
+                        {
+                            "x_e_m": 425.251,
+                            "y_n_m": -1475.251
+                        }
+                    ]
+                }
+            ],
+            "land": [
+                {
+                    "name": "Западный и северный берег",
+                    "height_m": 12.0,
+                    "points": [
+                        {
+                            "x_e_m": -6000.0,
+                            "y_n_m": -6000.0
+                        },
+                        {
+                            "x_e_m": -2600.0,
+                            "y_n_m": -6000.0
+                        },
+                        {
+                            "x_e_m": -2400.0,
+                            "y_n_m": -3500.0
+                        },
+                        {
+                            "x_e_m": -2100.0,
+                            "y_n_m": -1200.0
+                        },
+                        {
+                            "x_e_m": -1900.0,
+                            "y_n_m": 800.0
+                        },
+                        {
+                            "x_e_m": -2050.0,
+                            "y_n_m": 2600.0
+                        },
+                        {
+                            "x_e_m": -1800.0,
+                            "y_n_m": 4300.0
+                        },
+                        {
+                            "x_e_m": -1300.0,
+                            "y_n_m": 5600.0
+                        },
+                        {
+                            "x_e_m": -600.0,
+                            "y_n_m": 6600.0
+                        },
+                        {
+                            "x_e_m": 400.0,
+                            "y_n_m": 7100.0
+                        },
+                        {
+                            "x_e_m": 1800.0,
+                            "y_n_m": 7000.0
+                        },
+                        {
+                            "x_e_m": 3000.0,
+                            "y_n_m": 6700.0
+                        },
+                        {
+                            "x_e_m": 4200.0,
+                            "y_n_m": 6900.0
+                        },
+                        {
+                            "x_e_m": 5200.0,
+                            "y_n_m": 7400.0
+                        },
+                        {
+                            "x_e_m": 6000.0,
+                            "y_n_m": 8000.0
+                        },
+                        {
+                            "x_e_m": 6000.0,
+                            "y_n_m": 10000.0
+                        },
+                        {
+                            "x_e_m": -6000.0,
+                            "y_n_m": 10000.0
+                        }
+                    ]
+                },
+                {
+                    "name": "Остров Восточный",
+                    "height_m": 25.0,
+                    "points": [
+                        {
+                            "x_e_m": 4600.0,
+                            "y_n_m": 2300.0
+                        },
+                        {
+                            "x_e_m": 4850.0,
+                            "y_n_m": 2050.0
+                        },
+                        {
+                            "x_e_m": 5250.0,
+                            "y_n_m": 2080.0
+                        },
+                        {
+                            "x_e_m": 5480.0,
+                            "y_n_m": 2350.0
+                        },
+                        {
+                            "x_e_m": 5420.0,
+                            "y_n_m": 2750.0
+                        },
+                        {
+                            "x_e_m": 5150.0,
+                            "y_n_m": 2950.0
+                        },
+                        {
+                            "x_e_m": 4800.0,
+                            "y_n_m": 2900.0
+                        },
+                        {
+                            "x_e_m": 4580.0,
+                            "y_n_m": 2650.0
+                        }
+                    ]
+                }
+            ],
+            "fairways": [
+                {
+                    "name": "Фарватер №1",
+                    "width_m": 370.4,
+                    "axis": [
+                        {
+                            "x_e_m": 0.0,
+                            "y_n_m": -300.0
+                        },
+                        {
+                            "x_e_m": 0.0,
+                            "y_n_m": 3200.0
+                        },
+                        {
+                            "x_e_m": 3031.089,
+                            "y_n_m": 4950.0
+                        }
+                    ]
+                }
+            ]
+        }
+    },
+    "ship": {
+        "asset": "ShipParameters_Model45m",
+        "length_m": 45.0,
+        "service_speed_kn": 15.0,
+        "tau_accel_s": 30.0,
+        "tau_decel_s": 60.0,
+        "astern_factor": 0.6,
+        "yaw_model": "Nomoto",
+        "k_prime": 0.8,
+        "t_prime": 2.0,
+        "norrbin_alpha_prime": 0.0,
+        "turn_speed_loss_coeff": 0.0,
+        "min_calc_speed_ms": 0.05,
+        "max_rudder_deg": 35.0,
+        "rudder_rate_deg_s": 2.321429,
+        "beam_m": 8.71,
+        "draft_m": 3.0
+    },
+    "recording": {
+        "track_rate_hz": 5.0,
+        "fixed_dt_s": 0.02,
+        "time_base": "t_s — время упражнения (симуляционное) от «Начать», с",
+        "coordinates": "x_e_m — восток, y_n_m — север, м; курс 0 = N, по часовой; руль и XTE > 0 — правый борт / правее линии пути",
+        "files": [
+            "track.csv",
+            "targets.csv",
+            "events.csv",
+            "session.json",
+            "assessment.csv",
+            "report.html"
+        ],
+        "telegraph_positions": [
+            "Полный вперёд",
+            "Средний вперёд",
+            "Малый вперёд",
+            "Самый малый вперёд",
+            "Стоп",
+            "Самый малый назад",
+            "Малый назад",
+            "Средний назад",
+            "Полный назад"
+        ]
+    },
+    "summary": {
+        "waypoints_passed": 3,
+        "waypoints_total": 3,
+        "max_abs_xte_m": 2031.1,
+        "time_outside_corridor_s": 518.64,
+        "corridor_exits": 1,
+        "shoal_warnings": 0,
+        "groundings": 0,
+        "collisions": 0,
+        "helm_actions": 6,
+        "telegraph_orders": 0,
+        "horn_signals": 0,
+        "weather_changes": 0,
+        "track_rows": 7853,
+        "event_rows": 28,
+        "target_rows": 23559
+    },
+    "assessment_settings": {
+        "defaultRequiredCpaNm": 0.5,
+        "riskCpaFactor": 2.0,
+        "riskHorizonMin": 20.0,
+        "headOnSectorDeg": 6.0,
+        "targetTurnDeg": 10.0,
+        "bearingWindowS": 60.0,
+        "steadyBearingDegPerMin": 1.0,
+        "actionRudderDeg": 5.0,
+        "actionCourseDeg": 30.0,
+        "actionSpeedReduction": 0.5,
+        "significantTurnDeg": 5.0,
+        "standOnFreeTcpaMin": 3.0,
+        "standOnFreeRangeNm": 1.0,
+        "standOnHeadingTolDeg": 10.0,
+        "standOnSpeedTol": 0.2,
+        "routeReturnAllowanceMin": 10.0,
+        "wheelOverRudderDeg": 20.0,
+        "passScore": 70.0,
+        "weightEncounters": 0.6,
+        "weightReaction": 0.1,
+        "weightRoute": 0.3,
+        "weightVisibility": 0.3,
+        "restrictedVisibilityNm": 2.0,
+        "blastToleranceS": 0.5,
+        "signalGapS": 3.0,
+        "makingWayKnots": 0.5,
+        "safeSpeedGraceS": 120.0,
+        "minimumSteerageSf": 0.2,
+        "criteria": [
+            {
+                "code": "E1",
+                "enabled": true,
+                "mandatory": true,
+                "full": 1.0,
+                "pass": 1.0,
+                "zero": 0.0,
+                "weight": 10.0
+            },
+            {
+                "code": "E2",
+                "enabled": true,
+                "mandatory": false,
+                "full": 3.0,
+                "pass": 2.0,
+                "zero": 1.0,
+                "weight": 6.0
+            },
+            {
+                "code": "E3",
+                "enabled": true,
+                "mandatory": true,
+                "full": 1.0,
+                "pass": 1.0,
+                "zero": 0.0,
+                "weight": 10.0
+            },
+            {
+                "code": "E4",
+                "enabled": true,
+                "mandatory": true,
+                "full": 1.0,
+                "pass": 1.0,
+                "zero": 0.0,
+                "weight": 10.0
+            },
+            {
+                "code": "E5",
+                "enabled": true,
+                "mandatory": false,
+                "full": 1.0,
+                "pass": 1.0,
+                "zero": 0.0,
+                "weight": 3.0
+            },
+            {
+                "code": "E6",
+                "enabled": true,
+                "mandatory": true,
+                "full": 1.0,
+                "pass": 1.0,
+                "zero": 2.0,
+                "weight": 10.0
+            },
+            {
+                "code": "E7",
+                "enabled": true,
+                "mandatory": true,
+                "full": 1.0,
+                "pass": 1.0,
+                "zero": 0.0,
+                "weight": 6.0
+            },
+            {
+                "code": "E8",
+                "enabled": true,
+                "mandatory": true,
+                "full": 1.0,
+                "pass": 1.0,
+                "zero": 0.5,
+                "weight": 10.0
+            },
+            {
+                "code": "R8b",
+                "enabled": true,
+                "mandatory": true,
+                "full": 0.5,
+                "pass": 0.3,
+                "zero": 0.0,
+                "weight": 6.0
+            },
+            {
+                "code": "E9",
+                "enabled": true,
+                "mandatory": false,
+                "full": 30.0,
+                "pass": 60.0,
+                "zero": 120.0,
+                "weight": 1.0
+            },
+            {
+                "code": "R1",
+                "enabled": true,
+                "mandatory": true,
+                "full": 0.5,
+                "pass": 1.0,
+                "zero": 1.5,
+                "weight": 8.0
+            },
+            {
+                "code": "R2",
+                "enabled": true,
+                "mandatory": false,
+                "full": 0.25,
+                "pass": 0.5,
+                "zero": 0.75,
+                "weight": 5.0
+            },
+            {
+                "code": "R3",
+                "enabled": true,
+                "mandatory": false,
+                "full": 0.0,
+                "pass": 30.0,
+                "zero": 60.0,
+                "weight": 5.0
+            },
+            {
+                "code": "R4",
+                "enabled": true,
+                "mandatory": true,
+                "full": 1.0,
+                "pass": 1.0,
+                "zero": 0.0,
+                "weight": 8.0
+            },
+            {
+                "code": "R5",
+                "enabled": true,
+                "mandatory": true,
+                "full": 1.0,
+                "pass": 1.0,
+                "zero": 1.0001,
+                "weight": 4.0
+            },
+            {
+                "code": "R6",
+                "enabled": true,
+                "mandatory": false,
+                "full": 0.25,
+                "pass": 0.5,
+                "zero": 1.0,
+                "weight": 6.0
+            },
+            {
+                "code": "R7",
+                "enabled": true,
+                "mandatory": false,
+                "full": 0.25,
+                "pass": 0.5,
+                "zero": 1.0,
+                "weight": 5.0
+            },
+            {
+                "code": "R8a",
+                "enabled": true,
+                "mandatory": false,
+                "full": 0.9,
+                "pass": 0.75,
+                "zero": 0.5,
+                "weight": 5.0
+            },
+            {
+                "code": "A1",
+                "enabled": true,
+                "mandatory": true,
+                "full": 0.0,
+                "pass": 0.0,
+                "zero": 1.0,
+                "weight": 0.0
+            },
+            {
+                "code": "A2",
+                "enabled": true,
+                "mandatory": true,
+                "full": 0.0,
+                "pass": 0.0,
+                "zero": 1.0,
+                "weight": 0.0
+            },
+            {
+                "code": "F1",
+                "enabled": true,
+                "mandatory": true,
+                "full": 120.0,
+                "pass": 120.0,
+                "zero": 240.0,
+                "weight": 8.0
+            },
+            {
+                "code": "F2",
+                "enabled": true,
+                "mandatory": false,
+                "full": 1.0,
+                "pass": 0.75,
+                "zero": 0.5,
+                "weight": 4.0
+            },
+            {
+                "code": "F3",
+                "enabled": true,
+                "mandatory": true,
+                "full": 1.0,
+                "pass": 1.1,
+                "zero": 1.5,
+                "weight": 8.0
+            },
+            {
+                "code": "F4",
+                "enabled": true,
+                "mandatory": false,
+                "full": 1.1,
+                "pass": 1.25,
+                "zero": 1.75,
+                "weight": 4.0
+            },
+            {
+                "code": "F5",
+                "enabled": true,
+                "mandatory": true,
+                "full": 30.0,
+                "pass": 60.0,
+                "zero": 120.0,
+                "weight": 8.0
+            },
+            {
+                "code": "F6",
+                "enabled": true,
+                "mandatory": true,
+                "full": 1.0,
+                "pass": 1.0,
+                "zero": 0.0,
+                "weight": 8.0
+            }
+        ]
+    },
+    "assessment": {
+        "assessed": true,
+        "score": 95.5,
+        "passed": true,
+        "failed": false,
+        "failure": "",
+        "criteria_evaluated": 23,
+        "criteria_failed": 0,
+        "mandatory_failed": 0
+    }
+}

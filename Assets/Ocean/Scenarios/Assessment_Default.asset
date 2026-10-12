@@ -39,6 +39,13 @@ MonoBehaviour:
     weightEncounters: 0.6
     weightReaction: 0.1
     weightRoute: 0.3
+    weightVisibility: 0.3
+    restrictedVisibilityNm: 2
+    blastToleranceS: 0.5
+    signalGapS: 3
+    makingWayKnots: 0.5
+    safeSpeedGraceS: 120
+    minimumSteerageSf: 0.2
     criteria:
     - code: E1
       enabled: 1
@@ -180,3 +187,45 @@ MonoBehaviour:
       pass: 0
       zero: 1
       weight: 0
+    - code: F1
+      enabled: 1
+      mandatory: 1
+      full: 120
+      pass: 120
+      zero: 240
+      weight: 8
+    - code: F2
+      enabled: 1
+      mandatory: 0
+      full: 1
+      pass: 0.75
+      zero: 0.5
+      weight: 4
+    - code: F3
+      enabled: 1
+      mandatory: 1
+      full: 1
+      pass: 1.1
+      zero: 1.5
+      weight: 8
+    - code: F4
+      enabled: 1
+      mandatory: 0
+      full: 1.1
+      pass: 1.25
+      zero: 1.75
+      weight: 4
+    - code: F5
+      enabled: 1
+      mandatory: 1
+      full: 30
+      pass: 60
+      zero: 120
+      weight: 8
+    - code: F6
+      enabled: 1
+      mandatory: 1
+      full: 1
+      pass: 1
+      zero: 0
+      weight: 8
