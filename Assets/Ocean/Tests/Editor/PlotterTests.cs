@@ -129,6 +129,41 @@ public class PlotterTests
     }
 
     [Test]
+    public void Tasks_ProgressFactsAndBriefing_NoHints()
+    {
+        foreach (ScenarioDefinition s in new[] { AssessmentTests.DemoB2(), AssessmentTests.DemoB3(), FogTests.DemoC4() })
+        {
+            var route = new RouteTracker();
+            route.Reset(s.route);
+            string page = ExerciseTasks.Page(s, TaskPhase.Running, 125.0, route);
+            StringAssert.Contains(s.title, page);
+            StringAssert.Contains(ExerciseTasks.BriefingFacts(s), page, $"{s.id}: условия — тот же текст, что на панели брифинга");
+            StringAssert.Contains(s.briefing.Trim(), page, $"{s.id}: брифинг целиком");
+            StringAssert.Contains("Время 02:05", page);
+            if (s.timeLimitSeconds > 0)
+                StringAssert.Contains($"осталось {ScenarioText.Clock(s.timeLimitSeconds - 125.0)}", page);
+            StringAssert.Contains($"Пройдено точек: 0 из {s.route.Count - 1}; следующая — 1 «{s.route[1].name}»", page);
+
+            // Всё, кроме текста брифинга (его пишет автор сценария), — без подсказок решения
+            string own = page.Replace(s.briefing.Trim(), "");
+            foreach (EncounterSituation e in Enum.GetValues(typeof(EncounterSituation)))
+            {
+                if (e == EncounterSituation.None) continue;
+                StringAssert.DoesNotContain(EncounterClassifier.Title(e), own, $"{s.id}: ситуация МППСС ({e})");
+                StringAssert.DoesNotContain(EncounterClassifier.Duty(e), own, $"{s.id}: обязанность ({e})");
+            }
+            StringAssert.DoesNotContain("безопасн", own, $"{s.id}: безопасная скорость (F3/F4) — не подсказывать");
+            StringAssert.DoesNotContain("сигнал", own, $"{s.id}: время до туманного сигнала (F1) — не подсказывать");
+        }
+        Assert.Greater(FogTests.DemoC4().safeSpeedKnots, 0f, "у C4-01 безопасная скорость есть — и она не показана");
+
+        ScenarioDefinition b2 = AssessmentTests.DemoB2();
+        StringAssert.Contains("Брифинг — упражнение не начато", ExerciseTasks.Page(b2, TaskPhase.Briefing, 0, null));
+        StringAssert.Contains("Упражнение завершено, 19:51", ExerciseTasks.Page(b2, TaskPhase.Finished, 1191, null));
+        StringAssert.Contains("Свободное плавание", ExerciseTasks.Page(null, TaskPhase.Free, 0, null));
+    }
+
+    [Test]
     public void RevealEvent_AppendedAtEnd_TextAndReadBack()
     {
         Assert.Greater((int)ExerciseEventType.PlotterRevealTargets, (int)ExerciseEventType.SteeringRestored, "новый тип — в конец перечня");

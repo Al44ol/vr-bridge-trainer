@@ -28,6 +28,9 @@
 //     плавании и после упражнения — все. Режим инструктора / теста «все цели»
 //     (окно инструктора, меню A «Отладка») — видно всё, надпись на планшете,
 //     событие PlotterRevealTargets в журнал упражнения.
+//   • Вкладка «Задание» (кнопка «Задание ⇄ Карта», поверх карты): ход упражнения, условия
+//     (тот же текст, что на панели брифинга), текст брифинга, листание «< стр. >» — без
+//     подсказок решения (ExerciseTasks); пока открыта, карта не перестраивается.
 //   • Ночь: шторка «Подсветка приборов» (BridgeLighting.RegisterInstrumentPanel).
 // Скрытый планшет ничего не обновляет.
 // ============================================================
@@ -93,7 +96,7 @@ public class NavPlotter : MonoBehaviour
     public bool RevealAll => revealAll;
     public bool Shown => wantShown && !autoHidden;
 
-    private const float Width = 600f, Height = 400f, MapSize = 400f, Pad = 8f, Gap = 6f, ButtonH = 46f;
+    private const float Width = 600f, Height = 400f, MapSize = 400f, Pad = 8f, Gap = 6f, ButtonH = 42f;
     private static readonly Color PanelColor = new Color(0.04f, 0.06f, 0.08f, 0.96f);
     private static readonly Color ButtonColor = new Color(0.22f, 0.4f, 0.62f);
     private static readonly Color ActiveColor = new Color(0.3f, 0.52f, 0.8f);
@@ -115,6 +118,12 @@ public class NavPlotter : MonoBehaviour
     private ScenarioDefinition builtScenario;
     private bool builtOnce, routeMode;
     private TextMeshProUGUI rangeText, dataText, northText, revealBanner;
+    // Вкладка «Задание» — поверх карты
+    private RectTransform taskView;
+    private TextMeshProUGUI taskText, pageLabel;
+    private GameObject pageButtons;
+    private int taskPage = 1;
+    private bool showTasks;
     private readonly List<TextMeshProUGUI> shipLabels = new List<TextMeshProUGUI>();
     private readonly List<(TextMeshProUGUI text, WorldPosition pos)> staticLabels = new List<(TextMeshProUGUI, WorldPosition)>();
     private readonly List<(TextMeshProUGUI label, Image image, Func<string> text, Func<Color> color)> dynamicButtons =
@@ -287,6 +296,17 @@ public class NavPlotter : MonoBehaviour
             foreach (TargetTrack tr in a.Targets)
                 if (tr.Detected) detected.Add(tr.Info.Id);
 
+        if (!showTasks) RefreshMap();   // на вкладке «Задание» карта не перестраивается
+        if (Time.unscaledTime >= nextText)
+        {
+            nextText = Time.unscaledTime + 0.5f;
+            dataText.text = DataText(a);
+            if (showTasks) RefreshTasks();
+        }
+    }
+
+    private void RefreshMap()
+    {
         // Неподвижный слой: акватория и маршрут сценария
         WaterArea area = runner != null && runner.waterArea != null ? runner.waterArea.area : null;
         ScenarioDefinition sc = runner != null ? runner.Current : null;
@@ -357,12 +377,44 @@ public class NavPlotter : MonoBehaviour
                          $"  ·  {(rotate ? "курс вверх" : "север вверх")}" +
                          $"\n<size=80%><color=#9AA6B2>сетка {GridTitle(mapStatic.GridStepM)}</color></size>";
         revealBanner.transform.parent.gameObject.SetActive(revealAll);
+    }
 
-        if (Time.unscaledTime >= nextText)
+    // ─────────── Вкладка «Задание» ───────────
+    // Ход упражнения, условия (как на брифинге) и текст брифинга — без подсказок решения (ExerciseTasks)
+    private void RefreshTasks()
+    {
+        ScenarioDefinition sc = runner != null ? runner.Current : null;
+        TaskPhase phase = runner == null || sc == null ? TaskPhase.Free
+                        : runner.CurrentPhase == ScenarioRunner.Phase.Briefing ? TaskPhase.Briefing
+                        : runner.CurrentPhase == ScenarioRunner.Phase.Running ? TaskPhase.Running
+                        : runner.CurrentPhase == ScenarioRunner.Phase.Finished ? TaskPhase.Finished : TaskPhase.Free;
+        string text = ExerciseTasks.Page(sc, phase, runner != null ? runner.ExerciseTime : 0.0,
+                                         phase == TaskPhase.Running && runner != null ? runner.Route : null);
+        if (taskText.text != text)
         {
-            nextText = Time.unscaledTime + 0.5f;
-            dataText.text = DataText(a);
+            taskText.text = text;
+            taskText.ForceMeshUpdate();
         }
+        int pages = Mathf.Max(1, taskText.textInfo.pageCount);
+        taskPage = Mathf.Clamp(taskPage, 1, pages);
+        taskText.pageToDisplay = taskPage;
+        pageLabel.text = pages > 1 ? $"стр. {taskPage} / {pages}" : "";
+        pageButtons.SetActive(pages > 1);
+    }
+
+    private void ToggleTasks()
+    {
+        showTasks = !showTasks;
+        taskView.gameObject.SetActive(showTasks);
+        nextRefresh = 0f;
+        nextText = 0f;
+    }
+
+    private void StepTaskPage(int dir)
+    {
+        taskPage += dir;
+        nextText = 0f;
+        nextRefresh = 0f;
     }
 
     // ─────────── Подписи ───────────
@@ -587,6 +639,22 @@ public class NavPlotter : MonoBehaviour
         Stretch(revealBanner.rectTransform);
         banner.gameObject.SetActive(false);
 
+        // Вкладка «Задание» — поверх карты (непрозрачная), текст страницами, листание внизу
+        taskView = MakeRect(window, "Tasks", new Vector2(0.5f, 0.5f), new Vector2(MapSize, MapSize), new Vector2(0.5f, 0.5f), Vector2.zero);
+        Image taskBg = taskView.gameObject.AddComponent<Image>();
+        taskBg.color = new Color(0.06f, 0.08f, 0.11f, 1f);
+        taskBg.raycastTarget = false;
+        taskText = Text(taskView, "", 14f, Color.white, TextAlignmentOptions.TopLeft);
+        taskText.overflowMode = TextOverflowModes.Page;
+        Place(taskText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -10f), new Vector2(MapSize - 24f, MapSize - 62f), new Vector2(0.5f, 1f));
+        var pages = MakeRect(taskView, "Pages", new Vector2(0.5f, 0f), new Vector2(MapSize - 24f, ButtonH), new Vector2(0.5f, 0f), new Vector2(0f, 8f));
+        pageButtons = pages.gameObject;
+        Button(pages, 0f, 0f, 70f, "<", () => StepTaskPage(-1), null, null);
+        Button(pages, MapSize - 24f - 70f, 0f, 70f, ">", () => StepTaskPage(+1), null, null);
+        pageLabel = Text(pages, "", 14f, MutedColor, TextAlignmentOptions.Center);
+        Place(pageLabel.rectTransform, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(200f, ButtonH), new Vector2(0.5f, 0.5f));
+        taskView.gameObject.SetActive(false);
+
         // Столбец: кнопки и данные
         column = MakeRect(root, "Column", new Vector2(1f, 0.5f), new Vector2(Width - MapSize, Height), new Vector2(1f, 0.5f), Vector2.zero);
         float w = Width - MapSize - 2f * Pad, half = (w - Gap) * 0.5f, y = -Pad;
@@ -597,8 +665,10 @@ public class NavPlotter : MonoBehaviour
         Button(column, Pad, y, w, "", ToggleHeadUp, () => headUp ? "Курс вверх" : "Север вверх", () => headUp ? ActiveColor : ButtonColor);
         y -= ButtonH + Gap;
         Button(column, Pad, y, w, "", ToggleRoute, () => routeMode ? "За судном" : "Весь маршрут", () => routeMode ? ActiveColor : ButtonColor);
+        y -= ButtonH + Gap;
+        Button(column, Pad, y, w, "", ToggleTasks, () => showTasks ? "Карта" : "Задание", () => showTasks ? ActiveColor : ButtonColor);
         y -= ButtonH + Gap + 2f;
-        dataText = Text(column, "", 15f, Color.white, TextAlignmentOptions.TopLeft);
+        dataText = Text(column, "", 14f, Color.white, TextAlignmentOptions.TopLeft);
         dataText.overflowMode = TextOverflowModes.Truncate;
         Place(dataText.rectTransform, new Vector2(0f, 1f), new Vector2(Pad, y), new Vector2(w, Height + y - Pad), new Vector2(0f, 1f));
 

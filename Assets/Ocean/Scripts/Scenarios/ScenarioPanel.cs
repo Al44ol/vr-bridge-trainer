@@ -215,7 +215,7 @@ public class ScenarioPanel : MonoBehaviour
         Title($"{s.id}. {s.title}", ref y);
         Text(s.briefing, 18f, Color.white, ref y);
         y -= Gap;
-        Text(Conditions(s), 16f, MutedColor, ref y);
+        Text(ExerciseTasks.BriefingFacts(s), 16f, MutedColor, ref y);   // тот же текст — вкладка «Задание» планшета (D2)
         y -= Gap;
 
         if (Phase == ScenarioRunner.Phase.Briefing)
@@ -548,21 +548,6 @@ public class ScenarioPanel : MonoBehaviour
     {
         mode = Mode.Hidden;
         if (canvas != null) canvas.enabled = false;
-    }
-
-    private static string Conditions(ScenarioDefinition s)
-    {
-        var b = new StringBuilder();
-        b.AppendLine("<b>Условия</b>");
-        b.AppendLine($"Время суток: {ScenarioText.TimeOfDayTitle(s.timeOfDay)}; погода: {ScenarioText.Weather(s.weather)}");
-        OwnShipInitialState i = s.initial;
-        if (i != null)
-            b.AppendLine($"Начало: курс {i.headingDeg:000}°, {ScenarioText.Num(i.speedKnots, 1)} уз, телеграф «{ScenarioText.Telegraph(i.telegraph)}», руль {ScenarioText.Num(i.rudderDeg)}°");
-        b.AppendLine($"Путевых точек: {Math.Max(0, s.route.Count - 1)}, маршрут {ScenarioText.Num(s.RouteLength / 1852.0, 1)} мили");
-        if (s.traffic != null && s.traffic.Count > 0) b.AppendLine($"Другие суда в районе: {s.traffic.Count}");
-        b.AppendLine(s.timeLimitSeconds > 0 ? $"Лимит времени: {ScenarioText.Clock(s.timeLimitSeconds)}" : "Без лимита времени");
-        b.Append($"Завершение: {ScenarioText.EndConditions(s)}");
-        return b.ToString();
     }
 
     // ─────────── Построение панели ───────────

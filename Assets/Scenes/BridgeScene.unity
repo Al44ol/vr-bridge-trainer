@@ -9569,6 +9569,11 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 8806329115733545878, guid: 77e7c27b2c5525e4aa8cc9f99d654486, type: 3}
   m_PrefabInstance: {fileID: 1373153106}
   m_PrefabAsset: {fileID: 0}
+--- !u!4 &1373153108 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 7917674758919744168, guid: 77e7c27b2c5525e4aa8cc9f99d654486, type: 3}
+  m_PrefabInstance: {fileID: 1373153106}
+  m_PrefabAsset: {fileID: 0}
 --- !u!23 &1377802026 stripped
 MeshRenderer:
   m_CorrespondingSourceObject: {fileID: -268363167517769989, guid: 0cf5b21d0646cb04b8c9f74ab13f62ba, type: 3}
@@ -10458,6 +10463,71 @@ MeshRenderer:
   m_CorrespondingSourceObject: {fileID: -678588488315902003, guid: 86087020c6b9c144492a794e663e12f7, type: 3}
   m_PrefabInstance: {fileID: 463198669}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1567253635
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1567253637}
+  - component: {fileID: 1567253636}
+  m_Layer: 0
+  m_Name: NavPlotter
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1567253636
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1567253635}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 79442b246048419682a39984e4e39f3f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NavPlotter
+  runner: {fileID: 1422889051}
+  navigation: {fileID: 440562507}
+  assessment: {fileID: 1422889054}
+  lighting: {fileID: 1258629464}
+  leftController: {fileID: 1373153108}
+  visibleOnStart: 0
+  controllerButton: 1
+  handOffset: {x: 0, y: 0.14, z: 0.05}
+  faceHead: 1
+  handEuler: {x: 35, y: 0, z: 0}
+  hideWhileGrabbing: 1
+  canvasScale: 0.0005
+  uiRateHz: 5
+  rangeIndex: 3
+  headUp: 0
+  headUpShipOffset: 0.3
+  trailMinMeters: 10
+  trailMaxPoints: 1500
+  vectorMinutes: 3
+  minHullPx: 12
+  revealAll: 0
+--- !u!4 &1567253637
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1567253635}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1573118394
 GameObject:
   m_ObjectHideFlags: 0
@@ -15344,3 +15414,4 @@ SceneRoots:
   - {fileID: 41377262}
   - {fileID: 937235957}
   - {fileID: 1090787289}
+  - {fileID: 1567253637}
