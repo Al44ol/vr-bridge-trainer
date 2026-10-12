@@ -77,12 +77,10 @@ public class InstructorStation : MonoBehaviour
             () => Mode == DisplayMode.Instructor ? "Монитор: окно инструктора" : "Монитор: зеркало шлема",
             () => SetMode(Mode == DisplayMode.Instructor ? DisplayMode.Mirror : DisplayMode.Instructor),
             instructorOnly: true).InMenu(BridgeMenu.SettingsMenuId);
-        mode.CloseOnExecute = false;
         menuCommands.Add(mode);
         BridgeMenuCommand pip = BridgeMenu.Register(MenuGroup,
             () => Pip != null && Pip.Active ? "Вид из шлема на мониторе (PiP): вкл" : "Вид из шлема на мониторе (PiP): выкл",
             TogglePip, () => Mode == DisplayMode.Instructor && Pip != null, instructorOnly: true).InMenu(BridgeMenu.SettingsMenuId);
-        pip.CloseOnExecute = false;
         menuCommands.Add(pip);
     }
 

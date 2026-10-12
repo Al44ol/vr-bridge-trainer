@@ -2,9 +2,13 @@
 // PanelToggle.cs — Панель погоды: меню «Параметры» (Y) → «Погода (панель)…» (D1)
 // До D1 — кнопка B правого контроллера (InputAction для OpenXR) и Tab; теперь только
 // при controllerButton (по умолчанию выкл — кнопка B свободна).
+// D1: под кнопками панели — «« Назад» (копия первой кнопки панели, создаётся при запуске,
+// сцену не правит): закрыть панель и снова открыть меню «Параметры».
 // ============================================================
+using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
 
 public class PanelToggle : MonoBehaviour
 {
@@ -31,6 +35,7 @@ public class PanelToggle : MonoBehaviour
         isVisible = !startHidden;
         if (canvas != null)
             canvas.enabled = isVisible;
+        AddBackButton();
 
         if (controllerButton)
         {
@@ -48,6 +53,7 @@ public class PanelToggle : MonoBehaviour
         BridgeMenu.SetGroupOrder("Общее", -95);
         BridgeMenu.SetGroupExpanded("Общее", true);   // D1: на главной странице меню Y
         menuCommand = BridgeMenu.Register("Общее", () => isVisible ? $"{menuTitle}: закрыть" : $"{menuTitle}…", Toggle)
+            .OpensWindow()   // меню закрывается — панели не накладываются
             .InMenu(BridgeMenu.SettingsMenuId);
     }
 
@@ -64,6 +70,33 @@ public class PanelToggle : MonoBehaviour
             bButtonAction.Disable();
             bButtonAction.Dispose();
         }
+    }
+
+    /// <summary>«« Назад»: закрыть панель и снова открыть меню «Параметры» (Y).</summary>
+    public void Back()
+    {
+        if (isVisible) Toggle();
+        BridgeMenu.OpenMenu(BridgeMenu.SettingsMenuId);
+    }
+
+    // Кнопка «« Назад» — копия первой кнопки панели (тот же вид), под панелью по центру
+    private void AddBackButton()
+    {
+        Button sample = GetComponentInChildren<Button>(true);
+        var panel = transform as RectTransform;
+        if (sample == null || panel == null || transform.Find("BackButton") != null) return;
+        Button back = Instantiate(sample, transform);
+        back.name = "BackButton";
+        back.onClick = new Button.ButtonClickedEvent();   // без действий кнопки-образца (пресет погоды)
+        back.onClick.AddListener(Back);
+        var rt = (RectTransform)back.transform;
+        var src = (RectTransform)sample.transform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
+        rt.pivot = new Vector2(0.5f, 1f);
+        rt.sizeDelta = new Vector2(src.rect.width, src.rect.height);
+        rt.anchoredPosition = new Vector2(0f, -0.1f * src.rect.height);
+        foreach (TMP_Text l in back.GetComponentsInChildren<TMP_Text>(true)) l.text = "« Назад";
+        foreach (Text l in back.GetComponentsInChildren<Text>(true)) l.text = "« Назад";
     }
 
     public void Toggle()

@@ -45,7 +45,6 @@ public class ExerciseFailureNotice : MonoBehaviour
         toggle = BridgeMenu.Register("Оповещения",
             () => showNotice ? "Оповещение о провале: вкл" : "Оповещение о провале: выкл",
             () => showNotice = !showNotice, instructorOnly: true).InMenu(BridgeMenu.SettingsMenuId);
-        toggle.CloseOnExecute = false;
     }
 
     void OnDisable()

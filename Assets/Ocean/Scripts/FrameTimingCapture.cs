@@ -75,6 +75,7 @@ public class FrameTimingCapture : MonoBehaviour
         // D1: без клавиатуры — из меню «Параметры» (Y), раздел «Замер»
         menuCommand = BridgeMenu.Register("Замер",
             () => capturing ? "Прервать замер частоты кадров" : $"Замер частоты кадров ({durationSeconds:F0} с)", ToggleCapture)
+            .OpensWindow()   // замер — без открытого меню перед глазами (как обычный вид)
             .InMenu(BridgeMenu.SettingsMenuId);
     }
 

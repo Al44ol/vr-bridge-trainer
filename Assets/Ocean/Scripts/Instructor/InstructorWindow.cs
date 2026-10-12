@@ -2,7 +2,7 @@
 // InstructorWindow.cs — Интерфейс окна инструктора (D1)
 //
 // Screen Space Overlay (только монитор, в шлем не попадает), строится в коде,
-// сцену не правит. Опорное разрешение 1920 × 1080 (CanvasScaler).
+// сцену не правит. Опорное разрешение 1920 × 1080 (CanvasScaler, Expand — окно помещается целиком).
 //   • Верхняя строка: выбор сценария «< … >» и «Загрузить», ID обучающегося
 //     (поле ввода → ExerciseRecorder.TraineeId), «Начать», «Пауза / Продолжить»,
 //     «Перезапуск», «Завершить», «Свободное плавание»; справа — фаза и время.
@@ -516,8 +516,9 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         var scaler = go.AddComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920f, 1080f);
-        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-        scaler.matchWidthOrHeight = 0.5f;
+        // Expand: холст не меньше 1920 × 1080 по обеим осям — при узком или высоком Game View окно
+        // уменьшается целиком, а не обрезается справа (первая проверка D1: столбец справа не помещался)
+        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
         go.AddComponent<GraphicRaycaster>();
         root = go.GetComponent<RectTransform>();
 

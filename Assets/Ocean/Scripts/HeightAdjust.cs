@@ -62,6 +62,7 @@ public class HeightAdjust : MonoBehaviour
         BridgeMenu.SetGroupOrder("Общее", -95);
         BridgeMenu.SetGroupExpanded("Общее", true);   // D1: на главной странице меню Y
         menuCommand = BridgeMenu.Register("Общее", () => panelVisible ? "Рост игрока: закрыть панель" : "Рост игрока…", TogglePanel)
+            .OpensWindow()   // меню закрывается — панели не накладываются
             .InMenu(BridgeMenu.SettingsMenuId);
     }
 
@@ -159,8 +160,9 @@ public class HeightAdjust : MonoBehaviour
         CreateLabel(bg.transform, maxOffset.ToString("0") + " м",
                     new Vector2(120, -40), 14, new Color(0.7f, 0.7f, 0.7f));
 
-        // Кнопка «Сброс»
-        CreateButton(bg.transform, "Сброс", new Vector2(0, -65), ResetHeight);
+        // Кнопки «Сброс» и «« Назад» (D1: закрыть панель и вернуться в меню «Параметры»)
+        CreateButton(bg.transform, "Сброс", new Vector2(-65, -65), ResetHeight);
+        CreateButton(bg.transform, "« Назад", new Vector2(65, -65), Back);
 
         panelCanvas.enabled = false;
     }
@@ -178,6 +180,13 @@ public class HeightAdjust : MonoBehaviour
         heightOffset = 0f;
         heightSlider.value = 0f;
         ApplyHeight();
+    }
+
+    /// <summary>«« Назад»: закрыть панель и снова открыть меню «Параметры» (Y).</summary>
+    void Back()
+    {
+        if (panelVisible) TogglePanel();
+        BridgeMenu.OpenMenu(BridgeMenu.SettingsMenuId);
     }
 
     void TogglePanel()

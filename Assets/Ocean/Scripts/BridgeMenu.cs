@@ -23,6 +23,8 @@
 // D1: подменю — меню было перегружено. Группа показывается одной кнопкой «Вводные »», на её
 // странице — команды группы и «« Назад»; меню открывается с главной страницы. Группы, отмеченные
 // SetGroupExpanded (сценарий, сигнализация, общие параметры), раскрыты прямо на главной.
+// Меню после команды не закрывается (несколько пунктов подряд); закрывается только у команд,
+// открывающих своё окно (OpensWindow) — окна не накладываются.
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -41,8 +43,11 @@ public sealed class BridgeMenuCommand
     public Func<bool> IsAvailable;
     /// <summary>Команда инструктора (D1: в окне инструктора; пока доступна и в шлеме).</summary>
     public bool InstructorOnly;
-    /// <summary>Закрыть меню после выполнения.</summary>
-    public bool CloseOnExecute = true;
+    /// <summary>
+    /// Закрыть меню после выполнения. D1: по умолчанию меню остаётся открытым (можно включить
+    /// несколько пунктов подряд); закрывается только у команд, открывающих своё окно (OpensWindow).
+    /// </summary>
+    public bool CloseOnExecute;
     /// <summary>Недоступную команду не показывать (а не делать серой) — B2: команды сценария по фазе.</summary>
     public bool HideWhenUnavailable;
 
@@ -55,6 +60,13 @@ public sealed class BridgeMenuCommand
 
     public bool Available => IsAvailable == null || IsAvailable();
     public bool Visible => !HideWhenUnavailable || Available;
+
+    /// <summary>Команда открывает своё окно (панель сценария, рост, погода…) — меню закрывается, чтобы окна не накладывались (D1).</summary>
+    public BridgeMenuCommand OpensWindow()
+    {
+        CloseOnExecute = true;
+        return this;
+    }
 
     /// <summary>Перенести команду в другое меню (B4).</summary>
     public BridgeMenuCommand InMenu(string menu)
@@ -108,6 +120,13 @@ public class BridgeMenu : MonoBehaviour
     }
 
     private static bool IsExpanded(string group) => string.IsNullOrEmpty(group) || expandedGroups.Contains(group);
+
+    /// <summary>Открыть меню по id (пусто — меню A, SettingsMenuId — «Параметры»): кнопка «« Назад» панелей (D1).</summary>
+    public static void OpenMenu(string menuId)
+    {
+        foreach (BridgeMenu m in instances)
+            if (m != null && (m.menuId ?? "") == (menuId ?? "")) { m.Open(); return; }
+    }
 
     /// <summary>Пересобрать открытые меню (реестр изменился).</summary>
     public static void RebuildOpen()

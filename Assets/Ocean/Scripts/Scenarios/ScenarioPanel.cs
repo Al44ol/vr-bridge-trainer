@@ -112,22 +112,22 @@ public class ScenarioPanel : MonoBehaviour
         BridgeMenu.SetGroupExpanded(MenuGroup, true);   // D1: команды сценария — на главной странице меню, остальное — в подменю
         BridgeMenu.SetGroupOrder("Отладка", 100);
         menuCommands.Add(BridgeMenu.Register(MenuGroup, "Выбор сценария…", ShowSelection,
-            () => runner != null && Phase != ScenarioRunner.Phase.Running, hideWhenUnavailable: true));
+            () => runner != null && Phase != ScenarioRunner.Phase.Running, hideWhenUnavailable: true).OpensWindow());   // D1: открывает панель — меню закрывается
         menuCommands.Add(BridgeMenu.Register(MenuGroup, "Начать упражнение", () => runner.StartExercise(),
             () => Phase == ScenarioRunner.Phase.Briefing, hideWhenUnavailable: true));
         menuCommands.Add(BridgeMenu.Register(MenuGroup,
             () => Phase == ScenarioRunner.Phase.Finished ? "Результаты" : "Брифинг",
             () => { if (Phase == ScenarioRunner.Phase.Finished) ShowResults(); else ShowBriefing(); },
-            () => runner != null && runner.Current != null && Phase != ScenarioRunner.Phase.Idle, hideWhenUnavailable: true));
+            () => runner != null && runner.Current != null && Phase != ScenarioRunner.Phase.Idle, hideWhenUnavailable: true).OpensWindow());
         menuCommands.Add(BridgeMenu.Register(MenuGroup, "Перезапустить сценарий", () => runner.Restart(),
             () => runner != null && runner.Current != null && Phase != ScenarioRunner.Phase.Idle,
-            instructorOnly: true, hideWhenUnavailable: true));
+            instructorOnly: true, hideWhenUnavailable: true).OpensWindow());   // брифинг
         menuCommands.Add(BridgeMenu.Register(MenuGroup, "Завершить досрочно", () => runner.Abort(),
-            () => Phase == ScenarioRunner.Phase.Running, instructorOnly: true, hideWhenUnavailable: true));
+            () => Phase == ScenarioRunner.Phase.Running, instructorOnly: true, hideWhenUnavailable: true).OpensWindow());   // разбор
         menuCommands.Add(BridgeMenu.Register(MenuGroup, () => Phase == ScenarioRunner.Phase.Finished ? "Оценка (итог)" : "Текущий балл",
             () => { if (Phase == ScenarioRunner.Phase.Finished) ShowResults(); else ShowCurrentScore(); },
             () => assessment != null && assessment.assess && (Phase == ScenarioRunner.Phase.Running || Phase == ScenarioRunner.Phase.Finished),
-            hideWhenUnavailable: true).InMenu(BridgeMenu.SettingsMenuId));
+            hideWhenUnavailable: true).OpensWindow().InMenu(BridgeMenu.SettingsMenuId));
         Subscribe();
     }
 

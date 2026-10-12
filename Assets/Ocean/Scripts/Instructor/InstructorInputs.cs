@@ -118,7 +118,6 @@ public class InstructorInputs : MonoBehaviour
         // Переключатель оповещения — меню «Параметры» (Y), подменю «Оповещения»
         BridgeMenuCommand announce = BridgeMenu.Register("Оповещения", () => announceFailures ? "Оповещение об отказах: вкл" : "Оповещение об отказах: выкл",
             () => SetAnnounce(!announceFailures), instructorOnly: true).InMenu(BridgeMenu.SettingsMenuId);
-        announce.CloseOnExecute = false;
         menuCommands.Add(announce);
     }
 
