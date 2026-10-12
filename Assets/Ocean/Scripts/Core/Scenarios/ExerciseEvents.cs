@@ -44,6 +44,14 @@
 //   TargetSoundSignal    туманный сигнал цели дошёл до своего судна (источник — TrafficController):
 //                        Subject — id цели, Index — SoundSignalKind, Value — дистанция в момент подачи, м;
 //                        Value2 — курсовой угол цели, ° (0…360)
+// Окно инструктора (D1; источники — ScenarioRunner и InstructorInputs, ByInstructor = true):
+//   ExercisePaused       пауза: модель, цели и время упражнения стоят (время события — момент паузы)
+//   ExerciseResumed      Value — длительность паузы по часам, с
+//   EngineFailure        вводная «отказ главного двигателя»: Subject — положение телеграфа, Value — SF в момент отказа
+//   EngineRestored       Value — сколько длился отказ, с (время упражнения)
+//   SteeringFailure      вводная «отказ рулевого устройства»: Value — заклиненный фактический руль, ° (> 0 — ПБ);
+//                        Value2 — заданный руль в момент отказа, °
+//   SteeringRestored     Value — сколько длился отказ, с
 // XTE > 0 — судно правее линии пути.
 // ============================================================
 using System;
@@ -78,7 +86,14 @@ public enum ExerciseEventType
     // Ограниченная видимость и звуковые сигналы (C4)
     VisibilityChanged,
     SoundSignal,
-    TargetSoundSignal
+    TargetSoundSignal,
+    // Окно инструктора (D1): пауза и вводные
+    ExercisePaused,
+    ExerciseResumed,
+    EngineFailure,
+    EngineRestored,
+    SteeringFailure,
+    SteeringRestored
 }
 
 public enum ScenarioEndReason
@@ -163,6 +178,12 @@ public struct ExerciseEvent
                 return $"Обнаружена цель «{Subject}»: {ScenarioText.Num(Value, 2)} мили (дальность обнаружения {ScenarioText.Num(Value2, 1)} мили)";
             case ExerciseEventType.EncounterStarted:
                 return $"«{Subject}»: {EncounterClassifier.Title((EncounterSituation)Index)} — {EncounterClassifier.Duty((EncounterSituation)Index)}; CPA {ScenarioText.Num(Value, 2)} мили, TCPA {ScenarioText.Num(Value2, 1)} мин";
+            case ExerciseEventType.ExercisePaused: return "ПАУЗА (инструктор)";
+            case ExerciseEventType.ExerciseResumed: return double.IsNaN(Value) ? "Продолжение после паузы" : $"Продолжение после паузы ({ScenarioText.Num(Value)} с по часам)";
+            case ExerciseEventType.EngineFailure: return $"ВВОДНАЯ: отказ главного двигателя (телеграф «{Subject}»)";
+            case ExerciseEventType.EngineRestored: return $"Главный двигатель восстановлен (отказ {ScenarioText.Num(Value)} с)";
+            case ExerciseEventType.SteeringFailure: return $"ВВОДНАЯ: отказ рулевого устройства — руль заклинило на {ScenarioText.Rudder(Value)}";
+            case ExerciseEventType.SteeringRestored: return $"Рулевое устройство восстановлено (отказ {ScenarioText.Num(Value)} с)";
         }
         return $"{Type} {Subject}";
     }

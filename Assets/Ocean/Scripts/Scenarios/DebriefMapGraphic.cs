@@ -8,6 +8,9 @@
 // всё вне окна отсекается в геометрии (MapGeometry). Подписи (цели,
 // наименьшая дистанция, манёвр) — текстом TextMeshPro: их ставит ScenarioPanel
 // по Labels() в координатах этой графики. Строится один раз на смену вида.
+// D1: тот же класс — неподвижный слой карты окна инструктора (DebriefMap.BuildStatic),
+// наследник InstructorMapGraphic — подвижный (суда, следы, векторы); примитивы — protected.
+// Отметка вводной (MapLayer.Failure) — кольцо.
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -37,12 +40,13 @@ public class DebriefMapGraphic : MaskableGraphic
     public static readonly Color OkColor = new Color(0.45f, 0.9f, 0.5f);
     public static readonly Color BadColor = new Color(1f, 0.35f, 0.3f);
     public static readonly Color GridColor = new Color(1f, 1f, 1f, 0.07f);
+    public static readonly Color FailureColor = new Color(1f, 0.78f, 0.2f);
 
     private DebriefMapData data;
     private int viewIndex;
-    private MapRect view;
-    private double scale;   // единиц холста на метр
-    private Rect area;
+    protected MapRect view;
+    protected double scale;   // единиц холста на метр
+    protected Rect area;
 
     public DebriefMapData Data => data;
     public int ViewIndex => viewIndex;
@@ -60,7 +64,7 @@ public class DebriefMapGraphic : MaskableGraphic
         SetVerticesDirty();
     }
 
-    private void Layout()
+    protected void Layout()
     {
         area = GetPixelAdjustedRect();
         DebriefMapView v = View;
@@ -116,6 +120,7 @@ public class DebriefMapGraphic : MaskableGraphic
                 case MapLayer.Manoeuvre: Ring(vh, m.Position, 8f, 2f, OwnColor); break;
                 case MapLayer.Start: Dot(vh, m.Position, 4.5f, Color.white); break;
                 case MapLayer.Accident: Cross(vh, m.Position, 9f, 3f, BadColor); break;
+                case MapLayer.Failure: Ring(vh, m.Position, 7f, 2.5f, FailureColor); break;   // D1: вводная
             }
     }
 
@@ -139,18 +144,18 @@ public class DebriefMapGraphic : MaskableGraphic
             }
         }
         foreach (MapMarker m in data.Markers)
-            if ((m.Layer == MapLayer.Manoeuvre || m.Layer == MapLayer.Accident) && view.Contains(m.Position))
+            if ((m.Layer == MapLayer.Manoeuvre || m.Layer == MapLayer.Accident || m.Layer == MapLayer.Failure) && view.Contains(m.Position))
                 list.Add(new Label
                 {
                     Local = ToLocal(m.Position) + new Vector2(10, -10),
                     Text = m.Layer == MapLayer.Manoeuvre ? $"манёвр ({m.Label})" : m.Label,
-                    Color = m.Layer == MapLayer.Manoeuvre ? OwnColor : BadColor
+                    Color = m.Layer == MapLayer.Manoeuvre ? OwnColor : m.Layer == MapLayer.Failure ? FailureColor : BadColor
                 });
         return list;
     }
 
     // ─────────── Примитивы ───────────
-    private static Color AidColor(AidType t)
+    protected static Color AidColor(AidType t)
     {
         switch (IalaMarks.Get(t).MainColor)
         {
@@ -164,7 +169,7 @@ public class DebriefMapGraphic : MaskableGraphic
 
     private readonly List<(double s0, double s1)> dashRuns = new List<(double s0, double s1)>();
 
-    private void Polyline(VertexHelper vh, List<WorldPosition> pts, float width, Color c, bool dashed = false)
+    protected void Polyline(VertexHelper vh, List<WorldPosition> pts, float width, Color c, bool dashed = false)
     {
         List<WorldPosition> dec = MapGeometry.Decimate(pts, 1.5 / scale);
         double dash = 7 / scale, gap = 5 / scale, phase = 0;
@@ -181,7 +186,7 @@ public class DebriefMapGraphic : MaskableGraphic
         }
     }
 
-    private void Segment(VertexHelper vh, WorldPosition a, WorldPosition b, float width, Color c)
+    protected void Segment(VertexHelper vh, WorldPosition a, WorldPosition b, float width, Color c)
     {
         if (!MapGeometry.ClipSegment(view, ref a, ref b)) return;
         Vector2 pa = ToLocal(a), pb = ToLocal(b);
@@ -191,7 +196,7 @@ public class DebriefMapGraphic : MaskableGraphic
         Quad(vh, pa - n, pb - n, pb + n, pa + n, c);
     }
 
-    private void Polygon(VertexHelper vh, List<WorldPosition> pts, Color c)
+    protected void Polygon(VertexHelper vh, List<WorldPosition> pts, Color c)
     {
         if (pts == null || pts.Count < 3) return;
         List<WorldPosition> clipped = MapGeometry.ClipPolygon(pts, view);
@@ -202,7 +207,7 @@ public class DebriefMapGraphic : MaskableGraphic
         for (int i = 0; i + 2 < tri.Count; i += 3) vh.AddTriangle(start + tri[i], start + tri[i + 1], start + tri[i + 2]);
     }
 
-    private void Dot(VertexHelper vh, WorldPosition p, float r, Color c)
+    protected void Dot(VertexHelper vh, WorldPosition p, float r, Color c)
     {
         if (!view.Contains(p)) return;
         Vector2 o = ToLocal(p);
@@ -217,7 +222,7 @@ public class DebriefMapGraphic : MaskableGraphic
         for (int i = 0; i < seg; i++) vh.AddTriangle(start, start + 1 + i, start + 1 + (i + 1) % seg);
     }
 
-    private void Ring(VertexHelper vh, WorldPosition p, float r, float w, Color c)
+    protected void Ring(VertexHelper vh, WorldPosition p, float r, float w, Color c)
     {
         if (!view.Contains(p)) return;
         Vector2 o = ToLocal(p);
@@ -230,14 +235,14 @@ public class DebriefMapGraphic : MaskableGraphic
         }
     }
 
-    private void Diamond(VertexHelper vh, WorldPosition p, float r, Color c)
+    protected void Diamond(VertexHelper vh, WorldPosition p, float r, Color c)
     {
         if (!view.Contains(p)) return;
         Vector2 o = ToLocal(p);
         Quad(vh, o + new Vector2(0, -r), o + new Vector2(r, 0), o + new Vector2(0, r), o + new Vector2(-r, 0), c);
     }
 
-    private void Cross(VertexHelper vh, WorldPosition p, float r, float w, Color c)
+    protected void Cross(VertexHelper vh, WorldPosition p, float r, float w, Color c)
     {
         if (!view.Contains(p)) return;
         Vector2 o = ToLocal(p);
@@ -249,7 +254,7 @@ public class DebriefMapGraphic : MaskableGraphic
         }
     }
 
-    private static void Quad(VertexHelper vh, Vector2 a, Vector2 b, Vector2 c, Vector2 d, Color col)
+    protected static void Quad(VertexHelper vh, Vector2 a, Vector2 b, Vector2 c, Vector2 d, Color col)
     {
         int i = vh.currentVertCount;
         vh.AddVert(a, col, Vector2.zero);

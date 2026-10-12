@@ -13,6 +13,8 @@
 // и через 3 с HelmEnded с заданным рулём; поворот маршрута — тоже перекладка.
 // Шина ExerciseEvents не используется (статическое состояние сцены не трогается):
 // события получают время и признак «в упражнении» здесь же.
+// D1: вводные инструктора (SimFailure) — отказ главного двигателя / рулевого устройства
+// в заданный момент и устранение через заданное время; события — как у InstructorInputs.
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -35,9 +37,21 @@ public sealed class SimManoeuvre
     public string AfterHeard = "";
 }
 
+/// <summary>Вводная инструктора в прогоне (D1).</summary>
+public sealed class SimFailure
+{
+    public double Time;
+    /// <summary>true — главный двигатель, false — рулевое устройство.</summary>
+    public bool Engine;
+    /// <summary>Устранить через, с (NaN — до конца прогона).</summary>
+    public double Duration = double.NaN;
+}
+
 public sealed class ExerciseSimulation
 {
     public ScenarioDefinition Scenario;
+    /// <summary>Вводные инструктора (D1).</summary>
+    public readonly List<SimFailure> Failures = new List<SimFailure>();
     public double Dt = 0.02;
     /// <summary>Смещение от оси в узкости вправо, м (правило 9; 0 — по оси).</summary>
     public double ChannelOffsetM;
@@ -169,6 +183,7 @@ public sealed class ExerciseSimulation
                 active = null;
                 StartHelm(ref helmEndAt);   // возврат на маршрут — тоже перекладка
             }
+            ApplyFailures();
 
             // Заданный курс
             double course;
@@ -318,6 +333,39 @@ public sealed class ExerciseSimulation
 
     private WorldPosition Pos => new WorldPosition(m.East, m.North);
 
+    // Вводные: отказ в момент Time, устранение через Duration (события — как в сцене, InstructorInputs)
+    private double engineFailedAt, steeringFailedAt;
+    private static readonly bool[] FailureKinds = { true, false };
+
+    private void ApplyFailures()
+    {
+        if (Failures.Count == 0) return;
+        foreach (bool engine in FailureKinds)
+        {
+            bool due = false;
+            foreach (SimFailure f in Failures)
+                if (f.Engine == engine && t >= f.Time - 1e-9 && (double.IsNaN(f.Duration) || t < f.Time + f.Duration - 1e-9)) due = true;
+            bool on = engine ? m.EngineFailed : m.SteeringFailed;
+            if (due == on) continue;
+            if (engine)
+            {
+                m.EngineFailed = due;
+                if (due) engineFailedAt = t;
+                Publish(due
+                    ? new ExerciseEvent(ExerciseEventType.EngineFailure) { Value = m.SpeedFactor, Subject = ScenarioText.Telegraph(ScenarioText.OrderFromSpeedFactor(m.SpeedFactor)), ByInstructor = true }
+                    : new ExerciseEvent(ExerciseEventType.EngineRestored) { Value = t - engineFailedAt, ByInstructor = true });
+            }
+            else
+            {
+                m.SteeringFailed = due;
+                if (due) steeringFailedAt = t;
+                Publish(due
+                    ? new ExerciseEvent(ExerciseEventType.SteeringFailure) { Value = m.Delta, Value2 = m.Ordered, ByInstructor = true }
+                    : new ExerciseEvent(ExerciseEventType.SteeringRestored) { Value = t - steeringFailedAt, ByInstructor = true });
+            }
+        }
+    }
+
     private void StartHelm(ref double helmEndAt)
     {
         if (!double.IsNaN(helmEndAt)) Publish(new ExerciseEvent(ExerciseEventType.HelmEnded) { Value = m.Ordered, Value2 = 3.0 - (helmEndAt - t) });
@@ -408,6 +456,12 @@ public static class DemoAssessmentRuns
     public static readonly string[] B2Variants = { "wheelover", "nowheelover" };
     /// <summary>C4-01 (туман): правильно; без сигналов; не снизил ход по сигналу; поворот влево на сигнал.</summary>
     public static readonly string[] C4Variants = { "fog_correct", "fog_nosignals", "fog_noslow", "fog_port" };
+    /// <summary>
+    /// D1, B2-01 с вводными: отказ руля в t = 300 с на 120 с — «Стоп» через 10 с / через 45 с / без реакции;
+    /// отказ главного двигателя в t = 300 с на 180 с — «Стоп» через 10 с. После устранения — снова прежний ход.
+    /// </summary>
+    public static readonly string[] FailureVariants = { "steer_fast", "steer_late", "steer_none", "engine_fast" };
+    public const double FailureTime = 300;
 
     public static string Title(string variant)
     {
@@ -423,6 +477,10 @@ public static class DemoAssessmentRuns
             case "fog_nosignals": return "без туманных сигналов";
             case "fog_noslow": return "не снизил ход, услышав сигнал";
             case "fog_port": return "поворот влево на сигнал";
+            case "steer_fast": return "отказ руля — «Стоп» через 10 с";
+            case "steer_late": return "отказ руля — «Стоп» через 45 с";
+            case "steer_none": return "отказ руля — без реакции";
+            case "engine_fast": return "отказ ГД — «Стоп» через 10 с";
             default: return variant;
         }
     }
@@ -463,6 +521,21 @@ public static class DemoAssessmentRuns
                 if (variant == "fog_port")
                     sim.Manoeuvres.Add(new SimManoeuvre { AfterHeard = "T1", Time = 20, CourseChangeDeg = -30, HoldSeconds = 240, Label = "сигнал T1 — влево 30°" });
                 break;
+            // D1: вводные на B2-01
+            case "steer_fast":
+            case "steer_late":
+            case "steer_none":
+            case "engine_fast":
+            {
+                bool engine = variant == "engine_fast";
+                double duration = engine ? 180 : 120;
+                sim.Failures.Add(new SimFailure { Time = FailureTime, Engine = engine, Duration = duration });
+                double ahead = sim.Scenario != null && sim.Scenario.initial != null ? ScenarioText.SpeedFactor(sim.Scenario.initial.telegraph) : 1.0;
+                if (variant == "steer_none") break;
+                sim.Manoeuvres.Add(new SimManoeuvre { Time = FailureTime + (variant == "steer_late" ? 45 : 10), SpeedFactor = 0.0, Label = "«Стоп»" });
+                sim.Manoeuvres.Add(new SimManoeuvre { Time = FailureTime + duration + 5, SpeedFactor = ahead, Label = "отказ устранён — прежний ход" });
+                break;
+            }
         }
     }
 }

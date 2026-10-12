@@ -16,6 +16,10 @@
 //   время упражнения += Δt, контроль маршрута (RouteTracker) → события шины,
 //   лимит времени. Посадку и столкновение runner узнаёт из шины, а не от модулей.
 // End — ExerciseEnded в шину, итог (ExerciseSummary); дальше — свободное плавание.
+// D1: Pause / Resume (инструктор) — во время упражнения модель стоит (ShipNavigation.Paused, как
+//   на брифинге): своё судно, цели, время упражнения, запись и оценка; волны и качка идут.
+//   События ExercisePaused / ExerciseResumed (длительность паузы по часам). Конец упражнения
+//   на паузе сначала снимает паузу.
 //
 // Runner не содержит интерфейса: VR-панель и команды меню — ScenarioPanel,
 // вывод событий в консоль — ExerciseConsoleLog (отдельный подписчик шины).
@@ -53,6 +57,12 @@ public class ScenarioRunner : MonoBehaviour
 
     /// <summary>Сменилась фаза или сценарий (для панели).</summary>
     public event Action StateChanged;
+
+    /// <summary>Пауза инструктора (D1): модель, цели и время упражнения стоят.</summary>
+    public bool IsPaused { get; private set; }
+    /// <summary>Пауза поставлена или снята (D1; фаза при этом не меняется).</summary>
+    public event Action PauseChanged;
+    private float pausedAtRealtime;
 
     /// <summary>Сценарий для гизмо: загруженный, иначе — выбранный для предпросмотра.</summary>
     public ScenarioDefinition PreviewScenario =>
@@ -137,6 +147,32 @@ public class ScenarioRunner : MonoBehaviour
         if (CurrentPhase == Phase.Running) End(ScenarioEndReason.Aborted, true);
     }
 
+    /// <summary>Пауза инструктора (D1): только во время упражнения.</summary>
+    public void Pause()
+    {
+        if (CurrentPhase != Phase.Running || IsPaused || navigation == null) return;
+        IsPaused = true;
+        navigation.Paused = true;
+        pausedAtRealtime = Time.realtimeSinceStartup;
+        Publish(new ExerciseEvent(ExerciseEventType.ExercisePaused) { ByInstructor = true });
+        PauseChanged?.Invoke();
+    }
+
+    /// <summary>Снять паузу инструктора (D1).</summary>
+    public void Resume()
+    {
+        if (!IsPaused) return;
+        IsPaused = false;
+        if (navigation != null) navigation.Paused = false;
+        Publish(new ExerciseEvent(ExerciseEventType.ExerciseResumed) { ByInstructor = true, Value = Time.realtimeSinceStartup - pausedAtRealtime });
+        PauseChanged?.Invoke();
+    }
+
+    public void TogglePause()
+    {
+        if (IsPaused) Resume(); else Pause();
+    }
+
     /// <summary>Свободное плавание: без сценария, судно на ходу.</summary>
     public void FreeSail()
     {
@@ -200,6 +236,7 @@ public class ScenarioRunner : MonoBehaviour
     private void End(ScenarioEndReason reason, bool byInstructor)
     {
         if (CurrentPhase != Phase.Running) return;
+        if (IsPaused) Resume();   // D1: завершение на паузе — сначала снять паузу (пара событий в журнале)
         CurrentPhase = Phase.Finished;
         Publish(new ExerciseEvent(ExerciseEventType.ExerciseEnded)
         {

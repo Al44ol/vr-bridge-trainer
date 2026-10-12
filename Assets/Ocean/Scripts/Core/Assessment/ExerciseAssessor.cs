@@ -40,6 +40,15 @@
 //   • свои сигналы — по звукам HornEnded (время начала = t − τ), группировка и тип — SoundSignals;
 //   • слышимые сигналы целей — события TargetSoundSignal (TrafficController / ExerciseSimulation);
 //   • F1–F6 — EvaluateVisibility (формулы — там и в ThesisNotes, раздел 12).
+//
+// D1 — вводные инструктора (события EngineFailure / SteeringFailure и …Restored):
+//   • N1 — отказ руля: время от отказа до первой команды телеграфу на меньший ход;
+//     N2 — отказ главного двигателя: время до команды «Стоп». Телеграф уже на «Стоп»
+//     (для N1 — «Стоп» или назад) — 0 с. Реакции нет: за время наблюдения T (до устранения
+//     отказа или конца упражнения) T ≥ порога зачёта → значение max(T; порог нуля), иначе
+//     критерий не оценивается (как F5);
+//   • маршрутные критерии R1–R3, R8a не учитывают время отказа (от отказа до возврата
+//     в коридор после устранения — как манёвр расхождения).
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -125,6 +134,16 @@ public struct HeardRecord
     public bool Restricted, Seen;
 }
 
+/// <summary>Вводная инструктора — отказ (D1).</summary>
+public sealed class FailureRecord
+{
+    /// <summary>true — главный двигатель, false — рулевое устройство.</summary>
+    public bool Engine;
+    public double Start;
+    /// <summary>Устранён (NaN — нет).</summary>
+    public double End = double.NaN;
+}
+
 public enum ControlActionKind { Helm, Telegraph }
 
 public sealed class ControlAction
@@ -147,6 +166,8 @@ public sealed class ExerciseAssessor
     public IReadOnlyList<TrackSample> Own => own;
     public IReadOnlyList<TargetTrack> Targets => targets;
     public IReadOnlyList<ControlAction> Actions => actions;
+    /// <summary>Вводные-отказы (D1).</summary>
+    public IReadOnlyList<FailureRecord> Failures => failures;
     public bool Finished { get; private set; }
     public ScenarioEndReason EndReason { get; private set; }
     public double EndTime { get; private set; } = double.NaN;
@@ -155,6 +176,7 @@ public sealed class ExerciseAssessor
     private readonly List<TrackSample> own = new List<TrackSample>();
     private readonly List<TargetTrack> targets = new List<TargetTrack>();
     private readonly List<ControlAction> actions = new List<ControlAction>();
+    private readonly List<FailureRecord> failures = new List<FailureRecord>();
     private readonly List<ExerciseEvent> queue = new List<ExerciseEvent>();
     private bool hasPending;
     private TrackSample pendingOwn;
@@ -275,6 +297,18 @@ public sealed class ExerciseAssessor
             case ExerciseEventType.WaypointPassed:
                 passedWaypoints.Add(e.Index);
                 break;
+            case ExerciseEventType.EngineFailure:
+            case ExerciseEventType.SteeringFailure:
+                failures.Add(new FailureRecord { Engine = e.Type == ExerciseEventType.EngineFailure, Start = e.Time });
+                break;
+            case ExerciseEventType.EngineRestored:
+            case ExerciseEventType.SteeringRestored:
+            {
+                bool engine = e.Type == ExerciseEventType.EngineRestored;
+                for (int i = failures.Count - 1; i >= 0; i--)
+                    if (failures[i].Engine == engine && double.IsNaN(failures[i].End)) { failures[i].End = e.Time; break; }
+                break;
+            }
             case ExerciseEventType.Grounded:
                 if (groundings++ == 0) firstGrounding = e.Subject ?? "";
                 break;
@@ -745,8 +779,10 @@ public sealed class ExerciseAssessor
             }
         }
         ExcludeRestrictedManoeuvres(final);
+        foreach (FailureRecord f in failures) ExcludeFromRoute(f.Start, double.IsNaN(f.End) ? double.PositiveInfinity : f.End);
         EvaluateRoute(r, final, aborted);
         EvaluateVisibility(r, final);
+        EvaluateFailures(r, final);
 
         Add(r, AssessmentCatalog.A1, "", groundings, groundings > 0 ? $"посадка на мель «{firstGrounding}»" : "нет");
         Add(r, AssessmentCatalog.A2, "", collisions, collisions > 0 ? $"столкновение с «{firstCollision}»" : "нет");
@@ -1207,6 +1243,53 @@ public sealed class ExerciseAssessor
                     ExcludeFromRoute(a.Time, until);
                     break;
                 }
+        }
+    }
+
+    /// <summary>
+    /// N1, N2 — реакция на вводные-отказы (D1): время от отказа до команды телеграфу.
+    /// Объект критерия — время отказа (их может быть несколько).
+    /// </summary>
+    private void EvaluateFailures(AssessmentResult r, bool final)
+    {
+        double now = final && !double.IsNaN(EndTime) ? Math.Max(EndTime, Time) : Time;
+        int engines = 0, steerings = 0;
+        foreach (FailureRecord f in failures)
+        {
+            string code = f.Engine ? AssessmentCatalog.N2 : AssessmentCatalog.N1;
+            // Объект: первый отказ своего вида — без номера (столбцы сводки одинаковы у всех сессий), повторные — «2», «3»…
+            int n = f.Engine ? ++engines : ++steerings;
+            string subject = n > 1 ? n.ToString() : "";
+            string head = $"{(f.Engine ? "отказ главного двигателя" : "отказ рулевого устройства")} в t = {ScenarioText.Clock(f.Start)}";
+            int k = OwnIndexAt(f.Start);
+            double sf0 = k >= 0 ? own[k].TelegraphSf : double.NaN;
+            // Телеграф уже там, куда его нужно поставить
+            if (!double.IsNaN(sf0) && (f.Engine ? Math.Abs(sf0) < 1e-6 : sf0 < 1e-6))
+            {
+                Add(r, code, subject, 0.0, $"{head}; телеграф уже «{ScenarioText.Telegraph(ScenarioText.OrderFromSpeedFactor(sf0))}»");
+                continue;
+            }
+            ControlAction resp = null;
+            foreach (ControlAction a in actions)
+            {
+                if (a.Kind != ControlActionKind.Telegraph || a.Time < f.Start - 1e-9) continue;
+                if (f.Engine ? Math.Abs(a.SfNew) < 1e-6 : a.SfNew < a.SfOld - 1e-6) { resp = a; break; }
+            }
+            // После устранения отказа реакция уже не нужна
+            double limit = double.IsNaN(f.End) ? now : Math.Min(f.End, now);
+            if (resp != null && resp.Time <= limit + 1e-9)
+            {
+                Add(r, code, subject, resp.Time - f.Start, $"{head}; через {AssessmentResult.Num(resp.Time - f.Start)} с — {Describe(resp)}");
+                continue;
+            }
+            double observed = Math.Max(0.0, limit - f.Start);
+            CriterionSetting set = S.Get(code);
+            string until = double.IsNaN(f.End) ? "" : " до устранения отказа";
+            if (observed >= set.pass)
+                Add(r, code, subject, Math.Max(observed, set.zero),
+                    $"{head}; {(f.Engine ? "«Стоп» не дан" : "ход не снижен")} за {AssessmentResult.Num(observed)} с{until}");
+            else if (final || !double.IsNaN(f.End))
+                Skip(r, code, subject, $"{head}; {(double.IsNaN(f.End) ? "упражнение закончилось" : "отказ устранён")} через {AssessmentResult.Num(observed)} с");
         }
     }
 

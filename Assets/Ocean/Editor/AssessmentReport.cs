@@ -6,7 +6,8 @@
 //                             закон Алларда) с носа и с кормы, днём — V;
 //   runs.csv                — итог прогонов (B3-01: без манёвра / правильно / влево / поздно;
 //                             B2-01: с упреждением / без; C4-01 (туман, с C4): правильно / без сигналов /
-//                             не снизил ход / влево): причина, время, балл, зачёт;
+//                             не снизил ход / влево; D1 — B2-01 с вводными: отказ руля «Стоп» через 10 с /
+//                             через 45 с / без реакции, отказ ГД «Стоп» через 10 с): причина, время, балл, зачёт;
 //   runs_criteria.csv       — по каждому прогону — все критерии (значение, порог, зачёт, балл);
 //   b3_<вариант>_tracks.svg, c4_<вариант>_tracks.svg — траектории своего судна и целей;
 //   summary.md              — сводка для вставки в ВКР, в том числе проверка «оценка в
@@ -172,6 +173,7 @@ public static class AssessmentReport
         foreach (string v in DemoAssessmentRuns.B3Variants) list.Add((DemoTrafficScenario.Id, v));
         foreach (string v in DemoAssessmentRuns.B2Variants) list.Add((DemoScenario.Id, v));
         foreach (string v in DemoAssessmentRuns.C4Variants) list.Add((DemoFogScenario.Id, v));
+        foreach (string v in DemoAssessmentRuns.FailureVariants) list.Add((DemoScenario.Id, v));   // D1: вводные
         var details = new StringBuilder();
         for (int k = 0; k < list.Count; k++)
         {

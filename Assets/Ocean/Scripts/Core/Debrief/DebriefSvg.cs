@@ -148,6 +148,10 @@ public static class DebriefSvg
                     sb.AppendLine($"<path d=\"M{N(x - 6)},{N(y - 6)} L{N(x + 6)},{N(y + 6)} M{N(x - 6)},{N(y + 6)} L{N(x + 6)},{N(y - 6)}\" stroke=\"black\" stroke-width=\"2\"/>");
                     sb.AppendLine($"<text x=\"{N(x + 8)}\" y=\"{N(y + 14)}\" font-size=\"12\" font-weight=\"bold\">{SvgPlot.Xml(m.Label)}</text>");
                     break;
+                case MapLayer.Failure:   // D1: вводная — треугольник «внимание»
+                    sb.AppendLine($"<path d=\"M{N(x)},{N(y - 7)} L{N(x + 6)},{N(y + 4)} L{N(x - 6)},{N(y + 4)} Z\" fill=\"none\" stroke=\"black\" stroke-width=\"1.4\"/>");
+                    sb.AppendLine($"<text x=\"{N(x + 8)}\" y=\"{N(y - 6)}\" font-size=\"12\">{SvgPlot.Xml(m.Label)}</text>");
+                    break;
             }
         }
         // Подписи целей у конца видимой части траектории

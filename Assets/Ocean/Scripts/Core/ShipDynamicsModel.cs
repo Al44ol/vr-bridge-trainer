@@ -42,6 +42,12 @@
 //     u_цель = k_снят·u_зад (если u_зад·s < 0, иначе 0), du/dt = (u_цель − u)/τ_разг.
 //   • Поворот: r(t+dt) = r·e^(−dt/τ_ост) — корпус лежит на грунте, руль не действует.
 //   Снятие (Grounded = false) решает детектор: контур корпуса вышел из мели.
+//
+// Вводные инструктора (D1; при выключенных флагах шаг прежний бит в бит):
+//   • EngineFailed — отказ главного двигателя: u_зад = 0 при любом телеграфе, ход гаснет
+//     с τ_торм (тот же закон, что «Стоп»; выбег без упора винта, сопротивление — в τ_торм);
+//   • SteeringFailed — отказ рулевого устройства: δ остаётся на месте (рулевая машина
+//     не отрабатывает δ_зад), заданный руль по-прежнему идёт от штурвала (видно расхождение).
 // ============================================================
 using System;
 using UnityEngine;
@@ -71,6 +77,10 @@ public sealed class ShipDynamicsModel : IVesselModel
     public double SpeedFactor;
     /// <summary>Удерживать скорость = V_эксп (тест циркуляции F5 в ShipNavigation).</summary>
     public bool HoldServiceSpeed;
+    /// <summary>D1: отказ главного двигателя — u_зад = 0, телеграф не действует.</summary>
+    public bool EngineFailed;
+    /// <summary>D1: отказ рулевого устройства — фактический руль δ не меняется.</summary>
+    public bool SteeringFailed;
 
     // ── Посадка на мель (B1) ──
     /// <summary>Судно на мели (ставит GroundingMonitor через SetGrounded).</summary>
@@ -96,7 +106,7 @@ public sealed class ShipDynamicsModel : IVesselModel
         double maxRudder = p.maxRudderAngle;
         Ordered = Clamp(RudderCommandDeg, -maxRudder, maxRudder);
         double maxStep = p.rudderRate * dt;
-        Delta += Clamp(Ordered - Delta, -maxStep, maxStep);
+        if (!SteeringFailed) Delta += Clamp(Ordered - Delta, -maxStep, maxStep);
 
         if (Grounded)
         {
@@ -106,7 +116,7 @@ public sealed class ShipDynamicsModel : IVesselModel
 
         // 2. Скорость
         double vService = p.ServiceSpeedMs;
-        double sf = SpeedFactor;
+        double sf = EngineFailed ? 0.0 : SpeedFactor;
         double uSet = sf >= 0.0 ? sf * vService : sf * vService * p.asternFactor;
         if (HoldServiceSpeed)
         {
@@ -183,7 +193,7 @@ public sealed class ShipDynamicsModel : IVesselModel
         {
             // Съём: только от мели, с повышенным сопротивлением грунта
             double vService = p.ServiceSpeedMs;
-            double sf = SpeedFactor;
+            double sf = EngineFailed ? 0.0 : SpeedFactor;
             double uSet = sf >= 0.0 ? sf * vService : sf * vService * p.asternFactor;
             double uTarget = uSet * s < 0.0 ? uSet * RefloatSpeedFactor : 0.0;
             double tau = Math.Max(0.1, p.accelerationTimeConstant);

@@ -18,6 +18,7 @@
 // погода и время суток в начале и в конце замера, был ли переход освещения и сколько
 // раз перерисовывалась проба отражений (B4), идёт ли запись; extraNote — дописывается.
 // До C2 note было фиксированным («BridgeScene, moderate, stop») и условия не отражало.
+// D1: в note — режим монитора (окно инструктора / с PiP / зеркало шлема).
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -210,6 +211,12 @@ public class FrameTimingCapture : MonoBehaviour
         b.Append(", перерисовок пробы: ").Append(renders.ToString(Inv));
         ExerciseRecorder rec = ExerciseRecorder.Instance;
         b.Append(", запись: ").Append(rec != null && rec.IsRecording ? "идёт" : "нет");
+        // D1: что на мониторе — окно инструктора (и PiP) или зеркало из шлема
+        InstructorStation st = InstructorStation.Instance;
+        if (st != null)
+            b.Append(", монитор: ").Append(st.Mode == InstructorStation.DisplayMode.Instructor
+                ? "окно инструктора" + (st.Pip != null && st.Pip.Active ? $" + PiP {st.Pip.width}x{st.Pip.height} {st.Pip.rateHz.ToString("0", Inv)} Гц" : "")
+                : "зеркало шлема");
         if (!string.IsNullOrWhiteSpace(extraNote)) b.Append(", ").Append(extraNote.Trim());
         return b.ToString();
     }

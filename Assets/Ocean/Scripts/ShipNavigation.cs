@@ -131,6 +131,10 @@ public class ShipNavigation : MonoBehaviour
     /// судно неподвижно в мире, качка продолжается.
     /// </summary>
     public bool Paused { get; set; }
+    /// <summary>D1: вводная «отказ главного двигателя» — телеграф не действует (ShipDynamicsModel.EngineFailed).</summary>
+    public bool EngineFailed { get; set; }
+    /// <summary>D1: вводная «отказ рулевого устройства» — руль заклинило (ShipDynamicsModel.SteeringFailed).</summary>
+    public bool SteeringFailed { get; set; }
 
     void OnEnable()
     {
@@ -251,6 +255,8 @@ public class ShipNavigation : MonoBehaviour
         model.RudderCommandDeg = testActive ? testRudderDeg : (wheel != null ? wheelSignValue * wheel.RudderAngle : 0.0);
         model.SpeedFactor = telegraph != null ? telegraph.SpeedFactor : 0.0;
         model.HoldServiceSpeed = testActive;   // испытание на циркуляцию — при неизменной скорости
+        model.EngineFailed = EngineFailed;
+        model.SteeringFailed = SteeringFailed;
         model.Step(dt);
     }
 

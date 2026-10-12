@@ -270,7 +270,12 @@ public static class SessionReport
                 foreach (EncounterSummary e in r.Encounters)
                     if (!double.IsNaN(e.ActionTime)) p.AddMark((float)(e.ActionTime / 60.0), e.TargetId);
             foreach (ExerciseEvent e in s.Events)
+            {
                 if (e.Type == ExerciseEventType.Grounded || e.Type == ExerciseEventType.Collision) p.AddMark((float)(e.Time / 60.0), e.Type == ExerciseEventType.Grounded ? "мель" : "столкн.");
+                // D1: вводные инструктора
+                else if (e.Type == ExerciseEventType.EngineFailure || e.Type == ExerciseEventType.SteeringFailure)
+                    p.AddMark((float)(e.Time / 60.0), e.Type == ExerciseEventType.EngineFailure ? "отказ ГД" : "отказ руля");
+            }
             h.Append("<figure>\n").Append(p.Render()).Append($"<figcaption>{H(caption)}</figcaption>\n</figure>\n");
         }
 

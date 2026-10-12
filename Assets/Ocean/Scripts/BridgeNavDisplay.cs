@@ -9,6 +9,7 @@
 // B1: полоса над панелью (Setup B1 Water Area) — глубина по карте и запас
 // под килем; при опасном приближении мигает «ОПАСНО: МЕЛЬ … кбт», на мели —
 // «НА МЕЛИ» (сигнализация глубины, как у эхолота / планшета).
+// D1: при вводной инструктора и включённом оповещении — строка «ОТКАЗ ГД / ОТКАЗ РУЛЯ».
 // ============================================================
 using TMPro;
 using UnityEngine;
@@ -66,7 +67,8 @@ public class BridgeNavDisplay : MonoBehaviour
                 $"РУЛЬ  зад.  {Rudder(navigation.RudderOrdered)}\n" +
                 $"      факт. {Rudder(navigation.RudderActual)}\n" +
                 $"ТЕЛЕГРАФ    {TelegraphName(navigation.TelegraphPosition)}" +
-                (navigation.CirculationTestActive ? "\n<color=#FFD54F>ТЕСТ ЦИРКУЛЯЦИИ</color>" : "");
+                (navigation.CirculationTestActive ? "\n<color=#FFD54F>ТЕСТ ЦИРКУЛЯЦИИ</color>" : "") +
+                FailureLine();
         }
 
         UpdateAlarm();
@@ -108,6 +110,15 @@ public class BridgeNavDisplay : MonoBehaviour
                 break;
             }
         }
+    }
+
+    // D1: вводная инструктора (если оповещение включено) — мигающая строка «ОТКАЗ …»
+    private static string FailureLine()
+    {
+        string line = InstructorInputs.Instance != null ? InstructorInputs.Instance.FailureLine : "";
+        if (line.Length == 0) return "";
+        bool blinkOn = Mathf.Repeat(Time.unscaledTime, 1f) < 0.6f;
+        return $"\n<color={(blinkOn ? "#FF5A4A" : "#8A2A22")}><b>{line}</b></color>";
     }
 
     private static string Hazard(HazardInfo h)

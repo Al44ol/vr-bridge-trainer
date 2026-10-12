@@ -238,7 +238,8 @@ public class WeatherController : MonoBehaviour
         }
         if (changed) Apply();
 
-        if (Keyboard.current != null)
+        // D1: пока в окне инструктора набирают текст (ID обучающегося), цифры погоду не меняют
+        if (Keyboard.current != null && !InstructorStation.TextInputFocused)
         {
             if (Keyboard.current.digit1Key.wasPressedThisFrame) SetCalm();
             if (Keyboard.current.digit2Key.wasPressedThisFrame) SetModerate();

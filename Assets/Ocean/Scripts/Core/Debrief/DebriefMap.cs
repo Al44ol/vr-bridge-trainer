@@ -19,7 +19,8 @@ using System.Collections.Generic;
 public enum MapLayer
 {
     Land, Shoal, Fairway, Corridor, Route, Waypoint, Aid,
-    TargetTrack, OwnTrack, TimeTick, Start, Manoeuvre, MinLink, MinPoint, Accident
+    TargetTrack, OwnTrack, TimeTick, Start, Manoeuvre, MinLink, MinPoint, Accident,
+    Failure   // D1: вводная инструктора (отказ)
 }
 
 public sealed class MapLine
@@ -150,9 +151,30 @@ public static class DebriefMap
                 d.Markers.Add(new MapMarker { Layer = MapLayer.Accident, Position = e.Position, Time = e.Time, Label = "мель", Ok = false });
             else if (e.Type == ExerciseEventType.Collision)
                 d.Markers.Add(new MapMarker { Layer = MapLayer.Accident, Position = e.Position, Time = e.Time, Label = "столкновение", Ok = false });
+            else if (e.Type == ExerciseEventType.EngineFailure || e.Type == ExerciseEventType.SteeringFailure)
+                d.Markers.Add(new MapMarker { Layer = MapLayer.Failure, Position = e.Position, Time = e.Time, Label = FailureLabel(e.Type) });
         }
 
         AddViews(d, s, result, tracks);
+        return d;
+    }
+
+    /// <summary>Подпись вводной на схеме: «отказ ГД», «отказ руля».</summary>
+    public static string FailureLabel(ExerciseEventType t) => t == ExerciseEventType.EngineFailure ? "отказ ГД" : "отказ руля";
+
+    /// <summary>
+    /// Неподвижная часть схемы — акватория, маршрут и коридор (D1: карта окна инструктора;
+    /// траектории и суда рисуются поверх). Вид — один, «live», границы задаёт владелец.
+    /// </summary>
+    public static DebriefMapData BuildStatic(SessionArea area, SessionScenario scenario)
+    {
+        var d = new DebriefMapData();
+        AddArea(d, area);
+        if (scenario != null) AddRoute(d, scenario);
+        MapRect all = MapRect.Empty;
+        foreach (MapPolygon p in d.Polygons) foreach (WorldPosition w in p.Points) all.Include(w);
+        foreach (MapLine l in d.Lines) foreach (WorldPosition w in l.Points) all.Include(w);
+        d.Views.Add(new DebriefMapView { Key = "live", Title = "Окно инструктора", Bounds = all.IsEmpty ? new MapRect(-2000, -2000, 2000, 2000) : all.Padded(0.05, 500), TickStepS = 300 });
         return d;
     }
 
