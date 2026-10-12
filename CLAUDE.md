@@ -54,7 +54,7 @@ VR-тренажёр судоводительского мостика. Прот�
 - `Traffic` — **TrafficController** (B3, −86): другие суда по сценарию, столкновения, отладка огней; цели — дочерние объекты с **TrafficShipView** (−70)
 - `NavLights` — **NavLightField** (B3, −95): все навигационные огни одним мешем (шейдер `VRBridgeTrainer/NavLight`), режим огней «авто/вкл/выкл»
 - `WaterArea` также несёт **AidLightsView** (B3, −55): огни знаков МАМС; `ScenarioPanel` — **ExerciseFailureNotice** (B3); `Ship/ScenarioPanelAnchor` — точка панели выбора при запуске
-- `PerfCapture` — **FrameTimingCapture** (Setup Frame Timing): меню Y → «Замер» (F8 — только при `keyboardShortcuts`) — замер времени кадра CPU/GPU 30 с → `ThesisData/Performance/`
+- `PerfCapture` — **FrameTimingCapture** (Setup Frame Timing): меню Y → «Замер» (F8 — только при `keyboardShortcuts`) — замер времени кадра CPU/GPU 30 с → `ThesisData/Performance/`; с 12.10.2026 — индикатор в шлеме (надпись «ЗАМЕР N с» над штурвалом или `indicatorAnchor`, итог 4 с, тоны; флаги `showIndicator`, `tones`), «Прервать замер (осталось N с)», при выходе из Play Mode набранное сохраняется; в сводке столбцы `frames_over_20ms`, `max_frame_dt_ms` (ThesisNotes 13.16)
 - `Hands Permissions Manager` — префаб шаблона
 
 XR Origin — дочерний объект Ship, игрок качается вместе с судном.
