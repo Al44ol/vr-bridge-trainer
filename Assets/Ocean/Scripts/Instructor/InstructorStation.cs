@@ -150,7 +150,11 @@ public class InstructorStation : MonoBehaviour
                 mirrorBlitSaved = true;
             }
             int want = instructor ? XRMirrorViewBlitMode.None : mirrorBlitMode;
-            if (d.GetPreferredMirrorBlitMode() != want)
+            // Сравнивается только «зеркало есть / нет»: рантайм может вернуть вместо Default (0)
+            // свой режим (-1, LeftEye) — иначе зеркало переустанавливалось и писалось в лог раз в секунду
+            int active = d.GetPreferredMirrorBlitMode();
+            bool mismatch = instructor ? active != XRMirrorViewBlitMode.None : active == XRMirrorViewBlitMode.None;
+            if (mismatch)
             {
                 d.SetPreferredMirrorBlitMode(want);
                 log = true;

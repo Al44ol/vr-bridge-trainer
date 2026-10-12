@@ -1,0 +1,15 @@
+﻿scenario;variant;title;end_reason;duration_s;score;passed;failed;failure;mandatory_failed;criteria_evaluated;criteria_failed
+B3-01;none;без манёвра;Collision;235.6;45.3;0;1;столкновение с «T2»;E1 E8 R4;9;4
+B3-01;correct;правильные действия;Arrived;1570.4;95.5;1;0;;;23;0
+B3-01;port;поворот влево на T2;Arrived;1363.8;64.4;0;0;;E8 R8b E4;19;6
+B3-01;late;манёвр T2 поздно (150 с);Arrived;1559.7;74.7;0;0;;E8;20;3
+B2-01;wheelover;поворот с упреждением;Arrived;1191.2;99.5;1;0;;;10;0
+B2-01;nowheelover;поворот без упреждения;Arrived;1223.7;65.1;0;0;;;10;2
+C4-01;fog_correct;правильные действия в тумане;Arrived;1046.0;100.0;1;0;;;12;0
+C4-01;fog_nosignals;без туманных сигналов;Arrived;1046.0;85.7;0;0;;F1;11;1
+C4-01;fog_noslow;не снизил ход, услышав сигнал;Arrived;831.0;77.0;0;0;;E1 F5;15;2
+C4-01;fog_port;поворот влево на сигнал;Arrived;926.3;69.9;0;0;;E1 F5 F6;16;3
+B2-01;steer_fast;отказ руля — «Стоп» через 10 с;Arrived;1280.6;99.5;1;0;;;11;0
+B2-01;steer_late;отказ руля — «Стоп» через 45 с;Arrived;1249.1;82.8;1;0;;;11;1
+B2-01;steer_none;отказ руля — без реакции;Arrived;1191.2;74.2;1;0;;;11;1
+B2-01;engine_fast;отказ ГД — «Стоп» через 10 с;Arrived;1347.6;99.5;1;0;;;11;0
