@@ -229,3 +229,17 @@ MonoBehaviour:
       pass: 1
       zero: 0
       weight: 8
+    - code: N1
+      enabled: 1
+      mandatory: 0
+      full: 15
+      pass: 30
+      zero: 60
+      weight: 1
+    - code: N2
+      enabled: 1
+      mandatory: 0
+      full: 15
+      pass: 30
+      zero: 60
+      weight: 1

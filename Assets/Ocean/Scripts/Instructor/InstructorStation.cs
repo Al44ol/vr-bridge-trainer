@@ -2,17 +2,22 @@
 // InstructorStation.cs — Окно инструктора на мониторе ПК (D1)
 //
 // До D1 окно приложения на мониторе (Game View в редакторе) показывало
-// изображение из шлема (зеркало XR). Теперь режимов два, переключатель — F2:
-//   • «окно инструктора» (по умолчанию): зеркало XR выключено
-//     (XRSettings.gameViewRenderMode = None), на монитор рисует своя камера
-//     инструктора — без сцены (cullingMask = 0, не XR), только очистка фона;
-//     поверх — интерфейс InstructorWindow (Screen Space Overlay: в шлем не попадает);
-//   • «зеркало из шлема»: прежний вид, окно инструктора скрыто, подсказка «F2».
+// изображение из шлема (зеркало XR). Теперь режимов два; переключатель — меню
+// «Параметры» (Y) → «Монитор инструктора» (без клавиатуры: станция автономна;
+// клавиша F2 — только при keyboardShortcuts):
+//   • «окно инструктора» (по умолчанию): зеркало XR выключено, на монитор рисует
+//     своя камера инструктора — без сцены (cullingMask = 0, не XR), только очистка
+//     фона; поверх — интерфейс InstructorWindow (Screen Space Overlay: в шлем не попадает);
+//   • «зеркало из шлема»: прежний вид, окно инструктора скрыто, подсказка.
+// Зеркало URP рисует по XRDisplaySubsystem.GetPreferredMirrorBlitMode() — его и
+// выключаем (SetPreferredMirrorBlitMode(None)); XRSettings.gameViewRenderMode — дополнительно.
+// Подсистема дисплея может запуститься позже Start — режим проверяется раз в секунду.
 // Шлем рисует сцену как раньше в обоих режимах. Нагрузка окна на кадр: интерфейс
 // перестраивается с частотой uiRateHz (5 Гц), неподвижный слой карты — только
-// при смене масштаба; 3D окно не рисует (кроме PiP по кнопке — InstructorPip).
+// при смене масштаба; 3D окно не рисует (кроме PiP — InstructorPip, тоже из меню Y).
 // Без сети: всё в одном процессе (Play Mode / сборка на ПК станции).
 // ============================================================
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Rendering.Universal;
@@ -24,8 +29,10 @@ public class InstructorStation : MonoBehaviour
 
     [Tooltip("Режим при запуске")]
     public DisplayMode startMode = DisplayMode.Instructor;
-    [Tooltip("Клавиша «окно инструктора ⇄ зеркало из шлема»")]
+    [Tooltip("Клавиша «окно инструктора ⇄ зеркало из шлема» (только при keyboardShortcuts)")]
     public Key toggleKey = Key.F2;
+    [Tooltip("Клавиши клавиатуры (D1: по умолчанию выкл — режим и PiP из меню Y «Монитор инструктора»)")]
+    public bool keyboardShortcuts;
     [Tooltip("Обновление текстов и подвижного слоя карты, раз в секунду (реальное время)")]
     [Range(1f, 30f)] public float uiRateHz = 5f;
     [Tooltip("Цвет фона окна")]
@@ -39,8 +46,14 @@ public class InstructorStation : MonoBehaviour
     public InstructorWindow Window { get; private set; }
     public InstructorPip Pip { get; private set; }
 
+    private const string MenuGroup = "Монитор инструктора";
     private Camera cam;
     private GameViewRenderMode mirrorMode = GameViewRenderMode.LeftEye;
+    private int mirrorBlitMode = XRMirrorViewBlitMode.Default;
+    private bool mirrorBlitSaved;
+    private float nextMirrorCheck;
+    private readonly List<BridgeMenuCommand> menuCommands = new List<BridgeMenuCommand>();
+    private static readonly List<XRDisplaySubsystem> displays = new List<XRDisplaySubsystem>();
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStatics() => TextInputFocused = false;
@@ -57,6 +70,22 @@ public class InstructorStation : MonoBehaviour
         TextInputFocused = false;
     }
 
+    void OnEnable()
+    {
+        BridgeMenu.SetGroupOrder(MenuGroup, 20);
+        BridgeMenuCommand mode = BridgeMenu.Register(MenuGroup,
+            () => Mode == DisplayMode.Instructor ? "Монитор: окно инструктора" : "Монитор: зеркало шлема",
+            () => SetMode(Mode == DisplayMode.Instructor ? DisplayMode.Mirror : DisplayMode.Instructor),
+            instructorOnly: true).InMenu(BridgeMenu.SettingsMenuId);
+        mode.CloseOnExecute = false;
+        menuCommands.Add(mode);
+        BridgeMenuCommand pip = BridgeMenu.Register(MenuGroup,
+            () => Pip != null && Pip.Active ? "Вид из шлема на мониторе (PiP): вкл" : "Вид из шлема на мониторе (PiP): выкл",
+            TogglePip, () => Mode == DisplayMode.Instructor && Pip != null, instructorOnly: true).InMenu(BridgeMenu.SettingsMenuId);
+        pip.CloseOnExecute = false;
+        menuCommands.Add(pip);
+    }
+
     void Start()
     {
         mirrorMode = XRSettings.gameViewRenderMode == GameViewRenderMode.None ? GameViewRenderMode.LeftEye : XRSettings.gameViewRenderMode;
@@ -71,27 +100,77 @@ public class InstructorStation : MonoBehaviour
 
     void OnDisable()
     {
+        foreach (BridgeMenuCommand c in menuCommands) BridgeMenu.Unregister(c);
+        menuCommands.Clear();
         // Выход из Play Mode / отключение — вернуть зеркало
         XRSettings.gameViewRenderMode = mirrorMode;
+        XRDisplaySubsystem d = Display();
+        if (d != null && mirrorBlitSaved) d.SetPreferredMirrorBlitMode(mirrorBlitMode);
     }
 
     void Update()
     {
-        if (Keyboard.current != null && Keyboard.current[toggleKey].wasPressedThisFrame && !TextInputFocused)
+        if (keyboardShortcuts && Keyboard.current != null && Keyboard.current[toggleKey].wasPressedThisFrame && !TextInputFocused)
             SetMode(Mode == DisplayMode.Instructor ? DisplayMode.Mirror : DisplayMode.Instructor);
+        // Подсистема дисплея XR может запуститься позже — режим зеркала проверяется раз в секунду
+        if (Time.unscaledTime >= nextMirrorCheck)
+        {
+            nextMirrorCheck = Time.unscaledTime + 1f;
+            ApplyMirror(false);
+        }
     }
 
     public void SetMode(DisplayMode mode)
     {
         Mode = mode;
         bool instructor = mode == DisplayMode.Instructor;
-        XRSettings.gameViewRenderMode = instructor ? GameViewRenderMode.None : mirrorMode;
         if (cam != null) cam.enabled = instructor;
         if (Window != null) Window.SetVisible(instructor);
         if (!instructor && Pip != null) Pip.SetActive(false);
+        ApplyMirror(true);
+    }
+
+    public void TogglePip()
+    {
+        if (Pip == null || Mode != DisplayMode.Instructor) return;
+        Pip.SetActive(!Pip.Active);
+        Debug.Log($"[Инструктор] Вид из шлема на мониторе (PiP): {(Pip.Active ? $"вкл, {Pip.width}×{Pip.height}, {Pip.rateHz:F0} Гц" : "выкл")}.");
+    }
+
+    // Зеркало XR на мониторе: выключено в режиме окна, прежнее — в режиме зеркала
+    private void ApplyMirror(bool log)
+    {
+        bool instructor = Mode == DisplayMode.Instructor;
+        XRSettings.gameViewRenderMode = instructor ? GameViewRenderMode.None : mirrorMode;
+        XRDisplaySubsystem d = Display();
+        if (d != null)
+        {
+            if (!mirrorBlitSaved)
+            {
+                int current = d.GetPreferredMirrorBlitMode();
+                mirrorBlitMode = current == XRMirrorViewBlitMode.None ? XRMirrorViewBlitMode.Default : current;
+                mirrorBlitSaved = true;
+            }
+            int want = instructor ? XRMirrorViewBlitMode.None : mirrorBlitMode;
+            if (d.GetPreferredMirrorBlitMode() != want)
+            {
+                d.SetPreferredMirrorBlitMode(want);
+                log = true;
+            }
+        }
+        if (!log) return;
+        string blit = d == null ? "XR не запущен" : $"режим зеркала XR {d.GetPreferredMirrorBlitMode()}";
         Debug.Log(instructor
-            ? $"[Инструктор] Окно инструктора на мониторе (зеркало шлема выключено). {toggleKey} — зеркало из шлема."
-            : $"[Инструктор] Монитор — зеркало из шлема. {toggleKey} — окно инструктора.");
+            ? $"[Инструктор] Монитор — окно инструктора (зеркало шлема выключено; {blit}). Меню Y → «Монитор инструктора»."
+            : $"[Инструктор] Монитор — зеркало из шлема ({blit}). Меню Y → «Монитор инструктора».");
+    }
+
+    private static XRDisplaySubsystem Display()
+    {
+        displays.Clear();
+        SubsystemManager.GetSubsystems(displays);
+        foreach (XRDisplaySubsystem d in displays) if (d.running) return d;
+        return null;
     }
 
     private void BuildCamera()

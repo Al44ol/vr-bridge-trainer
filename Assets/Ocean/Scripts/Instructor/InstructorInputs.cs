@@ -13,7 +13,9 @@
 // report.html, на графики и схему; от неё оценка C2 отсчитывает время реакции (N1, N2).
 // Вводные снимаются (без событий) при загрузке сценария, начале и конце упражнения.
 //
-// Оповещение обучающегося (переключатель — меню A «Вводные» → «Оповещение об отказах»):
+// Меню A: подменю «Вводные» (отказы), «Пауза» — на главной (группа «Сценарий»), «Квитировать» —
+// на главной, пока звучит сигнал. Оповещение — меню Y, подменю «Оповещения».
+// Оповещение обучающегося (переключатель «Оповещение об отказах»):
 //   вкл — звуковая сигнализация (прерывистый тон, до квитирования или устранения),
 //   надпись перед обучающимся на showSeconds и строка «ОТКАЗ …» на NavDisplay;
 //   выкл — молча: обучающийся сам замечает, что ход или руль не отвечают.
@@ -108,10 +110,16 @@ public class InstructorInputs : MonoBehaviour
             () => SetEngineFailure(!EngineFailed), () => CanApply, instructorOnly: true));
         menuCommands.Add(BridgeMenu.Register(MenuGroup, () => SteeringFailed ? "Устранить отказ руля" : "Отказ рулевого устройства",
             () => SetSteeringFailure(!SteeringFailed), () => CanApply, instructorOnly: true));
-        menuCommands.Add(BridgeMenu.Register(MenuGroup, "Квитировать сигнализацию", Acknowledge,
+        // Квитирование — на главной странице меню A (группа «Сигнализация», как у мели), пока звучит сигнал
+        BridgeMenu.SetGroupOrder("Сигнализация", -90);
+        BridgeMenu.SetGroupExpanded("Сигнализация", true);
+        menuCommands.Add(BridgeMenu.Register("Сигнализация", "Квитировать сигнализацию отказа", Acknowledge,
             () => AlarmSounding, hideWhenUnavailable: true));
-        menuCommands.Add(BridgeMenu.Register(MenuGroup, () => announceFailures ? "Оповещение об отказах: вкл" : "Оповещение об отказах: выкл",
-            () => SetAnnounce(!announceFailures), instructorOnly: true));
+        // Переключатель оповещения — меню «Параметры» (Y), подменю «Оповещения»
+        BridgeMenuCommand announce = BridgeMenu.Register("Оповещения", () => announceFailures ? "Оповещение об отказах: вкл" : "Оповещение об отказах: выкл",
+            () => SetAnnounce(!announceFailures), instructorOnly: true).InMenu(BridgeMenu.SettingsMenuId);
+        announce.CloseOnExecute = false;
+        menuCommands.Add(announce);
     }
 
     void OnDisable()

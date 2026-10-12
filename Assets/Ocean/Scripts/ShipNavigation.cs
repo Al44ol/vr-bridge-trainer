@@ -54,7 +54,7 @@
 // между двумя последними шагами: x = x_пред + (x − x_пред)·α,
 // α = (Time.time − Time.fixedTime) / Time.fixedDeltaTime.
 //
-// Тест циркуляции (контекстное меню компонента или F5): скорость удерживается
+// Тест циркуляции (контекстное меню компонента, меню A «Отладка»; F5 — при keyboardShortcuts): скорость удерживается
 // равной V_эксп, руль 35° ПБ; в лог — координаты каждые 30° изменения курса,
 // выдвиг (90°), тактический диаметр (180°), диаметр установившейся
 // циркуляции (по точкам 360° и 540°) и теоретический D = 2L/(K'·δ).
@@ -84,8 +84,11 @@ public class ShipNavigation : MonoBehaviour
     public float testRudderDeg = 35f;
     [Tooltip("Ускорение моделирования во время теста (подшагов на один FixedUpdate)")]
     [Range(1, 20)] public int testSpeedup = 5;
-    [Tooltip("Клавиша F5 запускает/останавливает тест")]
+    [Tooltip("Клавиша F5 запускает/останавливает тест (D1: только вместе с keyboardShortcuts; без клавиатуры — меню A «Отладка»)")]
     public bool testHotkey = true;
+    [Tooltip("Клавиши клавиатуры (D1: по умолчанию выкл — всё из меню)")]
+    public bool keyboardShortcuts;
+    private BridgeMenuCommand testCommand;
 
     // ── Модель (A3: вынесена в чистый класс ShipDynamicsModel) ──
     private ShipDynamicsModel model;
@@ -140,12 +143,18 @@ public class ShipNavigation : MonoBehaviour
     {
         if (worldOrigin != null)
             worldOrigin.ExternalControl = true;
+        // D1: без клавиатуры — меню A «Отладка»
+        testCommand = BridgeMenu.Register("Отладка", () => testActive ? "Остановить тест циркуляции" : $"Тест циркуляции (руль {testRudderDeg:F0}° ПБ)",
+            () => { if (testActive) StopCirculationTest("остановлен вручную"); else StartCirculationTest(); },
+            () => initialized, instructorOnly: true);
     }
 
     void OnDisable()
     {
         if (worldOrigin != null)
             worldOrigin.ExternalControl = false;
+        BridgeMenu.Unregister(testCommand);
+        testCommand = null;
     }
 
     void Start()
@@ -197,7 +206,7 @@ public class ShipNavigation : MonoBehaviour
     {
         if (!initialized) return;
 
-        if (testHotkey && Keyboard.current != null && Keyboard.current.f5Key.wasPressedThisFrame)
+        if (keyboardShortcuts && testHotkey && Keyboard.current != null && Keyboard.current.f5Key.wasPressedThisFrame)
         {
             if (testActive) StopCirculationTest("остановлен вручную");
             else StartCirculationTest();

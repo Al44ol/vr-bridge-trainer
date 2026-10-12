@@ -109,6 +109,7 @@ public class ScenarioPanel : MonoBehaviour
     void OnEnable()
     {
         BridgeMenu.SetGroupOrder(MenuGroup, -100);
+        BridgeMenu.SetGroupExpanded(MenuGroup, true);   // D1: команды сценария — на главной странице меню, остальное — в подменю
         BridgeMenu.SetGroupOrder("Отладка", 100);
         menuCommands.Add(BridgeMenu.Register(MenuGroup, "Выбор сценария…", ShowSelection,
             () => runner != null && Phase != ScenarioRunner.Phase.Running, hideWhenUnavailable: true));

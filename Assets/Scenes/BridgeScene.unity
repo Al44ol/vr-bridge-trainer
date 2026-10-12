@@ -311,6 +311,9 @@ MonoBehaviour:
   collisionClip: {fileID: 0}
   collisionVolume: 1
   stopTargetOnCollision: 1
+  fogSignals: 1
+  restrictedVisibilityNm: 2
+  fogSignalVolume: 1
   orbitRadiusNm: 0.3
   orbitStepDeg: 15
   orbitStepSeconds: 3
@@ -2773,6 +2776,7 @@ MonoBehaviour:
   helmStillDeg: 0.2
   helmSettleSeconds: 1
   telegraphSettleSeconds: 0.5
+  blastToleranceS: 0.5
 --- !u!1001 &463198669
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -3218,7 +3222,7 @@ MonoBehaviour:
   m_BypassUIToolkitEvents: 1
   m_ActiveInputMode: 1
   m_EnableXRInput: 1
-  m_EnableMouseInput: 0
+  m_EnableMouseInput: 1
   m_EnableTouchInput: 0
   m_EnableGamepadInput: 0
   m_EnableJoystickInput: 0
@@ -4207,6 +4211,7 @@ MonoBehaviour:
   rainEffect: {fileID: 806489818}
   currentPreset: moderate
   currentTimeOfDay: 0
+  visibilityOverrideM: 0
   timeOfDayTransitionSeconds: 8
   sunYawDeg: -30
   nightProfile:
@@ -4361,6 +4366,60 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1663476065}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &755450511
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 755450512}
+  - component: {fileID: 755450513}
+  m_Layer: 0
+  m_Name: InstructorInputs
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &755450512
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 755450511}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1663476065}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &755450513
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 755450511}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d9404be4e66a4b62978709147e88ba26, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::InstructorInputs
+  runner: {fileID: 1422889051}
+  navigation: {fileID: 440562507}
+  weather: {fileID: 743935980}
+  announceFailures: 1
+  alarmVolume: 0.3
+  alarmFrequency: 1200
+  showSeconds: 6
+  distanceFromHead: 1.1
+  upOffset: 0.22
+  canvasScale: 0.001
 --- !u!1 &782544916
 GameObject:
   m_ObjectHideFlags: 0
@@ -6854,6 +6913,94 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1082667996}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &1090787285
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1090787289}
+  - component: {fileID: 1090787288}
+  - component: {fileID: 1090787287}
+  - component: {fileID: 1090787286}
+  m_Layer: 0
+  m_Name: Instructor
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1090787286
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1090787285}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c366c2807ae14ac1a7ab22bdcdcb09d6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::InstructorPip
+  width: 480
+  height: 270
+  rateHz: 10
+  fieldOfView: 60
+--- !u!114 &1090787287
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1090787285}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5e2d056b5b1e489e8304d72beb996149, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::InstructorWindow
+  runner: {fileID: 1422889051}
+  recorder: {fileID: 1422889053}
+  assessment: {fileID: 1422889054}
+  inputs: {fileID: 755450513}
+  weather: {fileID: 743935980}
+  grounding: {fileID: 440562508}
+  eventLines: 14
+  trailMinMeters: 10
+  trailMaxPoints: 4000
+  followMetersPerPixel: 3
+--- !u!114 &1090787288
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1090787285}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b35af852ab5841e2911f69b4d6c0b724, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::InstructorStation
+  startMode: 0
+  toggleKey: 95
+  uiRateHz: 5
+  background: {r: 0.04, g: 0.06, b: 0.08, a: 1}
+--- !u!4 &1090787289
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1090787285}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1110934897
 GameObject:
   m_ObjectHideFlags: 0
@@ -9045,6 +9192,7 @@ MonoBehaviour:
   scenarios:
   - {fileID: 11400000, guid: dec80650bea5c374785aa021cbeb333d, type: 2}
   - {fileID: 11400000, guid: 5cbacf9842e397148b0c5591cf024790, type: 2}
+  - {fileID: 11400000, guid: 754734c4ec4c6a9409b61718076eb779, type: 2}
   previewIndex: 0
   navigation: {fileID: 440562507}
   grounding: {fileID: 440562508}
@@ -10520,6 +10668,7 @@ Transform:
   - {fileID: 1258629465}
   - {fileID: 60234167}
   - {fileID: 247120832}
+  - {fileID: 755450512}
   m_Father: {fileID: 440562506}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1663476066
@@ -13222,6 +13371,10 @@ MonoBehaviour:
   frequency: 180
   duration: 3
   volume: 0.7
+  holdToSound: 1
+  attackSeconds: 0.12
+  releaseSeconds: 0.3
+  maxBlastSeconds: 30
 --- !u!82 &2068643254
 AudioSource:
   m_ObjectHideFlags: 0
@@ -13818,3 +13971,4 @@ SceneRoots:
   - {fileID: 1422889052}
   - {fileID: 41377262}
   - {fileID: 937235957}
+  - {fileID: 1090787289}

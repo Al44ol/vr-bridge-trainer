@@ -2,7 +2,7 @@
 // FrameTimingCapture.cs — Замер времени кадра CPU/GPU для ВКР
 // Ставится скриптом Tools/VR Bridge/Setup Frame Timing (объект PerfCapture).
 //
-// F8 — начать замер (durationSeconds), повторное F8 — прервать.
+// Меню Y «Замер» (до D1 — F8) — начать замер (durationSeconds), повторно — прервать.
 // Источник: FrameTimingManager (время кадра CPU и GPU, мс) +
 // счётчики рендера ProfilerRecorder (Draw Calls, SetPass, Batches —
 // есть в редакторе и в Development Build).
@@ -18,7 +18,8 @@
 // погода и время суток в начале и в конце замера, был ли переход освещения и сколько
 // раз перерисовывалась проба отражений (B4), идёт ли запись; extraNote — дописывается.
 // До C2 note было фиксированным («BridgeScene, moderate, stop») и условия не отражало.
-// D1: в note — режим монитора (окно инструктора / с PiP / зеркало шлема).
+// D1: в note — режим монитора (окно инструктора / с PiP / зеркало шлема). Запуск — меню Y «Замер»
+// (клавиша F8 — только при keyboardShortcuts).
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -43,6 +44,10 @@ public class FrameTimingCapture : MonoBehaviour
     public string extraNote = "";
     [Tooltip("Частота шлема, Гц — для доли кадров, не уложившихся в бюджет")]
     public float targetHz = 90f;
+    [Tooltip("Клавиша F8 (D1: замер запускается из меню Y «Замер»; клавиша — по желанию)")]
+    public bool keyboardShortcuts;
+
+    private BridgeMenuCommand menuCommand;
 
     private struct Sample
     {
@@ -67,6 +72,10 @@ public class FrameTimingCapture : MonoBehaviour
         drawRec = ProfilerRecorder.StartNew(ProfilerCategory.Render, "Draw Calls Count");
         setPassRec = ProfilerRecorder.StartNew(ProfilerCategory.Render, "SetPass Calls Count");
         batchRec = ProfilerRecorder.StartNew(ProfilerCategory.Render, "Batches Count");
+        // D1: без клавиатуры — из меню «Параметры» (Y), раздел «Замер»
+        menuCommand = BridgeMenu.Register("Замер",
+            () => capturing ? "Прервать замер частоты кадров" : $"Замер частоты кадров ({durationSeconds:F0} с)", ToggleCapture)
+            .InMenu(BridgeMenu.SettingsMenuId);
     }
 
     void OnDisable()
@@ -74,17 +83,23 @@ public class FrameTimingCapture : MonoBehaviour
         drawRec.Dispose();
         setPassRec.Dispose();
         batchRec.Dispose();
+        BridgeMenu.Unregister(menuCommand);
+        menuCommand = null;
+    }
+
+    /// <summary>Начать замер или прервать идущий (меню Y; F8 — если включены клавиши).</summary>
+    public void ToggleCapture()
+    {
+        if (capturing) Finish(true);
+        else Begin();
     }
 
     void Update()
     {
         FrameTimingManager.CaptureFrameTimings();
 
-        if (Keyboard.current != null && Keyboard.current.f8Key.wasPressedThisFrame)
-        {
-            if (capturing) Finish(true);
-            else Begin();
-        }
+        if (keyboardShortcuts && Keyboard.current != null && Keyboard.current.f8Key.wasPressedThisFrame)
+            ToggleCapture();
 
         if (!capturing) return;
 
@@ -121,7 +136,7 @@ public class FrameTimingCapture : MonoBehaviour
         conditionsAtStart = Lighting();
         capturing = true;
         Debug.Log($"[FrameTiming] Замер начат: {RenderModeName()}, {durationSeconds:F0} с " +
-                  $"(+{warmupSeconds:F0} с прогрев). Не двигайте головой. F8 — прервать.");
+                  $"(+{warmupSeconds:F0} с прогрев). Не двигайте головой. Прервать — меню Y «Замер».");
     }
 
     private void Finish(bool aborted)

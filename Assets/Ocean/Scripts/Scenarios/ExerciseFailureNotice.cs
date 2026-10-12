@@ -8,7 +8,7 @@
 // причина провала выделяется красным (ScenarioPanel).
 // Оповещение срабатывает и когда условие завершения в сценарии выключено
 // (например, при отработке съёма с мели упражнение продолжается).
-// Переключатель — меню мостика (кнопка A), группа «Сценарий»:
+// Переключатель — меню «Параметры» (Y), подменю «Оповещения» (до D1 — меню A, «Сценарий»):
 // «Оповещение о провале: вкл/выкл». Объект — дочерний к Ship (качается с мостиком).
 // ============================================================
 using TMPro;
@@ -41,9 +41,11 @@ public class ExerciseFailureNotice : MonoBehaviour
     void OnEnable()
     {
         ExerciseEvents.Raised += OnEvent;
-        toggle = BridgeMenu.Register("Сценарий",
+        // D1: переключатель — в меню «Параметры» (Y), подменю «Оповещения»
+        toggle = BridgeMenu.Register("Оповещения",
             () => showNotice ? "Оповещение о провале: вкл" : "Оповещение о провале: выкл",
-            () => showNotice = !showNotice, instructorOnly: true);
+            () => showNotice = !showNotice, instructorOnly: true).InMenu(BridgeMenu.SettingsMenuId);
+        toggle.CloseOnExecute = false;
     }
 
     void OnDisable()

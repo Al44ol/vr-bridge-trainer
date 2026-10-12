@@ -61,6 +61,9 @@ public class WeatherController : MonoBehaviour
     [Tooltip("Ночь и сумерки: луна, рассеянный свет, небо, экспозиция")]
     public NightProfile nightProfile = new NightProfile();
 
+    [Tooltip("Клавиши 1–4 — пресеты погоды (D1: по умолчанию выкл — погода из меню A «Обстановка» и панели погоды в меню Y)")]
+    public bool keyboardShortcuts;
+
     [System.Serializable]
     public struct WeatherPreset
     {
@@ -194,7 +197,8 @@ public class WeatherController : MonoBehaviour
         menuCommands.Add(BridgeMenu.RegisterStepper("Обстановка",
             () => visibilityOverrideM > 0f ? $"Видимость: {ScenarioText.Num(visibilityOverrideM / 1852f, 2)} мили" : "Видимость: по погоде",
             () => StepVisibility(-1), () => StepVisibility(+1)));
-        menuCommands.Add(BridgeMenu.RegisterStepper("Ночь",
+        // D1: экспозиция ночи — в подменю «Свет мостика» меню Y (было — группа «Ночь»)
+        menuCommands.Add(BridgeMenu.RegisterStepper("Свет мостика",
             () => $"Экспозиция ночи: {ScenarioText.Num(nightProfile.Exposure, 1)}",
             () => SetNightExposure(nightProfile.Exposure - 0.1f),
             () => SetNightExposure(nightProfile.Exposure + 0.1f)).InMenu(BridgeMenu.SettingsMenuId));
@@ -238,8 +242,8 @@ public class WeatherController : MonoBehaviour
         }
         if (changed) Apply();
 
-        // D1: пока в окне инструктора набирают текст (ID обучающегося), цифры погоду не меняют
-        if (Keyboard.current != null && !InstructorStation.TextInputFocused)
+        // Клавиши 1–4 — только при keyboardShortcuts (D1: погода — из меню); пока в окне инструктора набирают ID, цифры погоду не меняют
+        if (keyboardShortcuts && Keyboard.current != null && !InstructorStation.TextInputFocused)
         {
             if (Keyboard.current.digit1Key.wasPressedThisFrame) SetCalm();
             if (Keyboard.current.digit2Key.wasPressedThisFrame) SetModerate();

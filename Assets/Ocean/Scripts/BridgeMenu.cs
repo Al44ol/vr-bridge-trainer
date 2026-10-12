@@ -20,6 +20,9 @@
 // левого контроллера: свет рубки, подсветка приборов, экспозиция ночи.
 //     BridgeMenu.RegisterStepper("Свет", …).InMenu(BridgeMenu.SettingsMenuId);
 // Прежние вызовы Register попадают в меню A, как раньше. Открытие одного меню закрывает другие.
+// D1: подменю — меню было перегружено. Группа показывается одной кнопкой «Вводные »», на её
+// странице — команды группы и «« Назад»; меню открывается с главной страницы. Группы, отмеченные
+// SetGroupExpanded (сценарий, сигнализация, общие параметры), раскрыты прямо на главной.
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -79,6 +82,7 @@ public class BridgeMenu : MonoBehaviour
     {
         commands.Clear();
         groupOrder.Clear();
+        expandedGroups.Clear();
         instances.Clear();
         Instance = null;
     }
@@ -91,6 +95,19 @@ public class BridgeMenu : MonoBehaviour
         groupOrder[group ?? ""] = order;
         RebuildOpen();
     }
+
+    // Группы, раскрытые на главной странице (D1); остальные — подменю
+    private static readonly HashSet<string> expandedGroups = new HashSet<string>();
+
+    /// <summary>Команды группы — прямо на главной странице (true) или в подменю (false, по умолчанию).</summary>
+    public static void SetGroupExpanded(string group, bool expanded)
+    {
+        if (expanded) expandedGroups.Add(group ?? "");
+        else expandedGroups.Remove(group ?? "");
+        RebuildOpen();
+    }
+
+    private static bool IsExpanded(string group) => string.IsNullOrEmpty(group) || expandedGroups.Contains(group);
 
     /// <summary>Пересобрать открытые меню (реестр изменился).</summary>
     public static void RebuildOpen()
@@ -168,6 +185,9 @@ public class BridgeMenu : MonoBehaviour
     private readonly List<BridgeMenuCommand> builtVisible = new List<BridgeMenuCommand>();
     private readonly List<(BridgeMenuCommand cmd, Button btn, Image img)> arrows = new List<(BridgeMenuCommand, Button, Image)>();
     private static readonly Color StepperColor = new Color(0.16f, 0.26f, 0.38f);
+    private static readonly Color SubmenuColor = new Color(0.2f, 0.3f, 0.42f);
+    /// <summary>Открытое подменю (группа); null — главная страница.</summary>
+    private string page;
 
     public bool IsOpen => canvas != null && canvas.enabled;
 
@@ -219,6 +239,7 @@ public class BridgeMenu : MonoBehaviour
         if (canvas == null) BuildPanel();
         foreach (BridgeMenu m in instances)
             if (m != null && m != this && m.IsOpen) m.Close();
+        page = null;   // меню всегда открывается с главной страницы
         Rebuild();
         PositionInFrontOfPlayer();
         canvas.enabled = true;
@@ -275,26 +296,48 @@ public class BridgeMenu : MonoBehaviour
             return oa != ob ? oa.CompareTo(ob) : firstSeen.IndexOf(a).CompareTo(firstSeen.IndexOf(b));
         });
 
-        float rows = 0f;
-        rows += 34f;                                             // заголовок
+        // Подменю (D1): открытая группа пропала (все её команды скрыты) — на главную
+        if (page != null && !groups.Contains(page)) page = null;
+        bool root = page == null;
+        // На главной: раскрытые группы — заголовком и командами, остальные — кнопкой подменю;
+        // на странице подменю — «« Назад» и команды группы
+        var shown = new List<string>();
+        var submenus = new List<string>();
         foreach (string g in groups)
         {
-            rows += GroupHeight;
+            if (!root) { if (g == page) shown.Add(g); }
+            else if (IsExpanded(g)) shown.Add(g);
+            else submenus.Add(g);
+        }
+
+        float rows = 0f;
+        rows += 34f;                                             // заголовок
+        if (!root) rows += ButtonHeight + 6f;                    // «Назад»
+        foreach (string g in shown)
+        {
+            if (root) rows += GroupHeight;
             foreach (BridgeMenuCommand c in visible) if ((c.Group ?? "") == g) rows += ButtonHeight + 6f;
         }
+        if (submenus.Count > 0) rows += GroupHeight + submenus.Count * (ButtonHeight + 6f);
         if (visible.Count == 0) rows += 30f;
         rows += ButtonHeight + 10f;                              // «Закрыть»
         float height = rows + 2f * Pad;
         background.sizeDelta = new Vector2(Width, height);
 
         float y = height * 0.5f - Pad;
-        Label(menuTitle, ref y, 34f, 22f, new Color(0.85f, 0.92f, 1f), TextAlignmentOptions.Center);
+        Label(root ? menuTitle : $"{menuTitle} · {page}", ref y, 34f, 22f, new Color(0.85f, 0.92f, 1f), TextAlignmentOptions.Center);
         if (visible.Count == 0)
             Label("Нет команд", ref y, 30f, 16f, new Color(0.6f, 0.6f, 0.6f), TextAlignmentOptions.Center);
-
-        foreach (string g in groups)
+        if (!root)
         {
-            Label(g, ref y, GroupHeight, 15f, new Color(0.62f, 0.68f, 0.75f), TextAlignmentOptions.Left);
+            (Button back, Image backImg, TextMeshProUGUI backLabel) = MakeButton(ref y, () => OpenPage(null));
+            backImg.color = new Color(0.35f, 0.35f, 0.4f);
+            backLabel.text = "« Назад";
+        }
+
+        foreach (string g in shown)
+        {
+            if (root) Label(g, ref y, GroupHeight, 15f, new Color(0.62f, 0.68f, 0.75f), TextAlignmentOptions.Left);
             foreach (BridgeMenuCommand c in visible)
             {
                 if ((c.Group ?? "") != g) continue;
@@ -323,11 +366,29 @@ public class BridgeMenu : MonoBehaviour
                 items.Add((cmd, b0, i0, l0));
             }
         }
+        if (submenus.Count > 0)
+        {
+            Label("Разделы", ref y, GroupHeight, 15f, new Color(0.62f, 0.68f, 0.75f), TextAlignmentOptions.Left);
+            foreach (string g in submenus)
+            {
+                string group = g;
+                (Button sb, Image si, TextMeshProUGUI sl) = MakeButton(ref y, () => OpenPage(group));
+                si.color = SubmenuColor;
+                sl.text = $"{group}  »";   // «▸» в шрифте TMP по умолчанию нет
+            }
+        }
         y -= 4f;
         (Button close, Image closeImg, TextMeshProUGUI closeLabel) = MakeButton(ref y, Close);
         closeImg.color = new Color(0.35f, 0.35f, 0.4f);
         closeLabel.text = "Закрыть";
         RefreshStates();
+    }
+
+    /// <summary>Открыть подменю группы (null — главная страница).</summary>
+    private void OpenPage(string group)
+    {
+        page = group;
+        Rebuild();
     }
 
     private void Execute(BridgeMenuCommand c)

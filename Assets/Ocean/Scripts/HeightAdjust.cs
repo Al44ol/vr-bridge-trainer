@@ -2,8 +2,9 @@
 // HeightAdjust.cs — Настройка высоты игрока в VR
 //
 // Создаёт world-space панель с ползунком высоты.
-// Открывается кнопкой X (левый контроллер Quest: primaryButton) или H на клавиатуре.
-// (B4: Y левого — меню «Параметры», BridgeMenu.)
+// Открывается из меню «Параметры» (Y левого контроллера) → «Рост игрока…» (D1).
+// До D1 — кнопкой X (левый контроллер: primaryButton) или H на клавиатуре; теперь только
+// при controllerButton (по умолчанию выкл — кнопка X свободна).
 // Повесить на XR Origin Hands (XR Rig).
 // ============================================================
 using UnityEngine;
@@ -20,6 +21,10 @@ public class HeightAdjust : MonoBehaviour
     [Tooltip("Диапазон смещения")]
     public float minOffset = -2f;
     public float maxOffset = 1f;
+
+    [Header("Вызов")]
+    [Tooltip("Кнопка X левого контроллера и клавиша H (D1: по умолчанию выкл — панель из меню Y «Рост игрока…»)")]
+    public bool controllerButton;
 
     [Header("Панель")]
     public float distanceFromHead = 1.0f;
@@ -40,11 +45,30 @@ public class HeightAdjust : MonoBehaviour
         ApplyHeight();
 
         // X на левом контроллере = primaryButton левого (Y — secondaryButton)
-        yButtonAction = new InputAction("HeightPanel", InputActionType.Button);
-        yButtonAction.AddBinding("<XRController>{LeftHand}/primaryButton");
-        yButtonAction.AddBinding("<Keyboard>/h");
-        yButtonAction.performed += _ => TogglePanel();
-        yButtonAction.Enable();
+        if (controllerButton)
+        {
+            yButtonAction = new InputAction("HeightPanel", InputActionType.Button);
+            yButtonAction.AddBinding("<XRController>{LeftHand}/primaryButton");
+            yButtonAction.AddBinding("<Keyboard>/h");
+            yButtonAction.performed += _ => TogglePanel();
+            yButtonAction.Enable();
+        }
+    }
+
+    private BridgeMenuCommand menuCommand;
+
+    void OnEnable()
+    {
+        BridgeMenu.SetGroupOrder("Общее", -95);
+        BridgeMenu.SetGroupExpanded("Общее", true);   // D1: на главной странице меню Y
+        menuCommand = BridgeMenu.Register("Общее", () => panelVisible ? "Рост игрока: закрыть панель" : "Рост игрока…", TogglePanel)
+            .InMenu(BridgeMenu.SettingsMenuId);
+    }
+
+    void OnDisable()
+    {
+        BridgeMenu.Unregister(menuCommand);
+        menuCommand = null;
     }
 
     void OnDestroy()

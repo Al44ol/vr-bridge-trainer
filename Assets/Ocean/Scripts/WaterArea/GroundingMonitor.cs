@@ -122,8 +122,11 @@ public class GroundingMonitor : MonoBehaviour
     {
         refloatCommand = BridgeMenu.Register("Судно", "Снять с мели", RefloatByInstructor,
             () => State == GroundingState.Grounded, instructorOnly: true);
+        // D1: «Сигнализация» — на главной странице меню, команда видна, только пока звучит сигнал
+        BridgeMenu.SetGroupOrder("Сигнализация", -90);
+        BridgeMenu.SetGroupExpanded("Сигнализация", true);
         ackCommand = BridgeMenu.Register("Сигнализация", "Квитировать сигнализацию", Acknowledge,
-            () => AlarmSounding);
+            () => AlarmSounding, hideWhenUnavailable: true);
     }
 
     void OnDisable()

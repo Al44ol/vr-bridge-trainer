@@ -9,7 +9,7 @@
 //   • Слева — карта (InstructorMapGraphic поверх DebriefMapGraphic): колесо мыши —
 //     масштаб к курсору, перетаскивание — сдвиг; «За судном» (следование с
 //     перецентровкой, MapViewport), «Весь маршрут», «+», «−»; масштаб и сетка внизу;
-//     справа внизу — вид из шлема (PiP, по кнопке).
+//     справа внизу — вид из шлема (PiP: кнопка здесь или меню Y «Монитор инструктора»).
 //   • Справа — состояние своего судна и маршрута; таблица целей (дистанция, пеленг,
 //     курсовой угол, CPA, TCPA, ситуация по МППСС из оценки C2 — инструктор видит
 //     цели и при флаге сценария «цели не показывать»); вводные (отказ ГД, отказ руля,
@@ -525,8 +525,8 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         BuildMap();
         BuildColumn();
 
-        mirrorHint = MakeText(root, $"{station.toggleKey} — окно инструктора", 18f, new Color(1f, 1f, 1f, 0.8f), TextAlignmentOptions.TopLeft);
-        Place(mirrorHint.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(12f, -10f), new Vector2(420f, 30f), new Vector2(0f, 1f));
+        mirrorHint = MakeText(root, "Окно инструктора: меню Y → «Монитор инструктора»", 18f, new Color(1f, 1f, 1f, 0.8f), TextAlignmentOptions.TopLeft);
+        Place(mirrorHint.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(12f, -10f), new Vector2(620f, 30f), new Vector2(0f, 1f));
     }
 
     private void BuildBar()
@@ -588,7 +588,7 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         }, null, () => viewport.Follow ? ActiveColor : NeutralColor);
         Button(mapControls, ref x, 0f, 160f, "Весь маршрут", NeutralColor, () => { FitRoute(); nextRefresh = 0f; },
                null, null, () => runner != null && runner.Current != null);
-        Button(mapControls, ref x, 0f, 130f, "Вид из шлема", NeutralColor, () => station.Pip.SetActive(!station.Pip.Active),
+        Button(mapControls, ref x, 0f, 130f, "Вид из шлема", NeutralColor, () => station.TogglePip(),
                null, () => station.Pip != null && station.Pip.Active ? ActiveColor : NeutralColor);
 
         scaleText = MakeText(mapRect, "", 14f, MutedColor, TextAlignmentOptions.BottomLeft);
