@@ -1,0 +1,2 @@
+﻿date;render_mode;editor;aborted;duration_s;frames;fps_mean;frame_dt_mean_ms;cpu_mean_ms;cpu_p95_ms;gpu_mean_ms;gpu_median_ms;gpu_p95_ms;gpu_p99_ms;over_budget_pct;draw_calls_mean;setpass_mean;note;frames_over_20ms;max_frame_dt_ms
+2026-10-13 13:11:11;SinglePassInstanced;0;0;30.0;2700;90.0;11.115;11.115;12.115;2.991;2.020;9.098;10.265;16.19;-1.0;53.5;BridgeScene, сценарий B3-01 (выполнение), погода Night, время суток Night, переход освещения: нет, перерисовок пробы: 0, запись: идёт, монитор: окно инструктора, индикатор: вкл, планшет: скрыт;3;22.0
