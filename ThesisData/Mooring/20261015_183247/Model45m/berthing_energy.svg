@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="480" viewBox="0 0 680 480" font-family="Times New Roman, serif" font-size="14">
+<rect width="100%" height="100%" fill="white"/>
+<line x1="80" y1="40" x2="80" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="80" y="438" text-anchor="middle">0,05</text>
+<line x1="138" y1="40" x2="138" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="138" y="438" text-anchor="middle">0,10</text>
+<line x1="196" y1="40" x2="196" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="196" y="438" text-anchor="middle">0,15</text>
+<line x1="254" y1="40" x2="254" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="254" y="438" text-anchor="middle">0,20</text>
+<line x1="312" y1="40" x2="312" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="312" y="438" text-anchor="middle">0,25</text>
+<line x1="370" y1="40" x2="370" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="370" y="438" text-anchor="middle">0,30</text>
+<line x1="428" y1="40" x2="428" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="428" y="438" text-anchor="middle">0,35</text>
+<line x1="486" y1="40" x2="486" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="486" y="438" text-anchor="middle">0,40</text>
+<line x1="544" y1="40" x2="544" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="544" y="438" text-anchor="middle">0,45</text>
+<line x1="602" y1="40" x2="602" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="602" y="438" text-anchor="middle">0,50</text>
+<line x1="660" y1="40" x2="660" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="660" y="438" text-anchor="middle">0,55</text>
+<line x1="80" y1="420" x2="660" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="425" text-anchor="end">0</text>
+<line x1="80" y1="344" x2="660" y2="344" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="349" text-anchor="end">10</text>
+<line x1="80" y1="268" x2="660" y2="268" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="273" text-anchor="end">20</text>
+<line x1="80" y1="192" x2="660" y2="192" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="197" text-anchor="end">30</text>
+<line x1="80" y1="116" x2="660" y2="116" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="121" text-anchor="end">40</text>
+<line x1="80" y1="40" x2="660" y2="40" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="45" text-anchor="end">50</text>
+<rect x="80" y="40" width="580" height="380" fill="none" stroke="black" stroke-width="1"/>
+<text x="370" y="466" text-anchor="middle">Скорость подхода к кромке, уз</text>
+<text x="18" y="230" text-anchor="middle" transform="rotate(-90 18 230)">Энергия, кДж</text>
+<text x="370" y="24" text-anchor="middle" font-size="15">Энергия навала лагом по скорости подхода</text>
+<clipPath id="plot"><rect x="80" y="40" width="580" height="380"/></clipPath>
+<polyline clip-path="url(#plot)" fill="none" stroke="black" stroke-width="1.6" points="80,416.94 138,407.76 254,370.58 370,308.88 602,107.7 "/>
+<polyline clip-path="url(#plot)" fill="none" stroke="black" stroke-width="1.6" stroke-dasharray="8,4" points="80,416.4 138,405.59 254,362.38 370,290.35 602,59.87 "/>
+<polyline clip-path="url(#plot)" fill="none" stroke="black" stroke-width="1.6" stroke-dasharray="2,3" points="80,416.93 138,407.72 254,370.87 370,309.46 602,112.94 "/>
+<rect x="404" y="43" width="254" height="20" fill="white" fill-opacity="0.85"/>
+<line x1="410" y1="52" x2="450" y2="52" stroke="black" stroke-width="1.6"/>
+<text x="458" y="56">поглощена кранцами (модель)</text>
+<rect x="404" y="63" width="254" height="20" fill="white" fill-opacity="0.85"/>
+<line x1="410" y1="72" x2="450" y2="72" stroke="black" stroke-width="1.6" stroke-dasharray="8,4"/>
+<text x="458" y="76">½·m₂₂·v² (присоединённая масса модели)</text>
+<rect x="404" y="83" width="254" height="20" fill="white" fill-opacity="0.85"/>
+<line x1="410" y1="92" x2="450" y2="92" stroke="black" stroke-width="1.6" stroke-dasharray="2,3"/>
+<text x="458" y="96">PIANC, C_M = 1 + 2d/B, C_E = 1</text>
+</svg>
