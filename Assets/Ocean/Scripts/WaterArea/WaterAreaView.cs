@@ -15,7 +15,7 @@
 // Знаки дальше nearDistance обновляют высоту раз в farUpdateInterval кадров
 // (позиция — каждый кадр); волны там и так гаснут (затухание 1,5…6 км).
 //
-// Мели на воде не видны. Отладочный слой (команда меню «Показать мели»)
+// Мели на воде не видны. Отладочный слой (команда меню A «Подсказки» → «Показать мели»; до 19.2 — «Отладка»)
 // рисует их контуры над водой: красные — опасные для своего судна
 // (глубина < d + Δ, по GroundingMonitor), жёлтые — прочие; голубым — фарватер.
 // Порядок выполнения −60: после WorldOrigin, ShipNavigation, OceanWaves, ShipMotion.
@@ -107,7 +107,7 @@ public class WaterAreaView : MonoBehaviour
 
     void OnEnable()
     {
-        debugCommand = BridgeMenu.Register("Отладка",
+        debugCommand = BridgeMenu.Register(TrainerModeSwitch.HintsGroup,   // перед 19.2 (п. B): подсказка — не в «экзамене»
             () => showShoalsOnWater ? "Скрыть мели на воде" : "Показать мели на воде",
             () => showShoalsOnWater = !showShoalsOnWater);
         // Быстрая проверка без долгого перехода: переставить судно (на стопе) по первому фарватеру

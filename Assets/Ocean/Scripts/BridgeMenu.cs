@@ -9,7 +9,8 @@
 // Меню не знает конкретных команд: модули регистрируют их сами,
 //     BridgeMenu.Register("Судно", "Снять с мели", Refloat, () => grounded);
 // кнопки строятся при открытии; недоступная сейчас команда — серая.
-// Флаг InstructorOnly — задел на окно инструктора (D1).
+// Флаг InstructorOnly — задел на окно инструктора (D1). Перед 19.2 (п. B): AccessFilter — режим тренажёра
+// (TrainerModeSwitch) скрывает «Отладку», «Подсказки» и команды «(инстр.)» по режиму.
 // B2: порядок групп — BridgeMenu.SetGroupOrder (меньше — выше); команда с
 // hideWhenUnavailable не показывается, пока недоступна (команды сценария по фазе:
 // «Начать» — только на брифинге и т. п.), панель пересобирается сама.
@@ -86,6 +87,11 @@ public class BridgeMenu : MonoBehaviour
     public static BridgeMenu Instance { get; private set; }
     /// <summary>Меню «Параметры» на кнопке Y (B4).</summary>
     public const string SettingsMenuId = "Параметры";
+    /// <summary>
+    /// Доступ к командам (перед 19.2, п. B — режим тренажёра, TrainerModeSwitch): false — команда в меню
+    /// не показывается. null — показывать всё (как до режимов).
+    /// </summary>
+    public static Func<BridgeMenuCommand, bool> AccessFilter;
     private static readonly List<BridgeMenu> instances = new List<BridgeMenu>();
 
     // Если в настройках Play Mode отключена перезагрузка домена — не тащить команды прошлого запуска
@@ -97,6 +103,7 @@ public class BridgeMenu : MonoBehaviour
         expandedGroups.Clear();
         instances.Clear();
         Instance = null;
+        AccessFilter = null;
     }
 
     // Порядок групп (B2): меньше — выше; без порядка — 0, при равенстве — порядок первой регистрации
@@ -220,7 +227,7 @@ public class BridgeMenu : MonoBehaviour
     }
 
     // Команда показывается в этом меню
-    private bool Shows(BridgeMenuCommand c) => (c.Menu ?? "") == (menuId ?? "") && c.Visible;
+    private bool Shows(BridgeMenuCommand c) => (c.Menu ?? "") == (menuId ?? "") && c.Visible && (AccessFilter == null || AccessFilter(c));
 
     void Start()
     {

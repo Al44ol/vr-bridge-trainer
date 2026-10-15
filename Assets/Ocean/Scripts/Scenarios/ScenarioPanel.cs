@@ -283,6 +283,11 @@ public class ScenarioPanel : MonoBehaviour
     {
         Text(r.Title, 17f, MutedColor, ref y);
         Text(r.ToPanelTextShort(ExerciseFailureNotice.Enabled), 18f, Color.white, ref y);
+        // Перед 19.2 (п. B): режим тренажёра — был ли режим обучения / инструктора (из журнала упражнения)
+        string mode = r.Modes != null ? r.Modes.Line() : "";
+        if (mode.Length > 0)
+            Text(r.Modes.UsedInstructor ? $"<color=#FFC85A>{mode}</color>" : r.Modes.UsedTraining ? $"<color=#FFE08A>{mode}</color>" : $"<color=#9AA6B2>{mode}</color>",
+                 16f, Color.white, ref y);
         if (a == null)
         {
             Text(r.ToPanelText(ExerciseFailureNotice.Enabled), 18f, Color.white, ref y);

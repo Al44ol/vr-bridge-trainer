@@ -72,8 +72,9 @@ public static class SessionReport
         h.Append($"<title>Отчёт — {H(sc.id)} — {H(m.session_id)}</title>\n<style>\n{Css}</style>\n</head>\n<body>\n");
 
         h.Append($"<h1>Отчёт по упражнению {H(sc.id)} «{H(sc.title)}»</h1>\n");
+        TrainerModeUsage modes = TrainerModeUsage.From(s.Events);   // перед 19.2 (п. B); в записях до п. B — пусто, отчёт прежний
         Meta(h, s, m, sc);
-        Outcome(h, r, m);
+        Outcome(h, r, m, modes);
         Violations(h, r);
         Maps(h, map);
         Encounters(h, r);
@@ -158,9 +159,13 @@ public static class SessionReport
         h.Append("</table>\n");
     }
 
-    private static void Outcome(StringBuilder h, AssessmentResult r, SessionMeta m)
+    private static void Outcome(StringBuilder h, AssessmentResult r, SessionMeta m, TrainerModeUsage modes)
     {
         h.Append("<h2>Итог</h2>\n");
+        // Режим тренажёра (перед 19.2, п. B): режим обучения / инструктора — жирным, экзамен — серым
+        string mode = modes != null ? modes.Line() : "";
+        if (mode.Length > 0)
+            h.Append(modes.UsedTraining ? $"<p><b>{H(mode)}.</b></p>\n" : $"<p class=\"muted\">{H(mode)}.</p>\n");
         if (r == null)
         {
             h.Append("<p>Оценка не выполнялась: в записи нет траектории.</p>\n");

@@ -26,7 +26,7 @@
 //   • Цели (PlotterMath.ShowTarget): в брифинге и упражнении — только обнаруженные
 //     (оценка C2), при флаге сценария «цели не показывать» (C4) — никаких; в свободном
 //     плавании и после упражнения — все. Режим инструктора / теста «все цели»
-//     (окно инструктора, меню A «Отладка») — видно всё, надпись на планшете,
+//     (окно инструктора, меню A «Подсказки» (до п. B перед 19.2 — «Отладка»)) — видно всё, надпись на планшете,
 //     событие PlotterRevealTargets в журнал упражнения.
 //   • Вкладка «Задание» (кнопка «Задание ⇄ Карта», поверх карты): ход упражнения, условия
 //     (тот же текст, что на панели брифинга), текст брифинга, листание «< стр. >» — без
@@ -90,7 +90,7 @@ public class NavPlotter : MonoBehaviour
     public float minHullPx = 12f;
 
     [Header("Режим инструктора")]
-    [Tooltip("Все цели (в том числе не обнаруженные и скрытые флагом сценария); переключение — окно инструктора или меню A «Отладка»")]
+    [Tooltip("Все цели (в том числе не обнаруженные и скрытые флагом сценария); переключение — окно инструктора или меню A «Подсказки»")]
     [SerializeField] private bool revealAll;
 
     public bool RevealAll => revealAll;
@@ -179,7 +179,7 @@ public class NavPlotter : MonoBehaviour
         BridgeMenu.SetGroupExpanded("Общее", true);
         menuCommands.Add(BridgeMenu.Register("Общее", () => wantShown ? "Навигационный планшет: скрыть (X)" : "Навигационный планшет: показать (X)", Toggle)
             .InMenu(BridgeMenu.SettingsMenuId));
-        menuCommands.Add(BridgeMenu.Register("Отладка", () => revealAll ? "Планшет: все цели — вкл" : "Планшет: все цели — выкл (только обнаруженные)",
+        menuCommands.Add(BridgeMenu.Register(TrainerModeSwitch.HintsGroup, () => revealAll ? "Планшет: все цели — вкл" : "Планшет: все цели — выкл (только обнаруженные)",
             () => SetRevealAll(!revealAll), instructorOnly: true));
     }
 

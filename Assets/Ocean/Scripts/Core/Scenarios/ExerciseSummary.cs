@@ -30,6 +30,9 @@ public sealed class ExerciseSummary
     /// <summary>Действия обучающегося (C1): перекладки руля, команды телеграфу, гудки, смены погоды.</summary>
     public int HelmActions, TelegraphOrders, HornSignals, WeatherChanges;
 
+    /// <summary>Режимы тренажёра за упражнение (перед 19.2, п. B): был ли режим обучения или инструктора.</summary>
+    public TrainerModeUsage Modes = new TrainerModeUsage();
+
     public static ExerciseSummary From(ScenarioDefinition scenario, IReadOnlyList<ExerciseEvent> log, RouteTracker route)
     {
         var s = new ExerciseSummary
@@ -65,6 +68,7 @@ public sealed class ExerciseSummary
                         s.Reason = e.EndReason; s.ByInstructor = e.ByInstructor; s.Duration = e.Time; break;
                 }
             }
+        s.Modes = TrainerModeUsage.From(log);
         return s;
     }
 

@@ -429,9 +429,22 @@ public class SessionSummary
     public int collisions;
     public int helm_actions, telegraph_orders, horn_signals, weather_changes;
     public int track_rows, event_rows, target_rows;
+    /// <summary>
+    /// Режим тренажёра (перед 19.2, п. B; TrainerMode): на начало, наибольший за упражнение,
+    /// с какого момента был режим обучения / инструктора, с (−1 — не было), переключений.
+    /// Пусто — запись до п. B. Разбор берёт режимы из events.csv (TrainerModeUsage), это поле — для сводок.
+    /// </summary>
+    public string trainer_mode_start = "", trainer_mode_highest = "";
+    public double training_mode_from_s = -1, instructor_mode_from_s = -1;
+    public int trainer_mode_changes;
 
     public static SessionSummary From(ExerciseSummary s) => new SessionSummary
     {
+        trainer_mode_start = s.Modes != null && s.Modes.Recorded ? s.Modes.StartMode.ToString() : "",
+        trainer_mode_highest = s.Modes != null && s.Modes.Recorded ? s.Modes.HighestMode.ToString() : "",
+        training_mode_from_s = s.Modes != null && s.Modes.UsedTraining ? Math.Round(s.Modes.TrainingFrom, 2) : -1,
+        instructor_mode_from_s = s.Modes != null && s.Modes.UsedInstructor ? Math.Round(s.Modes.InstructorFrom, 2) : -1,
+        trainer_mode_changes = s.Modes != null ? s.Modes.Changes : 0,
         waypoints_passed = s.WaypointsPassed, waypoints_total = s.WaypointsTotal,
         max_abs_xte_m = Math.Round(s.MaxAbsXte, 2), time_outside_corridor_s = Math.Round(s.TimeOutsideCorridor, 2),
         corridor_exits = s.CorridorExits, shoal_warnings = s.ShoalWarnings, groundings = s.Groundings,

@@ -55,6 +55,10 @@
 // Навигационный планшет (D2; источник — NavPlotter, ByInstructor = true):
 //   PlotterRevealTargets режим инструктора / теста «все цели»: Value — 1 включён (обучающийся видит на планшете
 //                        все цели, в том числе не обнаруженные и скрытые флагом сценария), 0 — выключен
+// Режим тренажёра (перед 19.2, п. B; источник — TrainerModeSwitch, TrainerMode.cs):
+//   TrainerModeChanged   Index — новый режим (TrainerMode: 0 экзамен, 1 обучение, 2 инструктор);
+//                        Value — прежний режим, −1 — состояние на начало упражнения (при ExerciseStarted);
+//                        ByInstructor — переключено из окна инструктора
 // XTE > 0 — судно правее линии пути.
 // ============================================================
 using System;
@@ -98,7 +102,9 @@ public enum ExerciseEventType
     SteeringFailure,
     SteeringRestored,
     // Навигационный планшет (D2)
-    PlotterRevealTargets
+    PlotterRevealTargets,
+    // Режим тренажёра (перед 19.2)
+    TrainerModeChanged
 }
 
 public enum ScenarioEndReason
@@ -191,6 +197,11 @@ public struct ExerciseEvent
             case ExerciseEventType.SteeringRestored: return $"Рулевое устройство восстановлено (отказ {ScenarioText.Num(Value)} с)";
             case ExerciseEventType.PlotterRevealTargets:
                 return Value > 0 ? "Планшет: показаны ВСЕ цели (инструктор)" : "Планшет: все цели скрыты — только обнаруженные";
+            case ExerciseEventType.TrainerModeChanged:
+                return Value < 0
+                    ? $"Режим тренажёра на начало: {TrainerModes.Title(TrainerModes.FromIndex(Index))}"
+                    : $"РЕЖИМ ТРЕНАЖЁРА: {TrainerModes.Title(TrainerModes.FromIndex(Index))} (был: {TrainerModes.Title(TrainerModes.FromIndex((int)Value))})" +
+                      (ByInstructor ? " (окно инструктора)" : "");
         }
         return $"{Type} {Subject}";
     }

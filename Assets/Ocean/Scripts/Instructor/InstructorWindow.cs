@@ -15,6 +15,7 @@
 //     19.2 (A): над PiP — [−] [+] (480 / 720 / 960 / на всё поле карты) и «10 / 20 Гц»;
 //     «Шлем на весь экран» — режим зеркала; возврат — кнопка «« Окно инструктора» поверх
 //     зеркала, Esc или правый клик мыши (InstructorStation).
+//     19.2 (B): в верхней строке — «Режим: экзамен / обучение / инструктор» (TrainerModeSwitch, по кругу).
 //   • Справа — состояние своего судна и маршрута; таблица целей (дистанция, пеленг,
 //     курсовой угол, CPA, TCPA, ситуация по МППСС из оценки C2 — инструктор видит
 //     цели и при флаге сценария «цели не показывать»); вводные (отказ ГД, отказ руля,
@@ -473,6 +474,7 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
             case ExerciseEventType.SteeringRestored:
             case ExerciseEventType.Grounded:
             case ExerciseEventType.Collision:
+            case ExerciseEventType.TrainerModeChanged:   // перед 19.2 (п. B)
                 return true;    // и вне упражнения
             default:
                 return e.InExercise;
@@ -492,6 +494,7 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
             case ExerciseEventType.SteeringFailure:
             case ExerciseEventType.EncounterStarted:
             case ExerciseEventType.PlotterRevealTargets:   // D2: обучающемуся показаны все цели
+            case ExerciseEventType.TrainerModeChanged:     // перед 19.2 (п. B): режим тренажёра
                 return "#FFC85A";
             case ExerciseEventType.EngineRestored:
             case ExerciseEventType.SteeringRestored:
@@ -579,8 +582,8 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         float x = Pad, y = -(TopBar - RowHeight) * 0.5f;
         Button(bar, ref x, y, 40f, "<", NeutralColor, () => StepScenario(-1));
         scenarioLabel = MakeText(bar, "", 17f, Color.white, TextAlignmentOptions.Left);
-        Place(scenarioLabel.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(x, y), new Vector2(300f, RowHeight), new Vector2(0f, 1f));
-        x += 300f + Gap;
+        Place(scenarioLabel.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(x, y), new Vector2(240f, RowHeight), new Vector2(0f, 1f));
+        x += 240f + Gap;   // было 300 — место под кнопку режима (перед 19.2, п. B)
         Button(bar, ref x, y, 40f, ">", NeutralColor, () => StepScenario(+1));
         Button(bar, ref x, y, 120f, "Загрузить", ButtonColor, LoadSelected, null, null, () => Phase != ScenarioRunner.Phase.Running);
 
@@ -597,6 +600,11 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         Button(bar, ref x, y, 130f, "Перезапуск", NeutralColor, () => runner.Restart(), null, null, () => runner != null && runner.Current != null && Phase != ScenarioRunner.Phase.Idle);
         Button(bar, ref x, y, 130f, "Завершить", StopColor, () => runner.Abort(), null, null, () => Phase == ScenarioRunner.Phase.Running);
         Button(bar, ref x, y, 190f, "Свободное плавание", NeutralColor, () => runner.FreeSail(), null, null, () => runner != null);
+        // Перед 19.2 (п. B): режим тренажёра по кругу экзамен → обучение → инструктор (в журнал упражнения)
+        Button(bar, ref x, y, 150f, "", NeutralColor, () => TrainerModeSwitch.Instance.Cycle(byInstructor: true),
+               () => $"Режим: {TrainerModes.Title(TrainerModes.Current)}",
+               () => TrainerModes.Current == TrainerMode.Exam ? StartColor : TrainerModes.Current == TrainerMode.Instructor ? WarnColor : ButtonColor,
+               () => TrainerModeSwitch.Instance != null);
 
         statusText = MakeText(bar, "", 20f, Color.white, TextAlignmentOptions.Right);
         Place(statusText.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-Pad, -4f), new Vector2(380f, TopBar - 6f), new Vector2(1f, 1f));
