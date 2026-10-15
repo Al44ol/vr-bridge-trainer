@@ -136,4 +136,88 @@ public class BerthSceneTests
         Assert.AreEqual("прямо", ControlOrders.RudderTitle(0.0));
         Assert.AreEqual("Самый малый вперёд", ControlOrders.ValueText(ControlOrders.Telegraph, 0.2));
     }
+
+    // ─────────── Часть 2 (19.2б-2) ───────────
+
+    private static (BerthArea b, ShipParameters p, ShipDynamicsModel m, MooringSystem sys) Alongside(double gap)
+    {
+        BerthArea b = DemoArea().berths[0];
+        ShipParameters p = Model45m();
+        WorldPosition s = b.AlongsidePosition(0.5 * b.Length, gap, p.beam, out double hdg);
+        var m = new ShipDynamicsModel(p) { MotionOverride = MotionModel.Manoeuvring3Dof };
+        m.Teleport(s.East, s.North, hdg * System.Math.PI / 180.0, 0.0, 0.0);
+        return (b, p, m, new MooringSystem(b, p));
+    }
+
+    [Test]
+    public void LineOrders_GiveWinchBittsReleaseAndRefusals()
+    {
+        var (b, p, m, sys) = Alongside(1.0);
+        Assert.IsFalse(sys.Order(0, LineOrder.HaulIn, m, 0, out string r0), "не подан — выбирать нельзя");
+        StringAssert.Contains("не подан", r0);
+        Assert.IsTrue(sys.Order(0, LineOrder.Give, m, 0, out _), "лагом в 1 м — подаётся");
+        Assert.AreEqual(MooringLineState.Fast, sys.Lines[0].State);
+        Assert.AreEqual(-1, sys.Lines[0].Side, "на левый борт — к причалу");
+        Assert.IsTrue(sys.Order(0, LineOrder.HaulIn, m, 0, out _));
+        Assert.AreEqual(WinchCommand.HaulIn, sys.Lines[0].Winch);
+        Assert.IsTrue(sys.Order(0, LineOrder.OnBitts, m, 0, out _));
+        Assert.IsTrue(sys.Lines[0].OnBitts, "на кнехтах судна");
+        Assert.AreEqual(WinchCommand.Hold, sys.Lines[0].Winch);
+        Assert.IsTrue(sys.Order(0, LineOrder.PayOut, m, 0, out _));
+        Assert.IsFalse(sys.Lines[0].OnBitts, "травить — снова на лебёдке");
+        Assert.IsTrue(sys.Order(0, LineOrder.Release, m, 0, out _));
+        Assert.AreEqual(MooringLineState.Aboard, sys.Lines[0].State);
+        StringAssert.Contains("на борту", LineOrders.State(sys.Lines[0], true));
+
+        var far = Alongside(60.0);
+        Assert.IsFalse(far.sys.Order(2, LineOrder.Give, far.m, 0, out string r1), "в 60 м от кромки — не достать");
+        StringAssert.Contains("больше", r1);
+    }
+
+    [Test]
+    public void LineShape_SagFromSlackAndTension()
+    {
+        double s = MooringLineShape.Sag(10.0, 10.5, 0.0, 270e3);
+        Assert.AreEqual(System.Math.Sqrt(3.0 * 10.0 * 0.5 / 8.0), s, 1e-12);
+        Assert.AreEqual(10.5, MooringLineShape.ParabolaLength(10.0, s), 1e-9, "длина параболы = L₀");
+        Assert.AreEqual(0.1, MooringLineShape.Sag(10.0, 10.0, 0.0, 270e3), 1e-12, "обтянут без силы — 1 % хорды");
+        Assert.AreEqual(0.0, MooringLineShape.Sag(10.0, 9.9, 0.3 * 270e3, 270e3), 1e-12, "под нагрузкой — прямой");
+    }
+
+    [Test]
+    public void BerthReadout_GapsSpeedsAngle()
+    {
+        var (b, p, m, _) = Alongside(2.0);
+        BerthReadout r = BerthReadout.Compute(b, p, m);
+        Assert.IsTrue(r.Valid);
+        Assert.AreEqual(2.0, r.BowGapM, 1e-6, "плечо — в цилиндрической вставке");
+        Assert.AreEqual(2.0, r.SternGapM, 1e-6);
+        Assert.AreEqual(0.0, r.AngleDeg, 1e-6);
+        Assert.Less(r.DistanceM, BerthReadout.ShowWithinM);
+
+        // Лагом к причалу 0,1 м/с (на левый борт — V < 0)
+        m.V = -0.1;
+        r = BerthReadout.Compute(b, p, m);
+        Assert.AreEqual(0.1 / ShipParameters.KnotsToMs, r.BowSpeedKn, 1e-6);
+        Assert.AreEqual(r.BowSpeedKn, r.SternSpeedKn, 1e-9);
+
+        // Нос к причалу на 5°: нос ближе кормы
+        m.V = 0.0;
+        m.Psi -= 5.0 * System.Math.PI / 180.0;
+        r = BerthReadout.Compute(b, p, m);
+        Assert.Less(r.BowGapM, r.SternGapM);
+        Assert.AreEqual(-5.0, r.AngleDeg, 1e-6);
+        StringAssert.Contains("ПРИЧАЛ", r.Format());
+    }
+
+    [Test]
+    public void LineCommandAndStation_Describe()
+    {
+        var e = new ExerciseEvent(ExerciseEventType.LineCommand) { Index = 2, Value = (int)LineOrder.OnBitts, Value2 = 1, Subject = "носовой шпринг" };
+        Assert.AreEqual("Концы: «на кнехты» — носовой шпринг", e.Describe());
+        e.Value2 = 0;
+        StringAssert.Contains("НЕ ВЫПОЛНЕНО", e.Describe());
+        var s = new ExerciseEvent(ExerciseEventType.StationChanged) { Index = (int)BridgeStation.WingPort, Value = (int)BridgeStation.Helm };
+        Assert.AreEqual("Переход: крыло ЛБ (был: у штурвала)", s.Describe());
+    }
 }

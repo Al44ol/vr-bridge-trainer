@@ -13,7 +13,9 @@
 //      масштаб модели 0,5 (решение пользователя; уже построенный в масштабе 1 — уменьшается);
 //   5. Ship/ControlMenu — меню «Управление» на кнопке B правого контроллера (BridgeMenu + ShipControlOrders);
 //   6. проверка: корпус Hull в сцене против L × B ассета (контакт с кранцами считается по ассету),
-//      кнопка B не занята панелью погоды (PanelToggle.controllerButton).
+//      кнопка B не занята панелью погоды (PanelToggle.controllerButton); высота клюзов = верх Hull над ватерлинией;
+//   7. (19.2б-2) Ship/Stations — точки «к штурвалу / крыло ЛБ / крыло ПБ» (BridgeStationSwitch, меню B → «Переход»):
+//      поиск пола галереи МОСТИКИ, площадка до борта (WingPlatform_*) или невидимый пол (WingFloor_*) под точкой.
 // Чтобы перестроить рычаг — удалите ThrusterHead и запустите пункт снова.
 // ============================================================
 using System.Text;
@@ -166,7 +168,10 @@ public static class SetupBerth
         PanelToggle weather = FindInScene<PanelToggle>(scene);
         if (weather != null && weather.controllerButton)
             log.AppendLine("  ! PanelToggle.controllerButton включён — кнопка B откроет и панель погоды; выключите (погода — меню Y)");
-        CheckHull(scene, nav, log);
+        bool hullOk = CheckHull(scene, nav, mc, log, out Transform shipT, out Vector3 hullMin, out Vector3 hullMax);
+
+        // ── 7. Точки «к штурвалу / крыло ЛБ / крыло ПБ» (19.2б-2) ──
+        SetupStations(scene, nav, mc, hullOk ? shipT : null, hullMin, hullMax, log);
 
         Undo.CollapseUndoOperations(undoGroup);
         EditorSceneManager.MarkSceneDirty(scene);
@@ -314,17 +319,21 @@ public static class SetupBerth
 
     // ─────────── Проверка корпуса ───────────
 
-    private static void CheckHull(Scene scene, ShipNavigation nav, StringBuilder log)
+    private static bool CheckHull(Scene scene, ShipNavigation nav, MooringController mc, StringBuilder log,
+                                  out Transform ship, out Vector3 min, out Vector3 max)
     {
+        ship = null;
+        min = max = Vector3.zero;
         ShipParameters p = nav.parameters;
         Transform hull = FindByName(scene, "Hull");
-        if (p == null || hull == null) { log.AppendLine("  ? корпус Hull или ShipParameters не найден — сверка размеров пропущена"); return; }
-        Transform ship = hull.parent != null ? hull.parent : hull;
+        if (p == null || hull == null) { log.AppendLine("  ? корпус Hull или ShipParameters не найден — сверка размеров пропущена"); return false; }
+        ship = hull.parent != null ? hull.parent : hull;
         // Габарит Hull в системе Ship: углы ограничивающего ящика меша
         var mf = hull.GetComponent<MeshFilter>();
-        if (mf == null || mf.sharedMesh == null) { log.AppendLine("  ? у Hull нет меша — сверка размеров пропущена"); return; }
+        if (mf == null || mf.sharedMesh == null) { log.AppendLine("  ? у Hull нет меша — сверка размеров пропущена"); return false; }
         Bounds mb = mf.sharedMesh.bounds;
-        Vector3 min = Vector3.positiveInfinity, max = Vector3.negativeInfinity;
+        min = Vector3.positiveInfinity;
+        max = Vector3.negativeInfinity;
         for (int i = 0; i < 8; i++)
         {
             Vector3 c = new Vector3((i & 1) == 0 ? mb.min.x : mb.max.x, (i & 2) == 0 ? mb.min.y : mb.max.y, (i & 4) == 0 ? mb.min.z : mb.max.z);
@@ -335,6 +344,205 @@ public static class SetupBerth
         float width = max.x - min.x, length = max.z - min.z;
         log.AppendLine($"  = корпус Hull в сцене: ширина {width:F2} м (B ассета {p.beam:F2}), длина {length:F1} м (L ассета {p.length:F1}; нос — BowTip отдельно). " +
                        "Контакт с кранцами считается по L × B ассета; если борт Hull в шлеме не доходит до кранцев или входит в них — подогнать Hull или beam");
+
+        // 19.2б-2: высота клюзов — верх Hull над ватерлинией (ShipMotion.pivotLocal — мидель на ватерлинии)
+        ShipMotion motion = ship.GetComponent<ShipMotion>();
+        if (motion != null && mc != null)
+        {
+            float freeboard = max.y - motion.pivotLocal.y;
+            if (freeboard >= 1f && freeboard <= 6f)
+            {
+                if (Mathf.Abs(mc.fairleadHeightM - freeboard) > 0.05f)
+                {
+                    Undo.RecordObject(mc, "Fairlead height");
+                    mc.fairleadHeightM = Mathf.Round(freeboard * 10f) / 10f;
+                    EditorUtility.SetDirty(mc);
+                    log.AppendLine($"  + высота клюзов = верх Hull над ватерлинией: {mc.fairleadHeightM:F1} м (MooringController.fairleadHeightM)");
+                }
+                else log.AppendLine($"  = высота клюзов {mc.fairleadHeightM:F1} м (верх Hull над ватерлинией {freeboard:F2} м)");
+            }
+            else log.AppendLine($"  ? верх Hull над ватерлинией {freeboard:F2} м — вне 1…6 м, высота клюзов не меняется ({mc.fairleadHeightM:F1} м)");
+        }
+        return true;
+    }
+
+    // ─────────── Точки «к штурвалу / крыло ЛБ / крыло ПБ» (19.2б-2) ───────────
+    // Пол ищется лучами вниз (система Ship) от места оператора к каждому борту с шагом 0,1 м. Чтобы найти
+    // и галерею без коллайдера, на рендеры МОСТИКИ на время поиска ставятся MeshCollider (потом удаляются).
+    // Пол — попадание в полосе ±0,35 м от пола у штурвала; край галереи — последний пол перед разрывом > 0,6 м.
+    // Если край галереи не доходит до борта Hull (зазор > 0,3 м) — площадка до борта: пол 2 × Δ м с BoxCollider
+    // и леер (1 м). Точка крыла — в 0,6 м от края пола внутрь, «вперёд» — в нос (−Z Ship). Если под точкой
+    // нет настоящего коллайдера (галерея без него) — невидимый пол WingFloor_* (иначе Rig с гравитацией упадёт).
+    // Повторный запуск точки не двигает (их можно поправить в Scene View); перестроить — удалить Ship/Stations
+    // (и Ship/WingPlatform_*, Ship/WingFloor_*) и запустить снова.
+    private const string StationsName = "Stations";
+    private const float ProbeStep = 0.1f, FloorBand = 0.35f, GapLimit = 0.6f, EdgeInset = 0.6f, PlatformDepth = 2f;
+
+    private static void SetupStations(Scene scene, ShipNavigation nav, MooringController mc, Transform ship, Vector3 hullMin, Vector3 hullMax, StringBuilder log)
+    {
+        if (ship == null) { log.AppendLine("  ! точки крыла не поставлены — нет габарита Hull"); return; }
+        var rig = FindInScene<Unity.XR.CoreUtils.XROrigin>(scene);
+        Transform rigT = rig != null ? rig.transform : null;
+        if (rigT == null) { log.AppendLine("  ! нет XR Origin — точки крыла не поставлены"); return; }
+
+        BridgeStationSwitch sw = FindInScene<BridgeStationSwitch>(scene);
+        if (sw != null && sw.helm != null && sw.wingPort != null && sw.wingStarboard != null)
+        {
+            log.AppendLine("  = точки перехода уже есть (Ship/Stations) — не двигаются; перестроить — удалить Stations и площадки");
+            return;
+        }
+
+        Vector3 rigLocal = ship.InverseTransformPoint(rigT.position);
+        float floorY = ProbeFloorAt(ship, rigLocal, rigLocal.y, rigT, out bool floorHit);
+        log.AppendLine($"  пол у штурвала: y = {floorY:F2} (Ship; {(floorHit ? "коллайдер" : "по XR Origin")}), борт Hull: ЛБ x = {hullMax.x:F2}, ПБ x = {hullMin.x:F2}");
+
+        // Временные коллайдеры на МОСТИКИ — чтобы найти пол галереи без коллайдера
+        var temp = new System.Collections.Generic.List<MeshCollider>();
+        Transform bridge = FindChildByName(ship, "МОСТИКИ");
+        if (bridge != null)
+            foreach (MeshFilter f in bridge.GetComponentsInChildren<MeshFilter>(false))
+                if (f.sharedMesh != null && f.GetComponent<Collider>() == null)
+                {
+                    var c = f.gameObject.AddComponent<MeshCollider>();
+                    c.sharedMesh = f.sharedMesh;
+                    temp.Add(c);
+                }
+        var anchors = new Vector3[2];
+        var platforms = new (float from, float to, float y)?[2];
+        try
+        {
+            Physics.SyncTransforms();
+            for (int k = 0; k < 2; k++)
+            {
+                float s = k == 0 ? 1f : -1f;                      // 0 — ЛБ (+X), 1 — ПБ (−X)
+                float sideX = s > 0 ? hullMax.x : hullMin.x;
+                float lastX = rigLocal.x, lastY = floorY, gap = 0f;
+                for (float dx = ProbeStep; dx < 15f; dx += ProbeStep)
+                {
+                    var p = new Vector3(rigLocal.x + s * dx, floorY, rigLocal.z);
+                    float y = ProbeFloorAt(ship, p, floorY, rigT, out bool hit);
+                    if (hit) { lastX = p.x; lastY = y; gap = 0f; }
+                    else if ((gap += ProbeStep) > GapLimit) break;
+                }
+                float edge = lastX;
+                bool reaches = s > 0 ? edge >= sideX - 0.3f : edge <= sideX + 0.3f;
+                string side = s > 0 ? "ЛБ" : "ПБ";
+                log.AppendLine($"  галерея {side}: край пола x = {edge:F2} (y = {lastY:F2}), борт x = {sideX:F2} — {(reaches ? "доходит до борта" : $"не доходит на {Mathf.Abs(sideX - edge):F2} м → площадка")}");
+                if (!reaches) platforms[k] = (edge, sideX, lastY);
+                float outer = reaches ? edge : sideX;
+                anchors[k] = new Vector3(outer - s * EdgeInset, lastY, rigLocal.z);
+            }
+        }
+        finally
+        {
+            foreach (MeshCollider c in temp) if (c != null) Object.DestroyImmediate(c);
+            Physics.SyncTransforms();
+        }
+
+        // Объект точек
+        if (sw == null)
+        {
+            var go = new GameObject(StationsName);
+            Undo.RegisterCreatedObjectUndo(go, "Create Stations");
+            go.transform.SetParent(ship, false);
+            sw = go.AddComponent<BridgeStationSwitch>();
+            sw.navigation = nav;
+            sw.xrOrigin = rig;
+        }
+        Undo.RecordObject(sw, "Setup stations");
+        Quaternion toBow = Quaternion.LookRotation(Vector3.back, Vector3.up);   // нос модели — −Z Ship
+        sw.helm = Point(sw.transform, "Helm", new Vector3(rigLocal.x, floorY, rigLocal.z), toBow);
+        sw.wingPort = Point(sw.transform, "WingPort", anchors[0], toBow);
+        sw.wingStarboard = Point(sw.transform, "WingStarboard", anchors[1], toBow);
+        EditorUtility.SetDirty(sw);
+        log.AppendLine($"  + Ship/{StationsName}: у штурвала ({rigLocal.x:F2}; {floorY:F2}; {rigLocal.z:F2}), крыло ЛБ ({anchors[0].x:F2}; {anchors[0].y:F2}), крыло ПБ ({anchors[1].x:F2}; {anchors[1].y:F2}) — смотрят в нос; меню B → «Переход»");
+
+        // Площадки до борта и пол под точками
+        Material deck = GetMaterial("Wing_Deck", new Color(0.32f, 0.36f, 0.33f), 0.2f);
+        Material rail = GetMaterial("Telegraph_Lever", new Color(0.62f, 0.65f, 0.68f), 0.7f);
+        for (int k = 0; k < 2; k++)
+        {
+            string side = k == 0 ? "ЛБ" : "ПБ", suffix = k == 0 ? "Port" : "Starboard";
+            if (platforms[k].HasValue)
+            {
+                BuildPlatform(ship, "WingPlatform_" + suffix, platforms[k].Value.from, platforms[k].Value.to, platforms[k].Value.y, rigLocal.z, k == 0 ? 1f : -1f, deck, rail);
+                log.AppendLine($"  + Ship/WingPlatform_{suffix} — площадка {side} от галереи до борта ({Mathf.Abs(platforms[k].Value.to - platforms[k].Value.from):F2} × {PlatformDepth:F1} м, пол-коллайдер, леер)");
+                continue;
+            }
+            ProbeFloorAt(ship, anchors[k], anchors[k].y, rigT, out bool solid);
+            if (solid) continue;
+            var floor = new GameObject("WingFloor_" + suffix);
+            Undo.RegisterCreatedObjectUndo(floor, "Wing floor");
+            floor.transform.SetParent(ship, false);
+            floor.transform.localPosition = anchors[k] + Vector3.down * 0.05f;
+            var box = floor.AddComponent<BoxCollider>();
+            box.size = new Vector3(1.6f, 0.1f, PlatformDepth);
+            log.AppendLine($"  + Ship/WingFloor_{suffix} — под точкой крыла {side} нет коллайдера пола: невидимый пол 1,6 × {PlatformDepth:F1} м");
+        }
+    }
+
+    private static Transform Point(Transform parent, string name, Vector3 shipLocal, Quaternion rot)
+    {
+        Transform t = parent.Find(name);
+        if (t == null)
+        {
+            var go = new GameObject(name);
+            Undo.RegisterCreatedObjectUndo(go, "Station point");
+            t = go.transform;
+            t.SetParent(parent, false);
+        }
+        Transform ship = parent.parent;
+        t.position = ship.TransformPoint(shipLocal);
+        t.rotation = ship.rotation * rot;
+        return t;
+    }
+
+    // Пол в точке (система Ship): ближайшее попадание вниз в полосе ±FloorBand от expectedY (мимо коллайдеров Rig)
+    private static float ProbeFloorAt(Transform ship, Vector3 local, float expectedY, Transform rig, out bool hit)
+    {
+        Vector3 from = ship.TransformPoint(new Vector3(local.x, expectedY + 1.2f, local.z));
+        RaycastHit[] hits = Physics.RaycastAll(from, -ship.up, 2.5f, ~0, QueryTriggerInteraction.Ignore);
+        float best = expectedY;
+        hit = false;
+        float bestErr = float.MaxValue;
+        foreach (RaycastHit h in hits)
+        {
+            if (rig != null && h.collider.transform.IsChildOf(rig)) continue;
+            if (!h.collider.transform.IsChildOf(ship)) continue;
+            float y = ship.InverseTransformPoint(h.point).y, err = Mathf.Abs(y - expectedY);
+            if (err <= FloorBand && err < bestErr) { best = y; bestErr = err; hit = true; }
+        }
+        return best;
+    }
+
+    // Площадка от края галереи (from) до борта (to) по X, глубиной PlatformDepth по Z, пол на y; леер по борту и по краям
+    private static void BuildPlatform(Transform ship, string name, float from, float to, float y, float z, float side, Material deck, Material rail)
+    {
+        var root = new GameObject(name);
+        Undo.RegisterCreatedObjectUndo(root, "Wing platform");
+        Transform t = root.transform;
+        t.SetParent(ship, false);
+        float x0 = Mathf.Min(from, to) - 0.1f, x1 = Mathf.Max(from, to);   // заходит под галерею на 0,1 м
+        float w = x1 - x0, cx = 0.5f * (x0 + x1);
+        Transform plate = Part(PrimitiveType.Cube, "Deck", t, new Vector3(cx, y - 0.04f, z), Quaternion.identity, new Vector3(w, 0.08f, PlatformDepth), deck, keepCollider: true);
+        _ = plate;
+        float outer = side > 0 ? x1 : x0;
+        const float h = 1.0f, r = 0.04f;
+        // Леер по борту (вдоль Z) и по носовой / кормовой кромке (вдоль X)
+        Part(PrimitiveType.Cylinder, "RailOuter", t, new Vector3(outer, y + h, z), Quaternion.Euler(90f, 0f, 0f), new Vector3(r, 0.5f * PlatformDepth, r), rail);
+        foreach (float dz in new[] { -0.5f * PlatformDepth, 0.5f * PlatformDepth })
+        {
+            Part(PrimitiveType.Cylinder, "RailEnd", t, new Vector3(cx, y + h, z + dz), Quaternion.Euler(0f, 0f, 90f), new Vector3(r, 0.5f * w, r), rail);
+            Part(PrimitiveType.Cylinder, "Post", t, new Vector3(outer, y + 0.5f * h, z + dz), Quaternion.identity, new Vector3(r, 0.5f * h, r), rail);
+        }
+        Part(PrimitiveType.Cylinder, "Post", t, new Vector3(outer, y + 0.5f * h, z), Quaternion.identity, new Vector3(r, 0.5f * h, r), rail);
+    }
+
+    private static Transform FindChildByName(Transform root, string name)
+    {
+        foreach (Transform t in root.GetComponentsInChildren<Transform>(true))
+            if (t.name == name) return t;
+        return null;
     }
 
     // ─────────── Общее ───────────

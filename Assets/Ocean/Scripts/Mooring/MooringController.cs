@@ -13,6 +13,9 @@
 // Операция «Швартовка» (меню «Управление» на кнопке B; 16.10.2026 вынесена из «Отладки» — решение
 // пользователя): «Судно к причалу: лагом» и «… подход» — в любом режиме тренажёра, только в свободном
 // плавании (не в упражнении и не на паузе брифинга); модель 3 СС ставится сама.
+// Концы (19.2б-2): подменю «Концы» меню B — выбор конца, состояние (в «экзамене» — словами, без кН), команды
+// LineOrder (подать / выбирать / травить / держать / на кнехты / отдать) → MooringSystem.Order, событие LineCommand;
+// вид концов — MooringLinesView (добавляется сам).
 // ============================================================
 using UnityEngine;
 
@@ -90,6 +93,7 @@ public class MooringController : MonoBehaviour
         if (navigation == null) navigation = FindAnyObjectByType<ShipNavigation>();
         if (grounding == null) grounding = FindAnyObjectByType<GroundingMonitor>();
         if (thrusterLever == null) thrusterLever = FindAnyObjectByType<ThrusterLever>();
+        if (GetComponent<MooringLinesView>() == null) gameObject.AddComponent<MooringLinesView>();   // 19.2б-2: вид концов (Setup не нужен)
     }
 
     void OnDestroy()
@@ -113,6 +117,7 @@ public class MooringController : MonoBehaviour
             () => ToBerth(true), CanTeleport, hideWhenUnavailable: true).InMenu(ShipControlOrders.MenuId));
         BridgeMenu.SetGroupExpanded(ShipControlOrders.BerthGroup, true);
         BridgeMenu.SetGroupOrder(ShipControlOrders.BerthGroup, 20);
+        RegisterLineCommands();
     }
 
     void OnDisable()
@@ -268,6 +273,83 @@ public class MooringController : MonoBehaviour
         Debug.Log($"[Швартовка] Судно к причалу «{b.name}»: {(approach ? $"подход, {approachDistanceM:0} м до середины, борт в {approachGapM:0} м от кромки, {knots:0.#} уз" : $"лагом, борт в {alongsideGapM:0} м от кромки")}, " +
                   $"курс {hdg:F0}°, причал по левому борту, модель 3 СС." +
                   (approach ? "" : " Машина «Стоп»: руль без хода не действует — «толчок» машиной вперёд с рулём или подруливающее."), this);
+    }
+
+    // ─────────── Концы (19.2б-2): подменю «Концы» меню B ───────────
+    // Выбор конца переключателем, строка состояния (в «экзамене» — без кН, словами экипажа), команды
+    // выбранному концу (LineOrder) и «Все поданные: держать». Каждая команда — событие LineCommand.
+
+    private int selectedLine;
+
+    /// <summary>Выбранный в меню конец (номер в MooringSystem.Lines).</summary>
+    public int SelectedLine => selectedLine;
+
+    private MooringLine Selected => system != null && selectedLine >= 0 && selectedLine < system.Lines.Count ? system.Lines[selectedLine] : null;
+
+    private void RegisterLineCommands()
+    {
+        string g = ShipControlOrders.LinesGroup, menu = ShipControlOrders.MenuId;
+        int count = global::System.Enum.GetValues(typeof(MooringLineKind)).Length;
+        commands.Add(BridgeMenu.RegisterStepper(g, () => $"Конец: {MooringLine.Title((MooringLineKind)selectedLine)}",
+            () => selectedLine = (selectedLine + count - 1) % count, () => selectedLine = (selectedLine + 1) % count).InMenu(menu));
+        commands.Add(BridgeMenu.Register(g, () => $"<size=85%>{(Operating ? LineOrders.State(Selected, TrainerModes.HintsAllowedNow) : "концы — только в модели 3 СС")}</size>",
+            null, () => false).InMenu(menu));
+        foreach (LineOrder o in (LineOrder[])global::System.Enum.GetValues(typeof(LineOrder)))
+        {
+            LineOrder order = o;
+            commands.Add(BridgeMenu.Register(g, () => Capital(LineOrders.Title(order)), () => OrderSelected(order), () => CanOrder(order)).InMenu(menu));
+        }
+        commands.Add(BridgeMenu.Register(g, "Все поданные: держать", HoldAll, () => AnyFast).InMenu(menu));
+        BridgeMenu.SetGroupOrder(g, 30);
+    }
+
+    private static string Capital(string s) => string.IsNullOrEmpty(s) ? s : char.ToUpper(s[0]) + s.Substring(1);
+
+    private bool AnyFast
+    {
+        get
+        {
+            if (!Operating || system == null) return false;
+            foreach (MooringLine l in system.Lines) if (l.State == MooringLineState.Fast) return true;
+            return false;
+        }
+    }
+
+    private bool CanOrder(LineOrder o)
+    {
+        MooringLine l = Selected;
+        if (!Operating || l == null || navigation.Paused) return false;
+        if (o == LineOrder.Give) return ActiveBerth != null && l.State != MooringLineState.Fast;
+        return l.State == MooringLineState.Fast;
+    }
+
+    private void OrderSelected(LineOrder o) => OrderLine(selectedLine, o);
+
+    /// <summary>Команда концу (меню; в части 3 — сценарий): в модель, событие LineCommand в шину.</summary>
+    public bool OrderLine(int index, LineOrder o)
+    {
+        if (system == null || navigation == null || navigation.Model == null) return false;
+        bool ok = system.Order(index, o, navigation.Model, simTime, out string reason);
+        string title = index >= 0 && index < system.Lines.Count ? system.Lines[index].Title() : "—";
+        Publish(new ExerciseEvent(ExerciseEventType.LineCommand)
+        {
+            Index = index, Value = (int)o, Value2 = ok ? 1 : 0, Subject = ok ? title : $"{title}: {reason}"
+        });
+        // Событие подачи / отдачи (LineMadeFast / LineReleased) — сразу, а не на следующем шаге
+        if (system.Events.Count > 0)
+        {
+            foreach (MooringEvent me in system.Events) Publish(MooringEventBus.ToExerciseEvent(me));
+            system.Events.Clear();
+        }
+        return ok;
+    }
+
+    private void HoldAll()
+    {
+        if (!AnyFast) return;
+        for (int i = 0; i < system.Lines.Count; i++)
+            if (system.Lines[i].State == MooringLineState.Fast && !system.Lines[i].OnBitts && system.Lines[i].Winch != WinchCommand.Hold)   // на кнехтах — не трогать
+                OrderLine(i, LineOrder.Hold);
     }
 
     private void Publish(ExerciseEvent e)

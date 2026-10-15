@@ -10,6 +10,7 @@
 // под килем; при опасном приближении мигает «ОПАСНО: МЕЛЬ … кбт», на мели —
 // «НА МЕЛИ» (сигнализация глубины, как у эхолота / планшета).
 // D1: при вводной инструктора и включённом оповещении — строка «ОТКАЗ ГД / ОТКАЗ РУЛЯ».
+// 19.2б-2: у причала (ближе 300 м) — две строки: расстояние носа и кормы до кромки, их скорость к причалу, угол.
 // ============================================================
 using TMPro;
 using UnityEngine;
@@ -69,10 +70,25 @@ public class BridgeNavDisplay : MonoBehaviour
                 $"      факт. {Rudder(navigation.RudderActual)}\n" +
                 $"ТЕЛЕГРАФ    {TelegraphName(navigation.TelegraphPosition)}" +
                 (navigation.CirculationTestActive ? "\n<color=#FFD54F>ТЕСТ ЦИРКУЛЯЦИИ</color>" : "") +
+                BerthLine() +
                 FailureLine();
         }
 
         UpdateAlarm();
+    }
+
+    // 19.2б-2: строка причала — ближе BerthReadout.ShowWithinM (300 м) к кромке, во всех режимах (прибор, не подсказка):
+    // расстояние от борта до кромки у носа (плечо, 0,25·L) и у кормы, их скорость к причалу, угол к кромке
+    private string BerthLine()
+    {
+        MooringController mc = MooringController.Instance;
+        WaterArea area = mc != null ? mc.Area : null;
+        if (area == null || navigation.Model == null || navigation.parameters == null) return "";
+        int i = area.NearestBerth(navigation.PositionEastNorth, out double d);
+        if (i < 0 || d > BerthReadout.ShowWithinM) return "";
+        BerthReadout r = BerthReadout.Compute(area.berths[i], navigation.parameters, navigation.Model);
+        string note = navigation.Uses3Dof ? "" : "\n  <color=#FFD54F>силы причала — только в модели 3 СС</color>";
+        return $"\n<size=85%>{r.Format()}{note}</size>";
     }
 
     // Запрос 19.1: поперечная скорость (как у доплеровского лага) — только в модели 3 СС

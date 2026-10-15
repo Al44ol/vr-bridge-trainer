@@ -386,6 +386,31 @@ public sealed class MooringSystem
         Events.Add(new MooringEvent { Type = MooringEventType.LineReleased, Time = time, Index = i, Subject = Lines[i].Title() });
     }
 
+    /// <summary>
+    /// 19.2б: команда концу (меню «Управление» → «Концы»). Подать — на кнехт (TryGiveLine; оборванный
+    /// подаётся заново — запасной конец); выбирать / травить / держать — лебёдка (снимает с кнехтов судна);
+    /// на кнехты — закрепить на кнехтах судна (лебёдка не работает, тормоз не травит); отдать.
+    /// false — команда не выполнена, reason — почему.
+    /// </summary>
+    public bool Order(int i, LineOrder order, ShipDynamicsModel m, double time, out string reason)
+    {
+        reason = "";
+        if (i < 0 || i >= Lines.Count) { reason = "нет такого конца"; return false; }
+        MooringLine line = Lines[i];
+        if (order == LineOrder.Give) return TryGiveLine(i, m, time, out reason);
+        if (line.State != MooringLineState.Fast) { reason = line.State == MooringLineState.Broken ? "конец оборван" : "конец не подан"; return false; }
+        switch (order)
+        {
+            case LineOrder.HaulIn: line.Winch = WinchCommand.HaulIn; line.OnBitts = false; return true;
+            case LineOrder.PayOut: line.Winch = WinchCommand.PayOut; line.OnBitts = false; return true;
+            case LineOrder.Hold: line.Winch = WinchCommand.Hold; line.OnBitts = false; return true;
+            case LineOrder.OnBitts: line.Winch = WinchCommand.Hold; line.OnBitts = true; return true;
+            case LineOrder.Release: ReleaseLine(i, time); return true;
+        }
+        reason = "неизвестная команда";
+        return false;
+    }
+
     // ─────────── Индикация ───────────
 
     /// <summary>Расстояние от борта (сторона к причалу) в точке x до кромки, м (по нормали; < 0 — за кромкой).</summary>

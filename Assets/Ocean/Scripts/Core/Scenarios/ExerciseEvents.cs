@@ -73,6 +73,9 @@
 //                        Value — команда, % (> 0 — ПБ); Value2 — прежняя, %; Subject — «рычаг» / «меню»
 //   ControlOrder         команда из меню «Управление» (кнопка B, «как рулевому»): Subject — орган
 //                        («руль» / «машина» / «подруливающее»), Value — новое значение (°, SF, %), Value2 — прежнее
+//   LineCommand (19.2б-2) команда концу из меню B: Index — конец, Value — LineOrder (0 подать, 1 выбирать, 2 травить,
+//                        3 держать, 4 на кнехты, 5 отдать), Value2 — 1 выполнена / 0 нет; Subject — конец (при отказе — «: причина»)
+//   StationChanged (19.2б-2) переход обучающегося: Index — BridgeStation (0 у штурвала, 1 крыло ЛБ, 2 крыло ПБ), Value — прежнее
 // XTE > 0 — судно правее линии пути.
 // ============================================================
 using System;
@@ -129,7 +132,10 @@ public enum ExerciseEventType
     LineOverloadCleared,
     LineBroken,
     ThrusterChanged,
-    ControlOrder
+    ControlOrder,
+    // Швартовка, часть 2 (19.2б-2)
+    LineCommand,
+    StationChanged
 }
 
 public enum ScenarioEndReason
@@ -241,6 +247,10 @@ public struct ExerciseEvent
                 return $"Подруливающее: {ThrusterOrders.TitleOfPercent(Value)} ({Subject})";
             case ExerciseEventType.ControlOrder:
                 return $"Команда «{Subject}»: {ControlOrders.ValueText(Subject, Value)} (было {ControlOrders.ValueText(Subject, Value2)})";
+            case ExerciseEventType.LineCommand:
+                return $"Концы: «{LineOrders.Title((LineOrder)(int)Value)}» — {Subject}" + (Value2 > 0.5 ? "" : " (НЕ ВЫПОЛНЕНО)");
+            case ExerciseEventType.StationChanged:
+                return $"Переход: {BridgeStations.Title((BridgeStation)Index)} (был: {BridgeStations.Title((BridgeStation)(int)Value)})";
         }
         return $"{Type} {Subject}";
     }
