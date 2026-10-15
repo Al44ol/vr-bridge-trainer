@@ -384,6 +384,8 @@ public class SessionShip
     public double k_prime, t_prime, norrbin_alpha_prime, turn_speed_loss_coeff, min_calc_speed_ms;
     public double max_rudder_deg, rudder_rate_deg_s;
     public double beam_m, draft_m;
+    /// <summary>Модель движения (запрос 19.1): Course1Dof — Номото/Норрбин, Manoeuvring3Dof — 3 СС.</summary>
+    public string motion_model = "";
 
     public static SessionShip From(ShipParameters p) => new SessionShip
     {
@@ -396,7 +398,8 @@ public class SessionShip
         norrbin_alpha_prime = SessionMeta.R(p.norrbinAlphaPrime), turn_speed_loss_coeff = SessionMeta.R(p.turnSpeedLossCoeff),
         min_calc_speed_ms = SessionMeta.R(p.minCalcSpeed),
         max_rudder_deg = SessionMeta.R(p.maxRudderAngle), rudder_rate_deg_s = SessionMeta.R(p.rudderRate),
-        beam_m = SessionMeta.R(p.beam), draft_m = SessionMeta.R(p.draft)
+        beam_m = SessionMeta.R(p.beam), draft_m = SessionMeta.R(p.draft),
+        motion_model = p.motionModel.ToString()
     };
 }
 

@@ -46,6 +46,7 @@ public struct TrialSample
     public double U;              // м/с
     public double RDegS;          // °/с
     public double RudderOrderedDeg, RudderActualDeg;
+    public double V;              // поперечная скорость, м/с (> 0 — на ПБ; модель 3 СС, запрос 19.1)
 }
 
 /// <summary>Показатель испытания со значением и, если есть, критерием IMO.</summary>
@@ -92,6 +93,8 @@ public sealed class TrialSettings
     /// Аргумент — начальная скорость, м/с. null — ShipDynamicsModel(Parameters).
     /// </summary>
     public Func<double, IVesselModel> ModelFactory;
+    /// <summary>Модель движения ShipDynamicsModel вместо указанной в ассете (запрос 19.1); null — как в ассете.</summary>
+    public MotionModel? Motion;
 
     public static double DefaultTestSpeedMs(ShipParameters p) => 0.9 * p.ServiceSpeedMs;
 }
@@ -135,7 +138,7 @@ public static class ManoeuvringTrials
         {
             S = s;
             if (s.ModelFactory == null)
-                Model = new ShipDynamicsModel(s.Parameters) { Psi = 0, U = u0, SpeedFactor = sf };
+                Model = new ShipDynamicsModel(s.Parameters) { Psi = 0, U = u0, SpeedFactor = sf, MotionOverride = s.Motion };
             else
             {
                 Model = s.ModelFactory(u0);
@@ -156,7 +159,7 @@ public static class ManoeuvringTrials
             Model.Step(S.Dt);
             T += S.Dt;
             DeltaPsiDeg += Model.R * S.Dt * Rad2Deg;
-            Path += Math.Abs(Model.U) * S.Dt;
+            Path += (Model is ShipDynamicsModel sdm ? sdm.SpeedThroughWater : Math.Abs(Model.U)) * S.Dt;
             if (T + 1e-9 >= nextSample)
             {
                 Record();
@@ -175,6 +178,7 @@ public static class ManoeuvringTrials
                 RDegS = Model.R * Rad2Deg,
                 RudderOrderedDeg = Model.Ordered,
                 RudderActualDeg = Model.Delta,
+                V = Model is ShipDynamicsModel sdm ? sdm.V : 0.0,
             });
         }
 
@@ -393,7 +397,9 @@ public static class ManoeuvringTrials
             $"≤ {TrackReachLimitL:0}L (MSC.137(76) 5.2.4)", reach / run.L <= TrackReachLimitL);
         run.Metric("Продвижение вдоль начального курса (head reach)", head, "м", true);
         var lat = run.Metric("Боковое смещение", lateral, "м", true);
-        lat.Note = "модель без асимметрии винта — судно не уклоняется";
+        lat.Note = run.Model is ShipDynamicsModel sm && sm.Uses3Dof
+            ? "3 СС: поперечная сила винта на заднем ходу (правый винт — корму влево)"
+            : "модель без асимметрии винта — судно не уклоняется";
         run.Metric("Время до остановки", time, "с");
         return run.Finish(done, done ? "" : "судно не остановилось");
     }

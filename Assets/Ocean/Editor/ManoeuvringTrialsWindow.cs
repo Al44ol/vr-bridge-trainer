@@ -24,6 +24,11 @@ public class ManoeuvringTrialsWindow : EditorWindow
 
     private bool doTurning = true, doInitial = true, doZigzag10 = true, doZigzag20 = true;
     private bool doCrash = true, doPassive = true, doAccel = true;
+    // Запрос 19.1: модель движения, испытания малых скоростей, сравнение моделей
+    private static readonly string[] MotionNames = { "как в ассете", "Номото / Норрбин", "3 СС (запрос 19)" };
+    private int motion;
+    private bool doLowSpeed, doCompare;
+    private List<LowSpeedTrials.Variant> comparison;
 
     private List<TrialResult> results;
     private int selected;
@@ -76,6 +81,7 @@ public class ManoeuvringTrialsWindow : EditorWindow
         stopThresholdKn = EditorGUILayout.FloatField("Порог остановки (пассивное), уз", stopThresholdKn);
         sampleInterval = EditorGUILayout.FloatField("Интервал записи в CSV, с", sampleInterval);
         EditorGUILayout.LabelField("Шаг интегрирования", "0.02 с");
+        motion = EditorGUILayout.Popup("Модель движения", motion, MotionNames);
 
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("Испытания", EditorStyles.boldLabel);
@@ -86,6 +92,9 @@ public class ManoeuvringTrialsWindow : EditorWindow
         doCrash = EditorGUILayout.ToggleLeft("Торможение: полный вперёд → полный назад", doCrash);
         doPassive = EditorGUILayout.ToggleLeft("Пассивное торможение: полный вперёд → стоп", doPassive);
         doAccel = EditorGUILayout.ToggleLeft("Разгон: стоп → полный вперёд", doAccel);
+        doLowSpeed = EditorGUILayout.ToggleLeft("Малые скорости, 3 СС: дрейф, разворот на месте, «толчок», задний ход (запрос 19)", doLowSpeed);
+        doCompare = EditorGUILayout.ToggleLeft("Сравнение моделей: Номото/Норрбин — 3 СС (Хёрнер) — 3 СС (согласованная)" +
+                                               (IsMariner(parameters) ? " — эталон Mariner" : ""), doCompare);
         saveFiles = EditorGUILayout.ToggleLeft("Сохранить в ThesisData/Trials (CSV, сводка, SVG)", saveFiles);
 
         if (GUILayout.Button("Выполнить испытания", GUILayout.Height(30)))
@@ -123,9 +132,11 @@ public class ManoeuvringTrialsWindow : EditorWindow
             MaxDuration = Mathf.Max(10f, maxDuration),
             StopThresholdKn = Mathf.Max(0.001f, stopThresholdKn),
             SampleInterval = Mathf.Max(0.02f, sampleInterval),
+            Motion = motion == 1 ? MotionModel.Course1Dof : motion == 2 ? MotionModel.Manoeuvring3Dof : (MotionModel?)null,
         };
         var sw = System.Diagnostics.Stopwatch.StartNew();
         results = new List<TrialResult>();
+        comparison = doCompare ? LowSpeedTrials.CompareMotionModels(s, IsMariner(parameters)) : null;
         if (doTurning) { results.Add(ManoeuvringTrials.Turning(s, true)); results.Add(ManoeuvringTrials.Turning(s, false)); }
         if (doInitial) results.Add(ManoeuvringTrials.InitialTurning(s));
         if (doZigzag10) results.Add(ManoeuvringTrials.Zigzag(s, 10, 10));
@@ -133,17 +144,23 @@ public class ManoeuvringTrialsWindow : EditorWindow
         if (doCrash) results.Add(ManoeuvringTrials.CrashStop(s));
         if (doPassive) results.Add(ManoeuvringTrials.PassiveStop(s));
         if (doAccel) results.Add(ManoeuvringTrials.Acceleration(s));
+        if (doLowSpeed) results.AddRange(LowSpeedTrials.RunAll(s));
         runMs = sw.Elapsed.TotalMilliseconds;
         selected = 0;
         savedDir = null;
-        if (results.Count == 0) { results = null; return; }
+        if (results.Count == 0 && comparison == null) { results = null; return; }
+        if (results.Count == 0)
+            foreach (TrialResult r in comparison[0].Results) results.Add(r);
 
         if (saveFiles)
         {
-            savedDir = TrialsReport.Save(results, s);
+            savedDir = TrialsReport.Save(results, s, comparison);
             Debug.Log($"[Манёвренные испытания] {parameters.name}: {results.Count} испытаний за {runMs:F0} мс. Файлы: {savedDir}");
         }
     }
+
+    private static bool IsMariner(ShipParameters p) =>
+        p != null && p.name.IndexOf("Mariner", System.StringComparison.OrdinalIgnoreCase) >= 0;
 
     private void DrawTable()
     {
@@ -172,7 +189,8 @@ public class ManoeuvringTrialsWindow : EditorWindow
         EditorGUI.DrawRect(rect, new Color(0.12f, 0.12f, 0.12f));
         if (r.Samples.Count < 2) return;
 
-        bool timeSeries = r.Id.StartsWith("zigzag") || r.Id.StartsWith("passive") || r.Id.StartsWith("acceleration") || r.Id.StartsWith("crash");
+        bool timeSeries = r.Id.StartsWith("zigzag") || r.Id.StartsWith("passive") || r.Id.StartsWith("acceleration") || r.Id.StartsWith("crash")
+                          || r.Id == "lowspeed_spin";
         var a = new List<Vector2>(); var b = new List<Vector2>();
         foreach (TrialSample p in r.Samples)
         {
@@ -182,6 +200,7 @@ public class ManoeuvringTrialsWindow : EditorWindow
                 a.Add(new Vector2((float)p.T, (float)p.DeltaPsiDeg));
                 b.Add(new Vector2((float)p.T, (float)p.RudderActualDeg));
             }
+            else if (r.Id == "lowspeed_spin") a.Add(new Vector2((float)p.T, (float)p.DeltaPsiDeg));
             else a.Add(new Vector2((float)p.T, (float)(p.U / ManoeuvringTrials.KnotsToMs)));
         }
 

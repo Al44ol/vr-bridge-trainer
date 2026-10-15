@@ -23,6 +23,7 @@
 | Педагогический эксперимент: сводка по обучающимся | 🖥 `Sessions Summary…` или Session Replay → «Сводка по папке…» | `ThesisData/Summary/<дата>/` | `sessions_summary.csv` — строка на сессию: ID, сценарий, дата, итог, значения всех критериев (для статистики) | п. 11.7, табл. 11.2 |
 | Производительность | 🎮 меню Y → «Замер» | `ThesisData/Performance/` | `frametiming_summary.csv` (строка на замер, условия в `note`), `frametiming_<режим>_<дата>.csv` — покадрово (CPU, GPU, draw calls) | п. 1.1, 7.7, 9.2, 13.10, 13.16, 13.17, 14.8, 17.6; табл. 1.1, 7.7, 9.2, 13.2, 13.4, 14.1, 17.3 (в note — режим монитора и планшета). Замеры **в сборке PC** пишутся рядом с exe (`build/PC/ThesisData/Performance/`), в проект копируются как `frametiming_summary_build.csv` и `frametiming_build_*.csv` (столбец `editor` = 0) |
 | Тестовое судно: быстроходный катер (запрос 15) | 🖥 `Manoeuvring Trials` и `Seakeeping Trials` с ассетом `ShipParameters_FastBoat` | `ThesisData/Trials/ShipParameters_FastBoat_<дата>/`, `ThesisData/Seakeeping/ShipParameters_FastBoat_<дата>/` | те же CSV и SVG, что у судна сцены — для табл. 15.1 (циркуляция, зигзаг, разгон катера); прогон B2-01 на катере — в выводе теста `B2Run_OnBoat_ArrivesAndIsAssessed` | разд. 15, табл. 15.1 |
+| Модель 3 СС для малых скоростей (запрос 19.1) | 🖥 `Manoeuvring Trials`: «Модель движения», флажки «Малые скорости» и «Сравнение моделей» | `ThesisData/Trials/<ассет>[_3dof]_<дата>/` | `lowspeed_*.csv` (дрейф, разворот на месте, «толчок» с обдувом и без, задний ход; столбец `v_ms` — поперечная скорость), `lowspeed_drift_spin.svg`, `lowspeed_kick.svg`, `lowspeed_astern.svg` (траектория и контур корпуса); `comparison_3dof.csv/.md` + `comparison_turning.svg` (Номото/Норрбин — 3 СС Хёрнер — 3 СС согласованная [— эталон Mariner]); `model_3dof.md` — коэффициенты (Clarke, k_N, Y'_δ, C_d, k_∞, циркуляции; у Mariner — производные ПМУ рядом) | разд. 19, табл. 19.1–19.4 |
 | Записи упражнений | 🎮 каждое упражнение | `ThesisData/Sessions/<дата>_<сценарий>_<ID>/` (в .gitignore) | `track.csv` (5 Гц), `targets.csv`, `events.csv`, `session.json`, `assessment.csv`, `report.html` | разд. 7, табл. 7.1–7.4; п. 10.10, 11.6 |
 
 ---
@@ -57,7 +58,7 @@
 | Замер кадра | `FrameTimingCapture` | FrameTimingManager + ProfilerRecorder | п. 1.1, 13.16 |
 
 ### 2.6. Автоматические тесты
-Unity Test Runner → EditMode (сейчас **218**): `TestResults.xml` — подтверждение корректности модулей для главы 3 (по классам — таблицы «Новые EditMode-тесты» в каждом разделе ThesisNotes).
+Unity Test Runner → EditMode (сейчас **232**): `TestResults.xml` — подтверждение корректности модулей для главы 3 (по классам — таблицы «Новые EditMode-тесты» в каждом разделе ThesisNotes).
 
 ### 2.6а. Навигационный планшет (запрос 14, D2)
 - 👓 Планшет в левой руке (кнопка X) — схема, данные, цели после обнаружения. Не видно в шлеме:
@@ -65,6 +66,13 @@ Unity Test Runner → EditMode (сейчас **218**): `TestResults.xml` — п�
   - **правило показа целей** и раскладка «курс вверх» (формулы — п. 14.4–14.5), проверяются тестами `PlotterTests`;
   - **замер с планшетом** — табл. 14.1, в `note` сводки `frametiming_summary.csv` — «планшет: скрыт / север вверх / курс вверх».
 - D3 (вибрация на события) не делалась — обоснование для главы 2–3: п. 14.9.
+
+### 2.6б. Модель 3 СС (запрос 19.1)
+- 👓 В шлеме видно только поведение: меню A «Судно» → «Модель движения: Номото / 3 СС», в «Отладке» — «Сила в борт» и «Пара сил»; на NavDisplay строка «лагом … уз». Не видно в шлеме:
+  - **согласование с калибровкой** — подобранные k_N, Y'_δ, k_∞ и диаметры циркуляции: `model_3dof.md` и строка `[Навигация] Модель движения: 3 СС …` в консоли при переключении (п. 19.3, табл. 19.1);
+  - **сравнение с эталоном Mariner** и регрессии Clarke с ПМУ — `comparison_3dof.md`, `model_3dof.md` (табл. 19.2, 19.3);
+  - **модель движения сессии** — `session.json → ship.motion_model`; `track.csv → cog_deg` в 3 СС — с дрейфом (`speed_kn` — продольная скорость).
+- Внешние силы `ShipDynamicsModel.AddForce` — вход для буксиров, концов, кранцев (части 19.2–19.3), в шлеме пока только отладочные.
 
 ### 2.7. Источники значений параметров
 `Assets/Ocean/Settings/ShipParameters_Sources.md` — откуда взято каждое значение ShipParameters (Mariner, KCS, Model45m, допущения).

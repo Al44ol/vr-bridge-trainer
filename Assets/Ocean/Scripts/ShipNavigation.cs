@@ -54,6 +54,11 @@
 // между двумя последними шагами: x = x_пред + (x − x_пред)·α,
 // α = (Time.time − Time.fixedTime) / Time.fixedDeltaTime.
 //
+// Запрос 19.1: модель 3 СС (продольная, поперечная, рыскание — Core/Manoeuvring/Manoeuvring3Dof.cs)
+// включается полем motionModel (по умолчанию — как в ассете) или меню A «Судно» → «Модель движения»
+// вне упражнения; в «Отладке» — сила в борт и пара сил (только 3 СС), чтобы почувствовать дрейф
+// и разворот на месте. Позиция при этом — с поперечной скоростью, курс по-прежнему ψ.
+//
 // Тест циркуляции (контекстное меню компонента, меню A «Отладка»; F5 — при keyboardShortcuts): скорость удерживается
 // равной V_эксп, руль 35° ПБ; в лог — координаты каждые 30° изменения курса,
 // выдвиг (90°), тактический диаметр (180°), диаметр установившейся
@@ -90,6 +95,16 @@ public class ShipNavigation : MonoBehaviour
     public bool keyboardShortcuts;
     private BridgeMenuCommand testCommand;
 
+    public enum MotionChoice { AsAsset, Course1Dof, Manoeuvring3Dof }
+    [Header("Модель движения (запрос 19.1)")]
+    [Tooltip("AsAsset — как в ShipParameters.motionModel; меню A «Судно» → «Модель движения» (вне упражнения)")]
+    public MotionChoice motionModel = MotionChoice.AsAsset;
+    [Tooltip("Отладочная сила (меню A «Отладка», только 3 СС, вне упражнения), т; 0 — 0,002·Δ·g")]
+    public float debugForceTonnes = 0f;
+    private BridgeMenuCommand motionCommand, pushCommand, spinCommand;
+    private int debugPush, debugSpin;   // −1 / 0 / +1: ЛБ / нет / ПБ; влево / нет / вправо
+    private ScenarioRunner runner;
+
     // ── Модель (A3: вынесена в чистый класс ShipDynamicsModel) ──
     private ShipDynamicsModel model;
     public ShipDynamicsModel Model => model;
@@ -122,10 +137,14 @@ public class ShipNavigation : MonoBehaviour
     public float RudderActual => model != null ? (float)model.Delta : 0f;
     /// <summary>Истинная позиция судна (восток, север), м.</summary>
     public WorldPosition PositionEastNorth => model != null ? new WorldPosition(model.East, model.North) : default;
-    /// <summary>Вектор скорости относительно воды (x — восток, y — север), м/с.</summary>
+    /// <summary>Вектор скорости относительно воды (x — восток, y — север), м/с; с запроса 19.1 — с поперечной скоростью (3 СС).</summary>
     public Vector2 Velocity => model != null
-        ? new Vector2((float)(model.U * Math.Sin(model.Psi)), (float)(model.U * Math.Cos(model.Psi)))
+        ? new Vector2((float)model.VelocityEast, (float)model.VelocityNorth)
         : Vector2.zero;
+    /// <summary>Поперечная скорость, узлы (> 0 — на правый борт); только модель 3 СС.</summary>
+    public float SwayKnots => model != null ? (float)(model.V / ShipParameters.KnotsToMs) : 0f;
+    /// <summary>Действует модель 3 СС (запрос 19.1).</summary>
+    public bool Uses3Dof => model != null && model.Uses3Dof;
     /// <summary>Название положения телеграфа.</summary>
     public string TelegraphPosition => telegraph != null ? telegraph.PositionName : "—";
     public bool CirculationTestActive => testActive;
@@ -147,6 +166,16 @@ public class ShipNavigation : MonoBehaviour
         testCommand = BridgeMenu.Register("Отладка", () => testActive ? "Остановить тест циркуляции" : $"Тест циркуляции (руль {testRudderDeg:F0}° ПБ)",
             () => { if (testActive) StopCirculationTest("остановлен вручную"); else StartCirculationTest(); },
             () => initialized, instructorOnly: true);
+
+        // Запрос 19.1: модель движения и отладочные силы (вне упражнения)
+        motionCommand = BridgeMenu.RegisterStepper("Судно", () => $"Модель движения: {MotionTitle}",
+            () => StepMotion(), () => StepMotion(), () => initialized && OutsideExercise);
+        pushCommand = BridgeMenu.RegisterStepper("Отладка", () => $"Сила в борт ({DebugForceTonnes:0.#} т): {Side(debugPush, "ПБ", "ЛБ")}",
+            () => debugPush = Cycle(debugPush, -1), () => debugPush = Cycle(debugPush, +1),
+            () => initialized && OutsideExercise && model.Uses3Dof, instructorOnly: true);
+        spinCommand = BridgeMenu.RegisterStepper("Отладка", () => $"Пара сил ({DebugForceTonnes:0.#} т): {Side(debugSpin, "нос вправо", "нос влево")}",
+            () => debugSpin = Cycle(debugSpin, -1), () => debugSpin = Cycle(debugSpin, +1),
+            () => initialized && OutsideExercise && model.Uses3Dof, instructorOnly: true);
     }
 
     void OnDisable()
@@ -155,6 +184,72 @@ public class ShipNavigation : MonoBehaviour
             worldOrigin.ExternalControl = false;
         BridgeMenu.Unregister(testCommand);
         testCommand = null;
+        BridgeMenu.Unregister(motionCommand);
+        BridgeMenu.Unregister(pushCommand);
+        BridgeMenu.Unregister(spinCommand);
+        motionCommand = pushCommand = spinCommand = null;
+    }
+
+    // ─────────── Модель движения и отладочные силы (запрос 19.1) ───────────
+
+    private bool OutsideExercise
+    {
+        get
+        {
+            if (runner == null) runner = FindAnyObjectByType<ScenarioRunner>();
+            return runner == null || runner.CurrentPhase != ScenarioRunner.Phase.Running;
+        }
+    }
+
+    private string MotionTitle => model != null && model.Uses3Dof ? "3 СС (дрейф, лаг)" : "Номото";
+
+    private void StepMotion()
+    {
+        if (model == null || !OutsideExercise) return;
+        bool to3Dof = !model.Uses3Dof;
+        motionModel = to3Dof ? MotionChoice.Manoeuvring3Dof : MotionChoice.Course1Dof;
+        ApplyMotionModel();
+        if (to3Dof)
+        {
+            Manoeuvring3DofCoefficients c = model.Coefficients3Dof;   // построить сразу, а не на первом шаге
+            Debug.Log($"[Навигация] Модель движения: 3 СС ({parameters.name}): k_N = {c.YawDampingFactor:F3}, Y'_δ = {c.YdeltaPrime:F5}, " +
+                      $"K'/T' = {c.LinearKPrime:F3}/{c.LinearTPrime:F3}, C_d = {c.CrossFlowCd:F3}, k_∞ = {c.CrossFlowHighSpeedFactor:F3}, " +
+                      $"циркуляция {c.CircleD:F0} м (цель {c.CircleTargetD:F0} м). {c.FitNote} {c.CircleNote}");
+        }
+        else
+        {
+            debugPush = debugSpin = 0;
+            Debug.Log("[Навигация] Модель движения: Номото (поперечная скорость обнулена)");
+        }
+    }
+
+    private void ApplyMotionModel()
+    {
+        if (model == null) return;
+        model.MotionOverride = motionModel == MotionChoice.AsAsset ? (MotionModel?)null
+            : motionModel == MotionChoice.Course1Dof ? MotionModel.Course1Dof : MotionModel.Manoeuvring3Dof;
+    }
+
+    private float DebugForceTonnes => debugForceTonnes > 0f || model == null
+        ? debugForceTonnes
+        : (float)(LowSpeedTrials.ReferenceForce(parameters) / 9810.0);
+
+    private static int Cycle(int v, int dir) => v + dir > 1 ? -1 : v + dir < -1 ? 1 : v + dir;
+    private static string Side(int v, string plus, string minus) => v > 0 ? plus : v < 0 ? minus : "нет";
+
+    // Отладочные силы на шаг: в борт — на миделе; пара — ±F на ±0,45L (как в LowSpeedTrials)
+    private void ApplyDebugForces()
+    {
+        if (debugPush == 0 && debugSpin == 0) return;
+        if (!model.Uses3Dof || !OutsideExercise) { debugPush = debugSpin = 0; return; }
+        double f = DebugForceTonnes * 9810.0;
+        if (debugPush != 0) model.AddForce(0.0, debugPush * f, 0.0);
+        if (debugSpin != 0)
+        {
+            double arm = 0.45 * parameters.length;
+            model.AddForce(0.0, debugSpin * f, arm);
+            model.AddForce(0.0, -debugSpin * f, -arm);
+        }
     }
 
     void Start()
@@ -174,6 +269,7 @@ public class ShipNavigation : MonoBehaviour
         bowYawOffset = Mathf.Atan2(bowAxis.x, bowAxis.z) * Mathf.Rad2Deg;
 
         model = new ShipDynamicsModel(parameters);
+        ApplyMotionModel();
         model.Psi = ShipDynamicsModel.Wrap2Pi((transform.eulerAngles.y + bowYawOffset) * Mathf.Deg2Rad);
         if (worldOrigin != null)
         {
@@ -266,6 +362,7 @@ public class ShipNavigation : MonoBehaviour
         model.HoldServiceSpeed = testActive;   // испытание на циркуляцию — при неизменной скорости
         model.EngineFailed = EngineFailed;
         model.SteeringFailed = SteeringFailed;
+        ApplyDebugForces();
         model.Step(dt);
     }
 

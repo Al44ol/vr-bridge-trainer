@@ -147,6 +147,21 @@ public sealed class MarinerModel : IVesselModel
         xdot[6] = deltaDot;
     }
 
+    /// <summary>
+    /// Линейные производные ПМУ-модели Mariner в форме Clarke (запрос 19.1, сравнение с регрессией):
+    /// гидродинамические Y'_r, N'_r без центробежного члена — в mariner.m он входит в Y'_r, N'_r
+    /// (Y'_r,гд = Y'_r + m', N'_r,гд = N'_r + m'·x'_G). Нормировка та же (½ρL²U, ½ρL³).
+    /// </summary>
+    public static ClarkeDerivatives HydroDerivatives(out double massPrime, out double izPrime, out double xgPrime)
+    {
+        massPrime = m; izPrime = Iz; xgPrime = xG;
+        return new ClarkeDerivatives
+        {
+            Yvdot = Yvdot, Yrdot = Yrdot, Nvdot = Nvdot, Nrdot = Nrdot,
+            Yv = Yv, Yr = Yr + m, Nv = Nv, Nr = Nr + m * xG,
+        };
+    }
+
     // ─────────── Линеаризация (для проверки идентификации) ───────────
 
     /// <summary>

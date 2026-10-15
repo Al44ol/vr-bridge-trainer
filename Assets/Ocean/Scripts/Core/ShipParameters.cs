@@ -26,6 +26,16 @@
 // ============================================================
 using UnityEngine;
 
+/// <summary>
+/// Модель движения (запрос 19.1): Course1Dof — Номото/Норрбин (рыскание + ход, без дрейфа),
+/// Manoeuvring3Dof — продольная, поперечная, рыскание (Manoeuvring3Dof.cs), в т. ч. на малых скоростях.
+/// </summary>
+public enum MotionModel
+{
+    Course1Dof = 0,
+    Manoeuvring3Dof = 1,
+}
+
 /// <summary>Уравнение поворота: Номото 1-го порядка или нелинейная модель Норрбина.</summary>
 public enum YawModel
 {
@@ -98,6 +108,26 @@ public class ShipParameters : ScriptableObject
     [Tooltip("Относительное затухание килевой качки ζ_θ")]
     [Range(0f, 0.95f)] public float pitchDamping = 0.25f;
 
+    [Header("Модель 3 СС: продольная, поперечная, рыскание (запрос 19.1)")]
+    [Tooltip("Course1Dof — Номото/Норрбин (как до запроса 19); Manoeuvring3Dof — дрейф, движение лагом, разворот на месте. " +
+             "Своему судну модель можно переключить в сцене (ShipNavigation), не меняя ассет")]
+    public MotionModel motionModel = MotionModel.Course1Dof;
+    [Tooltip("Радиус инерции относительно вертикальной оси R₆₆/L (малые суда ≈ 0,25, танкеры ≈ 0,27; MSS clarke83.m)")]
+    public float yawGyrationRadiusL = 0.25f;
+    [Tooltip("Отстояние центра тяжести от миделя x_G, м (> 0 — в нос)")]
+    public float centreOfGravityX = 0f;
+    [Tooltip("Коэффициент поперечного сопротивления C_d (0 — по кривой Хёрнера от B/(2d))")]
+    public float crossFlowDragCoeff = 0f;
+    [Tooltip("Подбирать множитель поперечного сопротивления на ходу по установившейся циркуляции с рулём 35° " +
+             "модели Номото/Норрбина этого ассета (на малых скоростях C_d — по Хёрнеру). false — C_d одинаков на всех скоростях")]
+    public bool matchTurningCircle = true;
+    [Tooltip("Плечо руля x_R/L (руль в корме: −0,5)")]
+    public float rudderLeverL = -0.5f;
+    [Tooltip("Обдув руля струёй винта k_ps: q = u|u| + k_ps·max(0, u_зад² − u|u|) при работе вперёд (допущение)")]
+    [Range(0f, 2f)] public float rudderSlipstreamFactor = 0.5f;
+    [Tooltip("Поперечная сила винта на заднем ходу, доля упора (правый винт — корму влево; допущение)")]
+    [Range(0f, 0.3f)] public float propellerSideForceFactor = 0.05f;
+
     public const float KnotsToMs = 0.514444f;
     public float ServiceSpeedMs => serviceSpeedKnots * KnotsToMs;
 
@@ -137,6 +167,14 @@ public class ShipParameters : ScriptableObject
         rollDamping = o.rollDamping;
         heaveDamping = o.heaveDamping;
         pitchDamping = o.pitchDamping;
+        motionModel = o.motionModel;
+        yawGyrationRadiusL = o.yawGyrationRadiusL;
+        centreOfGravityX = o.centreOfGravityX;
+        crossFlowDragCoeff = o.crossFlowDragCoeff;
+        matchTurningCircle = o.matchTurningCircle;
+        rudderLeverL = o.rudderLeverL;
+        rudderSlipstreamFactor = o.rudderSlipstreamFactor;
+        propellerSideForceFactor = o.propellerSideForceFactor;
     }
 
     /// <summary>Оценить собственные периоды качки по размерениям (формулы — в шапке файла).</summary>

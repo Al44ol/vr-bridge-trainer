@@ -63,6 +63,7 @@ public class BridgeNavDisplay : MonoBehaviour
             valuesText.text =
                 $"КУРС        {hdg:000.0}°\n" +
                 $"СКОРОСТЬ    {navigation.SpeedKnots,5:F1} уз\n" +
+                LagLine() +
                 $"ПОВОРОТ     {navigation.RateOfTurn,6:+0;-0;0} °/мин\n" +
                 $"РУЛЬ  зад.  {Rudder(navigation.RudderOrdered)}\n" +
                 $"      факт. {Rudder(navigation.RudderActual)}\n" +
@@ -72,6 +73,15 @@ public class BridgeNavDisplay : MonoBehaviour
         }
 
         UpdateAlarm();
+    }
+
+    // Запрос 19.1: поперечная скорость (как у доплеровского лага) — только в модели 3 СС
+    private string LagLine()
+    {
+        if (!navigation.Uses3Dof) return "";
+        float v = navigation.SwayKnots;
+        string side = Mathf.Abs(v) < 0.05f ? "" : v > 0f ? " ПБ" : " ЛБ";
+        return $"  лагом     {Mathf.Abs(v),5:F2} уз{side}\n";
     }
 
     private void UpdateAlarm()

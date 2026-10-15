@@ -204,6 +204,12 @@ public class ExerciseRecorder : MonoBehaviour
 
         double heading = navigation.Heading;
         double cog = Math.Abs(m.U) < 0.01 ? heading : m.U >= 0 ? heading : (heading + 180.0) % 360.0;
+        if (m.V != 0.0)
+        {
+            // Запрос 19.1, модель 3 СС: путевой угол — по скорости относительно грунта (с дрейфом)
+            double ve = m.VelocityEast, vn = m.VelocityNorth;
+            cog = ve * ve + vn * vn < 1e-4 ? heading : (Math.Atan2(ve, vn) * 180.0 / Math.PI + 360.0) % 360.0;
+        }
         double xte = double.NaN, xteLimit = double.NaN;
         int leg = -1;
         if (r != null && r.Valid)
@@ -258,6 +264,8 @@ public class ExerciseRecorder : MonoBehaviour
             startRealtime = Time.realtimeSinceStartup;
             ShipParameters p = navigation != null ? navigation.parameters : null;
             SessionMeta meta = SessionMeta.Create(s, p, TraineeId, startLocal);
+            if (navigation != null && navigation.Model != null && meta.ship != null)
+                meta.ship.motion_model = navigation.Model.ActiveMotionModel.ToString();   // запрос 19.1: переключатель в сцене
             FillApp(meta.app);
             meta.recording.track_rate_hz = trackRateHz;
             meta.recording.fixed_dt_s = Math.Round(Time.fixedDeltaTime, 6);

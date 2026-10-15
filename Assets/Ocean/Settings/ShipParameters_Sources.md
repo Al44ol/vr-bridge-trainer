@@ -112,6 +112,26 @@ C_B = 0,651 [8, табл. 1], C_WP — нет данных.
 **Ограничение.** Модель манёвренности (Номото 1-го порядка) и качки (звенья 2-го порядка) построены для
 водоизмещающих судов. Подъём корпуса на глиссировании, ходовой дифферент, крен на циркуляции, «дельфинирование»
 и удары днища о волну [10, 11] не моделируются: на 35 уз катер движется как «маленькое быстрое судно».
+## Модель 3 СС (запрос 19.1): поля всех ассетов, значения по умолчанию
+
+Поля раздела «Модель 3 СС» одинаковы у всех ассетов (по умолчанию; в ассетах не заданы — берутся значения из кода).
+Коэффициенты корпуса и согласование считаются в коде по L, B, d, C_B, K', T' ассета (`Manoeuvring3DofCoefficients`,
+отчёт — `model_3dof.md` окна Manoeuvring Trials; ThesisNotes, разд. 19).
+
+| Поле | Значение | Метка | Источник / обоснование |
+|---|---|---|---|
+| `motionModel` | Course1Dof (Номото/Норрбин) | — | у ассетов модель не меняется; своё судно переключается в сцене |
+| производные Y'_v, Y'_r, N'_v, N'_r, Y'_v̇, Y'_ṙ, N'_v̇, N'_ṙ | по L, B, d, C_B | В | регрессия Clarke, Gedling, Hine (1983) [12], формулы MSS `clarke83.m` [1] |
+| −X_u̇ | 2,7·ρ·∇^(5/3)/L² | В | Söding (1982), MSS `addedMassSurge.m` [1] |
+| `yawGyrationRadiusL` | 0,25 | **З** | MSS clarke83.m: малые суда ≈ 0,25L, танкеры ≈ 0,27L (у Mariner 0,22L [1]) |
+| `centreOfGravityX` | 0 м | **З** | у Mariner −0,023L [1] |
+| `crossFlowDragCoeff` | 0 → по кривой Хёрнера от B/(2d) | В | MSS `Hoerner.m` (Leite et al., 1998) [1]; Model45m 0,730, Mariner 0,731, KCS 0,722 |
+| `matchTurningCircle` | вкл. | П | k_∞ — подбор по диаметру установившейся циркуляции 35° модели ассета: Model45m 0,32, Mariner 4,9, KCS 2,35 |
+| k_N, Y'_δ (в ассете не хранятся) | по K', T' ассета | П | согласование линеаризации (Nomoto et al., 1957): Model45m 2,375 / −0,00368; Mariner 1,600 / −0,00489; KCS 1,748 / −0,00773 |
+| `rudderLeverL` | −0,5 | **З** | руль в корме |
+| `rudderSlipstreamFactor` | 0,5 | **З** | обдув руля струёй винта при работе вперёд |
+| `propellerSideForceFactor` | 0,05 | **З** | поперечная сила правого винта на заднем ходу, доля упора |
+
 ## Литература
 
 1. Fossen T.I. Marine Systems Simulator (MSS), `CRAFT/SHIP/models/mariner.m` (авт. T. Lauvdal, 1994; ред. 2001–2024). https://github.com/cybergalactic/MSS
@@ -125,3 +145,4 @@ C_B = 0,651 [8, табл. 1], C_WP — нет данных.
 9. SIMMAN 2014. KCS free model tests in deep water — model test specification. https://simman2014.dk/wp-content/uploads/2015/07/KCS-free-deep.pdf
 10. Faltinsen O.M. Hydrodynamics of High-Speed Marine Vehicles. Cambridge University Press, 2005.
 11. Savitsky D. Hydrodynamic Design of Planing Hulls. Marine Technology, 1964, 1(1), pp. 71–95.
+12. Clarke D., Gedling P., Hine G. The application of manoeuvring criteria in hull design using linear theory. Transactions of the RINA, 1983, Vol. 125, pp. 45–68.

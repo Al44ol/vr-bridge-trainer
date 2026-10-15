@@ -48,6 +48,14 @@
 //     с τ_торм (тот же закон, что «Стоп»; выбег без упора винта, сопротивление — в τ_торм);
 //   • SteeringFailed — отказ рулевого устройства: δ остаётся на месте (рулевая машина
 //     не отрабатывает δ_зад), заданный руль по-прежнему идёт от штурвала (видно расхождение).
+//
+// Модель 3 СС (запрос 19.1; Manoeuvring3Dof.cs): включается полем motionModel ассета или
+// MotionOverride (переключатель в сцене). Тогда шаги 2–4 заменяет одна система уравнений
+// продольного, поперечного движения и рыскания (RK4), появляется поперечная скорость V
+// (> 0 — на правый борт) и внешние силы AddForce (буксиры, концы, кранцы — части 19.2–19.3).
+// Рулевая машина, отказы, посадка на мель — те же. Кинематика:
+//   E += (u·sin ψ + v·cos ψ)·dt,  N += (u·cos ψ − v·sin ψ)·dt.
+// В модели Номото V = 0, внешние силы не учитываются (сбрасываются после шага).
 // ============================================================
 using System;
 using UnityEngine;
@@ -69,6 +77,50 @@ public sealed class ShipDynamicsModel : IVesselModel
     public double Ordered;
     /// <summary>Позиция: восток, север, м.</summary>
     public double East, North;
+    /// <summary>Поперечная скорость, м/с (> 0 — на правый борт); только в модели 3 СС, иначе 0.</summary>
+    public double V;
+
+    // ── Модель 3 СС (запрос 19.1) ──
+    /// <summary>Модель движения вместо указанной в ассете (null — как в ассете).</summary>
+    public MotionModel? MotionOverride;
+    /// <summary>Действующая модель движения.</summary>
+    public MotionModel ActiveMotionModel =>
+        MotionOverride ?? (Parameters != null ? Parameters.motionModel : MotionModel.Course1Dof);
+    public bool Uses3Dof => ActiveMotionModel == MotionModel.Manoeuvring3Dof;
+    /// <summary>Коэффициенты модели 3 СС (строятся при первом шаге и при смене параметров).</summary>
+    public Manoeuvring3DofCoefficients Coefficients3Dof =>
+        coeffPinned ? coeff : (coeff = Manoeuvring3DofCoefficients.For(Parameters, coeff));
+    private Manoeuvring3DofCoefficients coeff;
+    private bool coeffPinned;
+
+    /// <summary>Работать с заданными коэффициентами 3 СС (подбор при их построении), а не по параметрам.</summary>
+    internal void PinCoefficients(Manoeuvring3DofCoefficients c)
+    {
+        coeff = c;
+        coeffPinned = true;
+    }
+    // Внешние силы, набранные к следующему шагу (связанные оси): Н, Н, Н·м
+    private double extX, extY, extN;
+    /// <summary>Внешние силы последнего шага (для индикации): продольная, поперечная, Н; момент, Н·м.</summary>
+    public double LastExternalX { get; private set; }
+    public double LastExternalY { get; private set; }
+    public double LastExternalN { get; private set; }
+
+    /// <summary>
+    /// Внешняя сила на следующий шаг (только модель 3 СС): fx — в нос, fy — на правый борт, Н;
+    /// xPoint — точка приложения от миделя, м (> 0 — в нос). Сбрасывается после каждого шага.
+    /// </summary>
+    public void AddForce(double fx, double fy, double xPoint = 0.0)
+    {
+        extX += fx; extY += fy; extN += xPoint * fy;
+    }
+
+    /// <summary>Внешний момент относительно вертикальной оси на следующий шаг, Н·м (> 0 — нос вправо).</summary>
+    public void AddMoment(double n) => extN += n;
+
+    /// <summary>Скорость относительно грунта: восток, север, м/с (с учётом поперечной V).</summary>
+    public double VelocityEast => U * Math.Sin(Psi) + V * Math.Cos(Psi);
+    public double VelocityNorth => U * Math.Cos(Psi) - V * Math.Sin(Psi);
 
     // ── Входы ──
     /// <summary>Команда руля, градусы (> 0 — правый борт), до ограничения δ_max.</summary>
@@ -111,8 +163,16 @@ public sealed class ShipDynamicsModel : IVesselModel
         if (Grounded)
         {
             StepGrounded(dt);
+            ClearExternal();
             return;
         }
+        if (Uses3Dof)
+        {
+            Step3Dof(dt);
+            ClearExternal();
+            return;
+        }
+        V = 0.0;
 
         // 2. Скорость
         double vService = p.ServiceSpeedMs;
@@ -166,6 +226,81 @@ public sealed class ShipDynamicsModel : IVesselModel
         Psi = Wrap2Pi(Psi + R * dt);
         East += U * Math.Sin(Psi) * dt;
         North += U * Math.Cos(Psi) * dt;
+        ClearExternal();
+    }
+
+    private void ClearExternal()
+    {
+        LastExternalX = extX; LastExternalY = extY; LastExternalN = extN;
+        extX = extY = extN = 0.0;
+    }
+
+    // ─────────── Модель 3 СС (запрос 19.1) ───────────
+
+    // Входы шага, замороженные на время RK4
+    private double s3uSet, s3tau, s3delta, s3sideForce;
+    private bool s3hold;
+
+    private void Step3Dof(double dt)
+    {
+        ShipParameters p = Parameters;
+        Manoeuvring3DofCoefficients c = Coefficients3Dof;
+
+        // Заданная скорость и τ — как в модели Номото (шаг 2)
+        double vService = p.ServiceSpeedMs;
+        double sf = EngineFailed ? 0.0 : SpeedFactor;
+        double uSet = sf >= 0.0 ? sf * vService : sf * vService * p.asternFactor;
+        s3hold = HoldServiceSpeed;
+        if (HoldServiceSpeed)
+        {
+            uSet = vService;
+            U = vService;
+        }
+        bool accelerating = Math.Abs(uSet) > Math.Abs(U) && U * uSet >= 0.0;
+        s3uSet = uSet;
+        s3tau = Math.Max(0.1, accelerating ? p.accelerationTimeConstant : p.decelerationTimeConstant);
+        s3delta = Delta * Mathf.Deg2Rad;
+        // Поперечная сила винта на заднем ходу: c_в·T_зх, T_зх = m₁₁·|u_зад|/τ_разг (на правый винт — корма влево)
+        s3sideForce = uSet < 0.0
+            ? c.PropSideForceFactor * c.M11 * Math.Abs(uSet) / Math.Max(0.1, p.accelerationTimeConstant)
+            : 0.0;
+
+        // RK4 по (u, v, r)
+        double u0 = U, v0 = V, r0 = R;
+        Derivs3Dof(c, u0, v0, r0, out double ku1, out double kv1, out double kr1);
+        Derivs3Dof(c, u0 + 0.5 * dt * ku1, v0 + 0.5 * dt * kv1, r0 + 0.5 * dt * kr1, out double ku2, out double kv2, out double kr2);
+        Derivs3Dof(c, u0 + 0.5 * dt * ku2, v0 + 0.5 * dt * kv2, r0 + 0.5 * dt * kr2, out double ku3, out double kv3, out double kr3);
+        Derivs3Dof(c, u0 + dt * ku3, v0 + dt * kv3, r0 + dt * kr3, out double ku4, out double kv4, out double kr4);
+        U = u0 + dt / 6.0 * (ku1 + 2.0 * ku2 + 2.0 * ku3 + ku4);
+        V = v0 + dt / 6.0 * (kv1 + 2.0 * kv2 + 2.0 * kv3 + kv4);
+        R = r0 + dt / 6.0 * (kr1 + 2.0 * kr2 + 2.0 * kr3 + kr4);
+
+        // Кинематика (как в шаге 4, с поперечной скоростью)
+        Psi = Wrap2Pi(Psi + R * dt);
+        double sin = Math.Sin(Psi), cos = Math.Cos(Psi);
+        East += (U * sin + V * cos) * dt;
+        North += (U * cos - V * sin) * dt;
+    }
+
+    /// <summary>Правые части модели 3 СС (формулы — в шапке Manoeuvring3Dof.cs).</summary>
+    private void Derivs3Dof(Manoeuvring3DofCoefficients c, double u, double v, double r,
+                            out double du, out double dv, out double dr)
+    {
+        double m = c.Mass, xg = c.XG;
+        double au = Math.Abs(u);
+
+        // Продольное движение: закон телеграфа + связь с поперечным движением + внешняя сила
+        du = s3hold ? 0.0 : (s3uSet - u) / s3tau + (m * v * r + m * xg * r * r + extX) / c.M11;
+
+        // Руль: скоростной напор с учётом струи винта при работе вперёд
+        double q = u * au;
+        if (s3uSet > 0.0) q += c.SlipstreamFactor * Math.Max(0.0, s3uSet * s3uSet - q);
+
+        c.CrossFlow(u, v, r, out double ycf, out double ncf);
+        double halfL = 0.5 * c.L;
+        double y = au * (c.Yv * v + c.Yr * r) - m * u * r + ycf + c.Ydelta * q * s3delta - s3sideForce + extY;
+        double n = u * c.Nv * v + au * c.Nr * r - m * xg * u * r + ncf + c.Ndelta * q * s3delta + halfL * s3sideForce + extN;
+        c.SolveSway(y, n, out dv, out dr);
     }
 
     /// <summary>Посадить на мель / снять с мели. При посадке запоминается направление хода.</summary>
@@ -206,7 +341,19 @@ public sealed class ShipDynamicsModel : IVesselModel
         Psi = Wrap2Pi(Psi + R * dt);
         East += U * Math.Sin(Psi) * dt;
         North += U * Math.Cos(Psi) * dt;
+
+        // 3 СС: поперечное движение на грунте гаснет так же (в модели Номото V = 0 — шаг прежний)
+        if (V != 0.0)
+        {
+            V *= decay;
+            if (Math.Abs(V) < 1e-3) V = 0.0;
+            East += V * Math.Cos(Psi) * dt;
+            North -= V * Math.Sin(Psi) * dt;
+        }
     }
+
+    /// <summary>Скорость относительно воды по модулю, м/с: |u| в модели Номото, √(u² + v²) в модели 3 СС.</summary>
+    public double SpeedThroughWater => V == 0.0 ? Math.Abs(U) : Math.Sqrt(U * U + V * V);
 
     /// <summary>
     /// Мгновенно переставить судно, без поворота (r = 0): снятие с мели инструктором (B1) —
@@ -216,7 +363,7 @@ public sealed class ShipDynamicsModel : IVesselModel
     public void Teleport(double east, double north, double psi, double u = 0.0, double? deltaDeg = null)
     {
         East = east; North = north; Psi = Wrap2Pi(psi);
-        U = u; R = 0.0;
+        U = u; R = 0.0; V = 0.0;
         if (deltaDeg.HasValue)
         {
             double max = Parameters != null ? Parameters.maxRudderAngle : 35.0;
