@@ -393,8 +393,10 @@ public static class SetupBerth
         }
 
         Vector3 rigLocal = ship.InverseTransformPoint(rigT.position);
-        float floorY = ProbeFloorAt(ship, rigLocal, rigLocal.y, rigT, out bool floorHit);
-        log.AppendLine($"  пол у штурвала: y = {floorY:F2} (Ship; {(floorHit ? "коллайдер" : "по XR Origin")}), борт Hull: ЛБ x = {hullMax.x:F2}, ПБ x = {hullMin.x:F2}");
+        // Пол у штурвала — первый коллайдер судна под XR Origin (как Setup Fast Boat: Rig в сцене выше пола; 16.10.2026
+        // полоса ±0,35 м от XR Origin пол не нашла, и «площадки» легли через всю рубку)
+        float floorY = FirstFloorBelow(ship, rigLocal, rigLocal.y + 0.3f, rigT, out bool floorHit);
+        log.AppendLine($"  пол у штурвала: y = {floorY:F2} (Ship; {(floorHit ? "коллайдер" : "НЕ НАЙДЕН — по XR Origin, площадки не строятся")}), борт Hull: ЛБ x = {hullMax.x:F2}, ПБ x = {hullMin.x:F2}");
 
         // Временные коллайдеры на МОСТИКИ — чтобы найти пол галереи без коллайдера
         var temp = new System.Collections.Generic.List<MeshCollider>();
@@ -428,7 +430,7 @@ public static class SetupBerth
                 bool reaches = s > 0 ? edge >= sideX - 0.3f : edge <= sideX + 0.3f;
                 string side = s > 0 ? "ЛБ" : "ПБ";
                 log.AppendLine($"  галерея {side}: край пола x = {edge:F2} (y = {lastY:F2}), борт x = {sideX:F2} — {(reaches ? "доходит до борта" : $"не доходит на {Mathf.Abs(sideX - edge):F2} м → площадка")}");
-                if (!reaches) platforms[k] = (edge, sideX, lastY);
+                if (!reaches && floorHit) platforms[k] = (edge, sideX, lastY);   // без пола у штурвала площадку не строить
                 float outer = reaches ? edge : sideX;
                 anchors[k] = new Vector3(outer - s * EdgeInset, lastY, rigLocal.z);
             }
@@ -495,6 +497,50 @@ public static class SetupBerth
         t.position = ship.TransformPoint(shipLocal);
         t.rotation = ship.rotation * rot;
         return t;
+    }
+
+    /// <summary>
+    /// Перестроить точки крыла: удалить Ship/Stations, WingPlatform_*, WingFloor_* (с Undo) и запустить Setup заново
+    /// (16.10.2026: первая постройка не нашла пол у штурвала и положила площадки через рубку).
+    /// </summary>
+    [MenuItem("Tools/VR Bridge/Setup 19.2 Berth — перестроить точки крыла")]
+    private static void RebuildStations()
+    {
+        if (EditorApplication.isPlayingOrWillChangePlaymode) { Debug.LogWarning("[Setup 19.2] Выйдите из Play Mode и запустите снова."); return; }
+        Scene scene = SceneManager.GetActiveScene();
+        Transform hull = FindByName(scene, "Hull");
+        Transform ship = hull != null && hull.parent != null ? hull.parent : null;
+        if (ship == null) { Debug.LogError("[Setup 19.2] Не найден Ship (родитель Hull)."); return; }
+        var removed = new StringBuilder();
+        foreach (string n in new[] { StationsName, "WingPlatform_Port", "WingPlatform_Starboard", "WingFloor_Port", "WingFloor_Starboard" })
+        {
+            Transform t = ship.Find(n);
+            if (t == null) continue;
+            Undo.DestroyObjectImmediate(t.gameObject);
+            removed.Append(removed.Length > 0 ? ", " : "").Append(n);
+        }
+        Debug.Log($"[Setup 19.2] Удалено: {(removed.Length > 0 ? removed.ToString() : "нечего")}. Точки крыла строятся заново.");
+        Run();
+    }
+
+    // Первый коллайдер судна под точкой (система Ship) не выше maxY — пол, на который Rig опустится в Play Mode
+    private static float FirstFloorBelow(Transform ship, Vector3 local, float maxY, Transform rig, out bool hit)
+    {
+        Physics.SyncTransforms();
+        Vector3 from = ship.TransformPoint(new Vector3(local.x, maxY + 1f, local.z));
+        RaycastHit[] hits = Physics.RaycastAll(from, -ship.up, 6f, ~0, QueryTriggerInteraction.Ignore);
+        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+        foreach (RaycastHit h in hits)
+        {
+            if (rig != null && h.collider.transform.IsChildOf(rig)) continue;
+            if (!h.collider.transform.IsChildOf(ship)) continue;
+            float y = ship.InverseTransformPoint(h.point).y;
+            if (y > maxY) continue;
+            hit = true;
+            return y;
+        }
+        hit = false;
+        return local.y;
     }
 
     // Пол в точке (система Ship): ближайшее попадание вниз в полосе ±FloorBand от expectedY (мимо коллайдеров Rig)
