@@ -11,7 +11,7 @@
 // BridgeActionMonitor (HelmStarted/Ended, TelegraphChanged — как действие обучающегося,
 // EngineTelegraph.SetSpeedFactor(sf, fromCode: false)), подруливающее — ThrusterChanged.
 // Экземпляр BridgeMenu (menuId = MenuId, кнопка B) и этот компонент ставит Setup 19.2 Berth
-// на Ship/ControlMenu. Часть 2 добавит группы «Концы» и «Переход».
+// на Ship/ControlMenu. Группа «Швартовка» (судно к причалу) — MooringController. Часть 2 добавит «Концы» и «Переход».
 // ============================================================
 using UnityEngine;
 
@@ -19,6 +19,8 @@ public class ShipControlOrders : MonoBehaviour
 {
     public const string MenuId = "Управление";
     public const string HelmGroup = "Руль, машина, подруливающее";
+    /// <summary>Операция «Судно к причалу» (MooringController; 16.10.2026 — из «Отладки» меню A сюда).</summary>
+    public const string BerthGroup = "Швартовка";
     /// <summary>Кнопка B правого контроллера (до D1 — панель погоды PanelToggle при controllerButton).</summary>
     public const string ToggleBinding = "<XRController>{RightHand}/secondaryButton";
 

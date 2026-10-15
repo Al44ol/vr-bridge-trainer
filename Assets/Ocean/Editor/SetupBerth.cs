@@ -171,7 +171,7 @@ public static class SetupBerth
         Undo.CollapseUndoOperations(undoGroup);
         EditorSceneManager.MarkSceneDirty(scene);
         AssetDatabase.SaveAssets();
-        log.Append("Готово. Сохраните сцену (Ctrl+S). Проверка: меню A «Отладка» → «Судно к причалу».");
+        log.Append("Готово. Сохраните сцену (Ctrl+S). Проверка: кнопка B (меню «Управление») → «Швартовка» → «Судно к причалу».");
         Debug.Log(log.ToString());
     }
 

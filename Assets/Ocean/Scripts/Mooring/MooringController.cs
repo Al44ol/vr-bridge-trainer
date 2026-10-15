@@ -10,8 +10,9 @@
 // События MooringSystem → шина упражнения (MooringEventBus; единицы — ExerciseEvents.cs) и консоль.
 // Рычаг подруливающего (ThrusterLever, пульт) — источник команды; меню «Управление» (кнопка B)
 // ставит его через SetThrusterIndex. Смена положения — событие ThrusterChanged.
-// Отладка (меню A «Отладка», только вне упражнения): «Судно к причалу: лагом» и «… подход»
-// (модель 3 СС ставится сама).
+// Операция «Швартовка» (меню «Управление» на кнопке B; 16.10.2026 вынесена из «Отладки» — решение
+// пользователя): «Судно к причалу: лагом» и «… подход» — в любом режиме тренажёра, только в свободном
+// плавании (не в упражнении и не на паузе брифинга); модель 3 СС ставится сама.
 // ============================================================
 using UnityEngine;
 
@@ -33,7 +34,7 @@ public class MooringController : MonoBehaviour
     [Tooltip("Высота клюзов над водой, м (MooringSystem.FairleadHeightM; подогнать по виду в сцене)")]
     public float fairleadHeightM = 2.5f;
 
-    [Header("Отладка «Судно к причалу»")]
+    [Header("Операция «Судно к причалу» (меню B → «Швартовка»)")]
     [Tooltip("Лагом: зазор борта до кромки, м")]
     public float alongsideGapM = 30f;
     [Tooltip("Подход: мидель за approachDistanceM до середины причала, борт в approachGapM от кромки")]
@@ -106,10 +107,12 @@ public class MooringController : MonoBehaviour
         if (thrusterLever != null) thrusterLever.Changed += OnLeverChanged;
         ExerciseEvents.Raised += OnExerciseEvent;
 
-        commands.Add(BridgeMenu.Register(TrainerModeSwitch.DebugGroup, () => $"Судно к причалу: лагом, {alongsideGapM:0} м (3 СС)",
-            () => ToBerth(false), CanTeleport, instructorOnly: true));
-        commands.Add(BridgeMenu.Register(TrainerModeSwitch.DebugGroup, () => $"Судно к причалу: подход {approachDistanceM:0} м, {approachSpeedKnots:0.#} уз (3 СС)",
-            () => ToBerth(true), CanTeleport, instructorOnly: true));
+        commands.Add(BridgeMenu.Register(ShipControlOrders.BerthGroup, () => $"Судно к причалу: лагом, {alongsideGapM:0} м",
+            () => ToBerth(false), CanTeleport, hideWhenUnavailable: true).InMenu(ShipControlOrders.MenuId));
+        commands.Add(BridgeMenu.Register(ShipControlOrders.BerthGroup, () => $"Судно к причалу: подход {approachDistanceM:0} м, {approachSpeedKnots:0.#} уз",
+            () => ToBerth(true), CanTeleport, hideWhenUnavailable: true).InMenu(ShipControlOrders.MenuId));
+        BridgeMenu.SetGroupExpanded(ShipControlOrders.BerthGroup, true);
+        BridgeMenu.SetGroupOrder(ShipControlOrders.BerthGroup, 20);
     }
 
     void OnDisable()
@@ -236,12 +239,13 @@ public class MooringController : MonoBehaviour
         if (e.Type == ExerciseEventType.ScenarioLoaded) ResetMooring();
     }
 
-    // ─────────── Отладка: судно к причалу ───────────
+    // ─────────── Операция «Судно к причалу» ───────────
 
     private bool OutsideExercise => ScenarioRunner.Instance == null || ScenarioRunner.Instance.CurrentPhase != ScenarioRunner.Phase.Running;
 
+    // Свободное плавание: не в упражнении и не на паузе (брифинг сценария — судно стоит, ShipNavigation.Paused)
     private bool CanTeleport() =>
-        navigation != null && navigation.Model != null && OutsideExercise && !OnFastBoat && Area != null && Area.berths.Count > 0;
+        navigation != null && navigation.Model != null && OutsideExercise && !navigation.Paused && !OnFastBoat && Area != null && Area.berths.Count > 0;
 
     private void ToBerth(bool approach)
     {
@@ -262,7 +266,8 @@ public class MooringController : MonoBehaviour
         if (grounding != null) grounding.ResetState();
         ResetMooring();
         Debug.Log($"[Швартовка] Судно к причалу «{b.name}»: {(approach ? $"подход, {approachDistanceM:0} м до середины, борт в {approachGapM:0} м от кромки, {knots:0.#} уз" : $"лагом, борт в {alongsideGapM:0} м от кромки")}, " +
-                  $"курс {hdg:F0}°, причал по левому борту, модель 3 СС.", this);
+                  $"курс {hdg:F0}°, причал по левому борту, модель 3 СС." +
+                  (approach ? "" : " Машина «Стоп»: руль без хода не действует — «толчок» машиной вперёд с рулём или подруливающее."), this);
     }
 
     private void Publish(ExerciseEvent e)

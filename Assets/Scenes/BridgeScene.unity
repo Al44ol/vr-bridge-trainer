@@ -791,7 +791,7 @@ Transform:
   m_GameObject: {fileID: 60234166}
   serializedVersion: 2
   m_LocalRotation: {x: 0.42261827, y: 0, z: 0, w: 0.9063079}
-  m_LocalPosition: {x: 2.5706, y: 0.8579, z: -2.1175}
+  m_LocalPosition: {x: 2.663, y: 0.865, z: -2.118}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -3751,7 +3751,7 @@ SphereCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Radius: 0.9
+  m_Radius: 1.3499999
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!33 &573901289
 MeshFilter:
@@ -12199,8 +12199,8 @@ Transform:
   m_GameObject: {fileID: 1513465271}
   serializedVersion: 2
   m_LocalRotation: {x: 0.4181691, y: 2.1316284e-14, z: -0.00000003655749, w: 0.90836924}
-  m_LocalPosition: {x: 2.6565, y: 0.804, z: -2.104}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalPosition: {x: 2.548, y: 0.86, z: -2.104}
+  m_LocalScale: {x: 0.5, y: 0.5, z: 0.5}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1150714588}
