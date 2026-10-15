@@ -7,6 +7,8 @@
 //      критерии выключены (DemoBerthScenario.Assessment);
 //   3. сценарий Assets/Ocean/Scenarios/Scenario_19-01_Berth.asset «Швартовка к причалу лагом»
 //      (DemoBerthScenario: причал №1, 3 СС, штиль, задания, финиш «ошвартован»).
+// С 16.10.2026 то же делается само при входе в Play Mode (ScenarioLibrarySync → EnsureCreated), если ассетов
+// ещё нет: сценарий 19-01 появляется в выборе без ручного Setup. Существующие ассеты при этом не меняются.
 // Библиотека сценариев ScenarioRunner собирается сама при входе в Play Mode (ScenarioLibrarySync).
 // Tools/VR Bridge/Rebuild Demo Berth Scenario — заполнить 19-01 и Assessment_Berthing заново (правки будут заменены).
 // ============================================================
@@ -31,7 +33,26 @@ public static class SetupBerthScenario
             return;
         }
         var log = new StringBuilder("[Setup 19.2б-3] Сценарий швартовки:\n");
+        Create(log);
+        log.Append("Готово. Сцену сохранять не нужно. В Play Mode: выбор сценария → 19-01.");
+        Debug.Log(log.ToString());
+    }
 
+    /// <summary>
+    /// При входе в Play Mode (ScenarioLibrarySync): создать сценарий 19-01 и набор критериев, если их нет,
+    /// чтобы сценарий был в выборе без ручного Setup. Существующие ассеты не меняются.
+    /// </summary>
+    public static void EnsureCreated()
+    {
+        if (AssetDatabase.LoadAssetAtPath<ScenarioDefinition>(ScenarioPath) != null &&
+            AssetDatabase.LoadAssetAtPath<AssessmentCriteria>(CriteriaPath) != null) return;
+        var log = new StringBuilder("[Setup 19.2б-3] Сценарий швартовки создан автоматически (при входе в Play Mode):\n");
+        Create(log);
+        Debug.Log(log.ToString().TrimEnd());
+    }
+
+    private static void Create(StringBuilder log)
+    {
         // ── 1. M1 в наборе по умолчанию ──
         AssessmentCriteria def = AssetDatabase.LoadAssetAtPath<AssessmentCriteria>(DefaultCriteriaPath);
         if (def == null) log.AppendLine($"  ! {DefaultCriteriaPath} нет — сначала Tools/VR Bridge/Setup C2 Assessment");
@@ -73,8 +94,6 @@ public static class SetupBerthScenario
         }
         else log.AppendLine($"  = {ScenarioPath} уже есть (заполнить заново — Tools/VR Bridge/Rebuild Demo Berth Scenario)");
         AssetDatabase.SaveAssets();
-        log.Append("Готово. Сцену сохранять не нужно. В Play Mode: выбор сценария → 19-01.");
-        Debug.Log(log.ToString());
     }
 
     [MenuItem("Tools/VR Bridge/Rebuild Demo Berth Scenario")]

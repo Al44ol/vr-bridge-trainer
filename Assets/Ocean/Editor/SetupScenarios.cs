@@ -208,6 +208,7 @@ public static class ScenarioLibrarySync
 
     private static void Sync()
     {
+        SetupBerthScenario.EnsureCreated();   // 19.2б-3: сценарий швартовки 19-01 — без ручного Setup
         List<ScenarioDefinition> all = FindAll();
         foreach (ScenarioRunner runner in Object.FindObjectsByType<ScenarioRunner>(FindObjectsInactive.Include))
         {
