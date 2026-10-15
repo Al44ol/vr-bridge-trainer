@@ -9,6 +9,8 @@
 //     своя камера инструктора — без сцены (cullingMask = 0, не XR), только очистка
 //     фона; поверх — интерфейс InstructorWindow (Screen Space Overlay: в шлем не попадает);
 //   • «зеркало из шлема»: прежний вид, окно инструктора скрыто, подсказка.
+//     С 19.2 (A) включается и кнопкой «Шлем на весь экран» в окне; обратно — кнопка
+//     «« Окно инструктора» поверх зеркала, Esc или правый клик мыши; PiP восстанавливается.
 // Зеркало URP рисует по XRDisplaySubsystem.GetPreferredMirrorBlitMode() — его и
 // выключаем (SetPreferredMirrorBlitMode(None)); XRSettings.gameViewRenderMode — дополнительно.
 // Подсистема дисплея может запуститься позже Start — режим проверяется раз в секунду.
@@ -51,6 +53,7 @@ public class InstructorStation : MonoBehaviour
     private GameViewRenderMode mirrorMode = GameViewRenderMode.LeftEye;
     private int mirrorBlitMode = XRMirrorViewBlitMode.Default;
     private bool mirrorBlitSaved;
+    private bool pipBeforeMirror;
     private float nextMirrorCheck;
     private readonly List<BridgeMenuCommand> menuCommands = new List<BridgeMenuCommand>();
     private static readonly List<XRDisplaySubsystem> displays = new List<XRDisplaySubsystem>();
@@ -110,6 +113,10 @@ public class InstructorStation : MonoBehaviour
     {
         if (keyboardShortcuts && Keyboard.current != null && Keyboard.current[toggleKey].wasPressedThisFrame && !TextInputFocused)
             SetMode(Mode == DisplayMode.Instructor ? DisplayMode.Mirror : DisplayMode.Instructor);
+        // 19.2 (A): из зеркала — обратно в окно по Esc или правому клику (не зависит от keyboardShortcuts:
+        // это клавиши монитора инструктора, обучающийся в шлеме их не нажмёт)
+        else if (Mode == DisplayMode.Mirror && ReturnPressed())
+            SetMode(DisplayMode.Instructor);
         // Подсистема дисплея XR может запуститься позже — режим зеркала проверяется раз в секунду
         if (Time.unscaledTime >= nextMirrorCheck)
         {
@@ -120,12 +127,25 @@ public class InstructorStation : MonoBehaviour
 
     public void SetMode(DisplayMode mode)
     {
+        bool wasInstructor = Mode == DisplayMode.Instructor;
         Mode = mode;
         bool instructor = mode == DisplayMode.Instructor;
         if (cam != null) cam.enabled = instructor;
         if (Window != null) Window.SetVisible(instructor);
-        if (!instructor && Pip != null) Pip.SetActive(false);
+        if (Pip != null)
+        {
+            // 19.2 (A): PiP, включённый до перехода в зеркало, при возврате включается снова
+            if (!instructor && wasInstructor) pipBeforeMirror = Pip.Active;
+            if (!instructor) Pip.SetActive(false);
+            else if (!wasInstructor && pipBeforeMirror) Pip.SetActive(true);
+        }
         ApplyMirror(true);
+    }
+
+    private static bool ReturnPressed()
+    {
+        if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame) return true;
+        return Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame;
     }
 
     public void TogglePip()

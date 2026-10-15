@@ -7,6 +7,8 @@
 // сглаживания и HDR, дальность — как у камеры шлема (туман и огни видны).
 // По умолчанию выключено (кнопка в окне / меню Y «Монитор инструктора»).
 // Замер 12.10.2026 (ThesisNotes, табл. 13.2): с PiP 90,0 кадра/с, +0,85 мс GPU — оставлен.
+// С 19.2 (п. A): размер меняется из окна инструктора ([−] [+], SetResolution — текстура
+// пересоздаётся), частота — кнопкой «10 / 20 Гц»; на первом шаге — прежние 480 × 270, 10 Гц.
 // ============================================================
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
@@ -36,6 +38,28 @@ public class InstructorPip : MonoBehaviour
         if (on) Build();
         if (cam != null) cam.enabled = false;
         nextRender = 0f;
+    }
+
+    /// <summary>Новый размер текстуры, пикселей (16…2560 × 16…1440). Уже созданная текстура пересоздаётся.</summary>
+    public void SetResolution(int w, int h)
+    {
+        w = Mathf.Clamp(w, 16, 2560);
+        h = Mathf.Clamp(h, 16, 1440);
+        if (w == width && h == height) return;
+        width = w;
+        height = h;
+        if (cam == null) return;   // ещё не включали — создастся в Build с новым размером
+        RenderTexture old = Texture;
+        Texture = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32) { name = "InstructorPip" };
+        Texture.Create();
+        cam.targetTexture = Texture;
+        cam.ResetAspect();
+        nextRender = 0f;
+        if (old != null)
+        {
+            old.Release();
+            Destroy(old);
+        }
     }
 
     void LateUpdate()

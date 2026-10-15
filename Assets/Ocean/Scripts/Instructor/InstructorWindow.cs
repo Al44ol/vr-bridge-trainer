@@ -12,6 +12,9 @@
 //     справа внизу — вид из шлема (PiP: кнопка здесь или меню Y «Монитор инструктора»).
 //     D2: «Планшет: все цели / обнаруженные» — что видит обучающийся на планшете (NavPlotter);
 //     суда и следы — общий класс LiveMapTracks (с планшетом).
+//     19.2 (A): над PiP — [−] [+] (480 / 720 / 960 / на всё поле карты) и «10 / 20 Гц»;
+//     «Шлем на весь экран» — режим зеркала; возврат — кнопка «« Окно инструктора» поверх
+//     зеркала, Esc или правый клик мыши (InstructorStation).
 //   • Справа — состояние своего судна и маршрута; таблица целей (дистанция, пеленг,
 //     курсовой угол, CPA, TCPA, ситуация по МППСС из оценки C2 — инструктор видит
 //     цели и при флаге сценария «цели не показывать»); вводные (отказ ГД, отказ руля,
@@ -84,6 +87,12 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
     private NavPlotter plotter;
     private bool dragging;
     private RawImage pipImage;
+    private RectTransform pipPanel;          // [−] [+] размер, частота — над PiP
+    private TextMeshProUGUI pipSizeText;
+    private int pipStep;                     // шаг размера PiP (PipWidths)
+    private Vector2 pipBase;                 // шаг 0: размер на холсте
+    private Vector2Int pipBaseTexture;       // шаг 0: текстура (размер InstructorPip по умолчанию)
+    private RectTransform mirrorBack;        // в режиме зеркала: «« Окно инструктора»
 
     // Тексты и кнопки
     private TextMeshProUGUI statusText, stateText, targetsText, eventsText, scoreText, mirrorHint, scenarioLabel;
@@ -115,6 +124,7 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         if (root == null) return;
         foreach (Transform t in root) t.gameObject.SetActive(on);
         mirrorHint.gameObject.SetActive(!on);
+        mirrorBack.gameObject.SetActive(!on);
         nextRefresh = 0f;
     }
 
@@ -133,12 +143,73 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
             Color c = b.color != null ? b.color() : ButtonColor;
             b.image.color = enabled ? c : new Color(0.2f, 0.22f, 0.25f);
         }
-        if (pipImage != null)
+        RefreshPip();
+    }
+
+    // ─────────── Вид из шлема (PiP): размер и частота ───────────
+    // Шаг 0 — прежние 480 × 270 (текстура — размер по умолчанию InstructorPip, как в замере табл. 13.2);
+    // шаги 1, 2 — ширина 720 и 960 ед. холста; последний — на всё поле карты (под строкой кнопок).
+    // Текстура на шагах ≥ 1 — по пикселям экрана (размер на холсте × scaleFactor).
+    private static readonly float[] PipWidths = { 0f, 720f, 960f, float.MaxValue };
+    private static readonly float[] PipRates = { 10f, 20f };
+
+    private Vector2 PipDisplaySize()
+    {
+        float aspect = pipBase.x / Mathf.Max(1f, pipBase.y);
+        if (pipStep == 0) return pipBase;
+        // Наибольший: поле карты без отступов, строки кнопок карты и строки кнопок PiP
+        float maxW = mapRect.rect.width - 16f;
+        float maxH = mapRect.rect.height - 16f - (RowHeight + 8f) - (RowHeight + 4f);
+        float w = Mathf.Min(PipWidths[pipStep], maxW, maxH * aspect);
+        w = Mathf.Max(w, pipBase.x);
+        return new Vector2(Mathf.Round(w), Mathf.Round(w / aspect));
+    }
+
+    private void RefreshPip()
+    {
+        if (pipImage == null) return;
+        InstructorPip p = station.Pip;
+        bool pip = p != null && p.Active;
+        pipImage.gameObject.SetActive(pip);
+        pipPanel.gameObject.SetActive(pip);
+        if (!pip) return;
+        Vector2 size = PipDisplaySize();
+        if (pipImage.rectTransform.sizeDelta != size)
         {
-            bool pip = station.Pip != null && station.Pip.Active;
-            pipImage.gameObject.SetActive(pip);
-            if (pip) pipImage.texture = station.Pip.Texture;
+            pipImage.rectTransform.sizeDelta = size;
+            pipPanel.anchoredPosition = new Vector2(-8f, 8f + size.y + 4f);
+            float k = canvas.scaleFactor > 0f ? canvas.scaleFactor : 1f;
+            if (pipStep == 0) p.SetResolution(pipBaseTexture.x, pipBaseTexture.y);
+            else p.SetResolution(Mathf.RoundToInt(size.x * k), Mathf.RoundToInt(size.y * k));
+            Debug.Log($"[Инструктор] Вид из шлема (PiP): {size.x:F0}×{size.y:F0} на экране, текстура {p.width}×{p.height}, {p.rateHz:F0} Гц.");
         }
+        pipImage.texture = p.Texture;
+        pipSizeText.text = $"{p.width}×{p.height} · {pipStep + 1}/{PipWidths.Length}";
+    }
+
+    private void StepPip(int delta)
+    {
+        // Шаг, который на этом мониторе не меняет размер (поле карты узкое), пропускается
+        Vector2 current = PipDisplaySize();
+        int saved = pipStep, step = pipStep;
+        while (step + delta >= 0 && step + delta < PipWidths.Length)
+        {
+            step += delta;
+            pipStep = step;
+            bool changed = PipDisplaySize() != current;
+            pipStep = saved;
+            if (changed) break;
+        }
+        pipStep = step;
+    }
+
+    private void TogglePipRate()
+    {
+        InstructorPip p = station.Pip;
+        if (p == null) return;
+        int i = Array.IndexOf(PipRates, p.rateHz);
+        p.rateHz = PipRates[(i + 1) % PipRates.Length];
+        Debug.Log($"[Инструктор] Вид из шлема (PiP): {p.rateHz:F0} Гц.");
     }
 
     // ─────────── Карта ───────────
@@ -492,8 +563,13 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         BuildMap();
         BuildColumn();
 
-        mirrorHint = MakeText(root, "Окно инструктора: меню Y → «Монитор инструктора»", 18f, new Color(1f, 1f, 1f, 0.8f), TextAlignmentOptions.TopLeft);
-        Place(mirrorHint.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(12f, -10f), new Vector2(620f, 30f), new Vector2(0f, 1f));
+        // Режим зеркала (вид шлема на весь монитор): кнопка возврата и подсказка поверх зеркала
+        float bx = 12f;
+        mirrorBack = Button(root, ref bx, -10f, 230f, "«  Окно инструктора", ButtonColor,
+                            () => station.SetMode(InstructorStation.DisplayMode.Instructor));
+        mirrorHint = MakeText(root, "Вид из шлема. Окно инструктора — кнопка слева, Esc или правый клик мыши; в шлеме — меню Y → «Монитор инструктора»",
+                              17f, new Color(1f, 1f, 1f, 0.8f), TextAlignmentOptions.MidlineLeft);
+        Place(mirrorHint.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(bx + 6f, -10f), new Vector2(1100f, RowHeight), new Vector2(0f, 1f));
     }
 
     private void BuildBar()
@@ -544,7 +620,7 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         mapLive = Layer<InstructorMapGraphic>("MapLive");
 
         mapControls = Panel(mapRect, "MapControls", new Color(0f, 0f, 0f, 0f));
-        Place(mapControls, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(8f, -8f), new Vector2(780f, RowHeight), new Vector2(0f, 1f));
+        Place(mapControls, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(8f, -8f), new Vector2(1000f, RowHeight), new Vector2(0f, 1f));
         float x = 0f;
         Button(mapControls, ref x, 0f, 44f, "+", NeutralColor, () => Zoom(1.5f, mapRect.rect.center));
         Button(mapControls, ref x, 0f, 44f, "−", NeutralColor, () => Zoom(1f / 1.5f, mapRect.rect.center));
@@ -561,6 +637,9 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         Button(mapControls, ref x, 0f, 210f, "", NeutralColor, () => plotter.SetRevealAll(!plotter.RevealAll),
                () => plotter != null && plotter.RevealAll ? "Планшет: все цели" : "Планшет: обнаруженные",
                () => plotter != null && plotter.RevealAll ? WarnColor : NeutralColor, () => plotter != null);
+        // 19.2 (A): вид шлема на весь монитор (зеркало XR — полная частота, без лишней отрисовки)
+        Button(mapControls, ref x, 0f, 200f, "Шлем на весь экран", NeutralColor,
+               () => station.SetMode(InstructorStation.DisplayMode.Mirror));
 
         scaleText = MakeText(mapRect, "", 14f, MutedColor, TextAlignmentOptions.BottomLeft);
         Place(scaleText.rectTransform, Vector2.zero, Vector2.zero, new Vector2(10f, 8f), new Vector2(900f, 24f), Vector2.zero);
@@ -569,9 +648,24 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         pip.transform.SetParent(mapRect, false);
         pipImage = pip.AddComponent<RawImage>();
         pipImage.raycastTarget = false;
-        Place(pipImage.rectTransform, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-8f, 8f),
-              new Vector2(station.Pip != null ? station.Pip.width : 480, station.Pip != null ? station.Pip.height : 270), new Vector2(1f, 0f));
+        pipBaseTexture = new Vector2Int(station.Pip != null ? station.Pip.width : 480, station.Pip != null ? station.Pip.height : 270);
+        pipBase = new Vector2(pipBaseTexture.x, pipBaseTexture.y);
+        Place(pipImage.rectTransform, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-8f, 8f), pipBase, new Vector2(1f, 0f));
         pip.SetActive(false);
+
+        // 19.2 (A): над PiP — размер [−] [+] и частота обновления
+        pipPanel = Panel(mapRect, "PipControls", new Color(0f, 0f, 0f, 0.55f));
+        Place(pipPanel, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-8f, 8f + pipBase.y + 4f),
+              new Vector2(44f * 2f + 170f + 90f + 3f * Gap, RowHeight), new Vector2(1f, 0f));
+        float px = 0f;
+        Button(pipPanel, ref px, 0f, 44f, "−", NeutralColor, () => StepPip(-1));
+        Button(pipPanel, ref px, 0f, 44f, "+", NeutralColor, () => StepPip(+1));
+        pipSizeText = MakeText(pipPanel, "", 15f, MutedColor, TextAlignmentOptions.Center);
+        Place(pipSizeText.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(px, 0f), new Vector2(170f, RowHeight), new Vector2(0f, 1f));
+        px += 170f + Gap;
+        Button(pipPanel, ref px, 0f, 90f, "", NeutralColor, TogglePipRate,
+               () => station.Pip != null ? $"{station.Pip.rateHz:F0} Гц" : "—");
+        pipPanel.gameObject.SetActive(false);
     }
 
     private T Layer<T>(string name) where T : DebriefMapGraphic
@@ -702,8 +796,8 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         return t;
     }
 
-    /// <summary>Кнопка в строке (x — от левого края родителя, растёт; y — от верха). text/color/enabled — обновляются с окном.</summary>
-    private void Button(RectTransform parent, ref float x, float y, float width, string label, Color color, UnityAction action,
+    /// <summary>Кнопка в строке (x — от левого края родителя, растёт; y — от верха). text/color/enabled — обновляются с окном. Возвращает кнопку.</summary>
+    private RectTransform Button(RectTransform parent, ref float x, float y, float width, string label, Color color, UnityAction action,
                         Func<string> text = null, Func<Color> dynColor = null, Func<bool> enabled = null)
     {
         var go = new GameObject("Button", typeof(RectTransform));
@@ -733,6 +827,7 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         if (text != null || dynColor != null || enabled != null)
             dynamicButtons.Add((t, img, text ?? (() => label), dynColor ?? (() => color), enabled));
         x += width + Gap;
+        return go.GetComponent<RectTransform>();
     }
 
     private TMP_InputField InputField(RectTransform parent, Vector2 pos, Vector2 size)
