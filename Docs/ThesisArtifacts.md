@@ -24,6 +24,7 @@
 | Производительность | 🎮 меню Y → «Замер» | `ThesisData/Performance/` | `frametiming_summary.csv` (строка на замер, условия в `note`), `frametiming_<режим>_<дата>.csv` — покадрово (CPU, GPU, draw calls) | п. 1.1, 7.7, 9.2, 13.10, 13.16, 13.17, 14.8, 17.6; табл. 1.1, 7.7, 9.2, 13.2, 13.4, 14.1, 17.3 (в note — режим монитора и планшета). Замеры **в сборке PC** пишутся рядом с exe (`build/PC/ThesisData/Performance/`), в проект копируются как `frametiming_summary_build.csv` и `frametiming_build_*.csv` (столбец `editor` = 0) |
 | Тестовое судно: быстроходный катер (запрос 15) | 🖥 `Manoeuvring Trials` и `Seakeeping Trials` с ассетом `ShipParameters_FastBoat` | `ThesisData/Trials/ShipParameters_FastBoat_<дата>/`, `ThesisData/Seakeeping/ShipParameters_FastBoat_<дата>/` | те же CSV и SVG, что у судна сцены — для табл. 15.1 (циркуляция, зигзаг, разгон катера); прогон B2-01 на катере — в выводе теста `B2Run_OnBoat_ArrivesAndIsAssessed` | разд. 15, табл. 15.1 |
 | Модель 3 СС для малых скоростей (запрос 19.1) | 🖥 `Manoeuvring Trials`: «Модель движения», флажки «Малые скорости» и «Сравнение моделей» | `ThesisData/Trials/<ассет>[_3dof]_<дата>/` | `lowspeed_*.csv` (дрейф, разворот на месте, «толчок» с обдувом и без, задний ход; столбец `v_ms` — поперечная скорость), `lowspeed_drift_spin.svg`, `lowspeed_kick.svg`, `lowspeed_astern.svg` (траектория и контур корпуса); `comparison_3dof.csv/.md` + `comparison_turning.svg` (Номото/Норрбин — 3 СС Хёрнер — 3 СС согласованная [— эталон Mariner]); `model_3dof.md` — коэффициенты (Clarke, k_N, Y'_δ, C_d, k_∞, циркуляции; у Mariner — производные ПМУ рядом) | разд. 19, табл. 19.1–19.4 |
+| Швартовка: причал, кранцы, концы, подруливающее (запрос 19.2) | 🖥 `Mooring Trials` (меню, без окна) | `ThesisData/Mooring/<дата>/<Model45m|Mariner>/` | `impacts.csv` (навалы лагом 0,05…0,5 уз и носом 5°/10°: W, ½·m₂₂·v², PIANC, δ/δ_н, ΣR, e), `impact_0.2kn.csv`, `fender_loop.svg` (петля «обжатие — реакция»), `berthing_energy.svg`, `hold.csv` + `mooring_hold.svg` (натяжения при нарастающей силе), `thruster.csv/.svg`; `summary.md` в папке даты — обе модели | разд. 19.15, табл. 19.5–19.7 |
 | Записи упражнений | 🎮 каждое упражнение | `ThesisData/Sessions/<дата>_<сценарий>_<ID>/` (в .gitignore) | `track.csv` (5 Гц), `targets.csv`, `events.csv`, `session.json`, `assessment.csv`, `report.html` | разд. 7, табл. 7.1–7.4; п. 10.10, 11.6 |
 
 ---
@@ -58,7 +59,7 @@
 | Замер кадра | `FrameTimingCapture` | FrameTimingManager + ProfilerRecorder | п. 1.1, 13.16 |
 
 ### 2.6. Автоматические тесты
-Unity Test Runner → EditMode (сейчас **242**): `TestResults.xml` — подтверждение корректности модулей для главы 3 (по классам — таблицы «Новые EditMode-тесты» в каждом разделе ThesisNotes).
+Unity Test Runner → EditMode (сейчас **250**): `TestResults.xml` — подтверждение корректности модулей для главы 3 (по классам — таблицы «Новые EditMode-тесты» в каждом разделе ThesisNotes).
 
 ### 2.6а. Навигационный планшет (запрос 14, D2)
 - 👓 Планшет в левой руке (кнопка X) — схема, данные, цели после обнаружения. Не видно в шлеме:
