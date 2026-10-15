@@ -70,6 +70,7 @@ public static class DebriefText
         { AssessmentCatalog.F6, "Поворот на невидимое судно в ограниченную видимость" },
         { AssessmentCatalog.N1, "Запоздалая реакция на отказ рулевого устройства (ход не снижен)" },
         { AssessmentCatalog.N2, "Запоздалая реакция на отказ главного двигателя (не дан «Стоп»)" },
+        { AssessmentCatalog.M1, "Задание швартовки не выполнено: судно не ошвартовано" },
         { AssessmentCatalog.A1, "Посадка на мель" },
         { AssessmentCatalog.A2, "Столкновение" }
     };

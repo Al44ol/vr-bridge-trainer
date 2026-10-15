@@ -389,7 +389,8 @@ public class NavPlotter : MonoBehaviour
                         : runner.CurrentPhase == ScenarioRunner.Phase.Running ? TaskPhase.Running
                         : runner.CurrentPhase == ScenarioRunner.Phase.Finished ? TaskPhase.Finished : TaskPhase.Free;
         string text = ExerciseTasks.Page(sc, phase, runner != null ? runner.ExerciseTime : 0.0,
-                                         phase == TaskPhase.Running && runner != null ? runner.Route : null);
+                                         phase == TaskPhase.Running && runner != null ? runner.Route : null,
+                                         runner != null ? runner.MooringTask : null);   // 19.2б-3: задания швартовки с отметками
         if (taskText.text != text)
         {
             taskText.text = text;

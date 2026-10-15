@@ -33,13 +33,19 @@ public sealed class ExerciseSummary
     /// <summary>Режимы тренажёра за упражнение (перед 19.2, п. B): был ли режим обучения или инструктора.</summary>
     public TrainerModeUsage Modes = new TrainerModeUsage();
 
+    /// <summary>19.2б-3: сценарий швартовки — выполнено этапов задания (из 4) и время «ошвартован», с (NaN — нет).</summary>
+    public bool MooringTask;
+    public int MooringStagesDone;
+    public double MooredAt = double.NaN;
+
     public static ExerciseSummary From(ScenarioDefinition scenario, IReadOnlyList<ExerciseEvent> log, RouteTracker route)
     {
         var s = new ExerciseSummary
         {
             ScenarioId = scenario != null ? scenario.id : "",
             Title = scenario != null ? scenario.title : "",
-            WaypointsTotal = route != null && route.Valid ? route.WaypointCount - 1 : 0
+            WaypointsTotal = route != null && route.Valid ? route.WaypointCount - 1 : 0,
+            MooringTask = scenario != null && scenario.IsMooring
         };
         if (route != null)
         {
@@ -64,6 +70,10 @@ public sealed class ExerciseSummary
                     case ExerciseEventType.TelegraphChanged: if (!e.ByInstructor) s.TelegraphOrders++; break;
                     case ExerciseEventType.HornStarted: s.HornSignals++; break;
                     case ExerciseEventType.WeatherChanged: s.WeatherChanges++; break;
+                    case ExerciseEventType.MooringStage:
+                        s.MooringStagesDone++;
+                        if (e.Index == (int)MooringStage.Moored) s.MooredAt = e.Time;
+                        break;
                     case ExerciseEventType.ExerciseEnded:
                         s.Reason = e.EndReason; s.ByInstructor = e.ByInstructor; s.Duration = e.Time; break;
                 }
@@ -71,6 +81,9 @@ public sealed class ExerciseSummary
         s.Modes = TrainerModeUsage.From(log);
         return s;
     }
+
+    /// <summary>Ход выполнения: путевые точки или (сценарий швартовки) задания.</summary>
+    public string Progress => MooringTask ? $"заданий {MooringStagesDone} из {MooringTaskTracker.StageCount}" : $"точек {WaypointsPassed} из {WaypointsTotal}";
 
     /// <summary>Причина провала словами (пусто — не провал).</summary>
     public string FailureText()
@@ -86,8 +99,9 @@ public sealed class ExerciseSummary
         var b = new StringBuilder();
         if (markFailure && Failed)
             b.AppendLine($"<color=#FF5A4A><b>УПРАЖНЕНИЕ ПРОВАЛЕНО:</b> {FailureText()}</color>");
-        b.AppendLine($"<b>{ScenarioText.EndReason(Reason)}</b>{(ByInstructor ? " (инструктор)" : "")} · {ScenarioText.Clock(Duration)} · точек {WaypointsPassed} из {WaypointsTotal}");
-        b.Append($"<size=85%><color=#9AA6B2>max XTE {ScenarioText.Num(MaxAbsXte)} м, вне коридора {ScenarioText.Num(TimeOutsideCorridor)} с · посадок {Groundings}, столкновений {Collisions} · перекладок {HelmActions}, команд телеграфу {TelegraphOrders}, гудков {HornSignals}</color></size>");
+        b.AppendLine($"<b>{ScenarioText.EndReason(Reason)}</b>{(ByInstructor ? " (инструктор)" : "")} · {ScenarioText.Clock(Duration)} · {Progress}");
+        string route = MooringTask ? "" : $"max XTE {ScenarioText.Num(MaxAbsXte)} м, вне коридора {ScenarioText.Num(TimeOutsideCorridor)} с · ";
+        b.Append($"<size=85%><color=#9AA6B2>{route}посадок {Groundings}, столкновений {Collisions} · перекладок {HelmActions}, команд телеграфу {TelegraphOrders}, гудков {HornSignals}</color></size>");
         return b.ToString();
     }
 
@@ -100,7 +114,8 @@ public sealed class ExerciseSummary
         b.AppendLine($"<b>{ScenarioText.EndReason(Reason)}</b>{(ByInstructor ? " (инструктор)" : "")}");
         b.AppendLine();
         b.AppendLine($"Время упражнения: {ScenarioText.Clock(Duration)}");
-        b.AppendLine($"Пройдено путевых точек: {WaypointsPassed} из {WaypointsTotal}");
+        if (MooringTask) b.AppendLine($"Выполнено заданий швартовки: {MooringStagesDone} из {MooringTaskTracker.StageCount}");
+        else b.AppendLine($"Пройдено путевых точек: {WaypointsPassed} из {WaypointsTotal}");
         b.AppendLine($"Наибольшее боковое отклонение: {ScenarioText.Num(MaxAbsXte)} м");
         b.AppendLine($"Выходов из коридора: {CorridorExits}, вне коридора {ScenarioText.Num(TimeOutsideCorridor)} с");
         b.AppendLine($"Опасных приближений к мели: {ShoalWarnings}");

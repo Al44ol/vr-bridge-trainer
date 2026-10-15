@@ -76,6 +76,10 @@
 //   LineCommand (19.2б-2) команда концу из меню B: Index — конец, Value — LineOrder (0 подать, 1 выбирать, 2 травить,
 //                        3 держать, 4 на кнехты, 5 отдать), Value2 — 1 выполнена / 0 нет; Subject — конец (при отказе — «: причина»)
 //   StationChanged (19.2б-2) переход обучающегося: Index — BridgeStation (0 у штурвала, 1 крыло ЛБ, 2 крыло ПБ), Value — прежнее
+// Сценарий швартовки (19.2б-3; источник — ScenarioRunner, MooringTaskTracker):
+//   MooringStage         выполнен этап задания: Index — MooringStage (1 лагом, 2 у кранцев, 3 концы поданы, 4 ошвартован),
+//                        Subject — название этапа, Value — наибольший зазор нос/корма до кромки, м; Value2 — ход, уз
+//   ExerciseEnded с EndReason = Moored — ошвартован (условие ScenarioEndConditions.Moored)
 // XTE > 0 — судно правее линии пути.
 // ============================================================
 using System;
@@ -135,7 +139,9 @@ public enum ExerciseEventType
     ControlOrder,
     // Швартовка, часть 2 (19.2б-2)
     LineCommand,
-    StationChanged
+    StationChanged,
+    // Сценарий швартовки (19.2б-3)
+    MooringStage
 }
 
 public enum ScenarioEndReason
@@ -145,7 +151,8 @@ public enum ScenarioEndReason
     Grounding,
     Collision,
     TimeLimit,
-    Aborted
+    Aborted,
+    Moored      // 19.2б-3: ошвартован (сценарий швартовки)
 }
 
 /// <summary>Событие упражнения.</summary>
@@ -251,6 +258,8 @@ public struct ExerciseEvent
                 return $"Концы: «{LineOrders.Title((LineOrder)(int)Value)}» — {Subject}" + (Value2 > 0.5 ? "" : " (НЕ ВЫПОЛНЕНО)");
             case ExerciseEventType.StationChanged:
                 return $"Переход: {BridgeStations.Title((BridgeStation)Index)} (был: {BridgeStations.Title((BridgeStation)(int)Value)})";
+            case ExerciseEventType.MooringStage:
+                return $"Швартовка: выполнено «{Subject}»" + (double.IsNaN(Value) ? "" : $" (зазор до {ScenarioText.Num(Value, 1)} м, ход {ScenarioText.Num(Value2, 2)} уз)");
         }
         return $"{Type} {Subject}";
     }

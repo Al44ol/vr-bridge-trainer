@@ -39,6 +39,8 @@ public sealed class AssessmentContext
     /// <summary>Параметры своего судна (null — нет в записи: момент перекладки не оценивается).</summary>
     public ShipParameters Own;
     public readonly List<AssessmentTargetInfo> Targets = new List<AssessmentTargetInfo>();
+    /// <summary>19.2б-3: задание швартовки (null — сценарий не швартовка).</summary>
+    public MooringTaskDefinition Mooring;
 
     public AssessmentTargetInfo Target(string id)
     {
@@ -72,6 +74,7 @@ public sealed class AssessmentContext
                 if (x == null) continue;
                 c.Targets.Add(new AssessmentTargetInfo { Id = x.id ?? "", Name = x.name ?? "", Index = i, LengthM = x.length_m, RequiredCpaNm = x.required_cpa_nm });
             }
+        c.Mooring = s.mooring != null ? s.mooring.ToDefinition() : null;
         c.Own = ShipFrom(m.ship);
         return c;
     }

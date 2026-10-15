@@ -199,7 +199,7 @@ public class ScenarioPanel : MonoBehaviour
             if (s == null) continue;
             ScenarioDefinition sc = s;
             string limit = s.timeLimitSeconds > 0 ? $" · {ScenarioText.Num(s.timeLimitSeconds / 60.0)} мин" : "";
-            string label = $"<b>{s.id}</b>  {s.title}\n<size=75%><color=#C8D2DC>{ScenarioText.Conditions(s.weather, s.timeOfDay)}{limit} · маршрут {ScenarioText.Num(s.RouteLength / 1000.0, 1)} км</color></size>";
+            string label = $"<b>{s.id}</b>  {s.title}\n<size=75%><color=#C8D2DC>{ScenarioText.Conditions(s.weather, s.timeOfDay)}{limit} · {(s.IsMooring ? "швартовка" : $"маршрут {ScenarioText.Num(s.RouteLength / 1000.0, 1)} км")}</color></size>";
             ButtonRow(ref y, 66f, (label, ButtonColor, () => runner.Load(sc)));
         }
         y -= Gap;

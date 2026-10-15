@@ -282,6 +282,10 @@ public class SessionScenario
     public List<SessionTraffic> traffic = new List<SessionTraffic>();
     /// <summary>Снимок акватории (C3): знаки, мели, суша, фарватеры — для схемы траектории по записи.</summary>
     public SessionArea area = new SessionArea();
+    /// <summary>19.2б-3: модель движения сценария (ScenarioMotionModel: AsSelected — как в тренажёре; фактическая — ship.motion_model).</summary>
+    public string motion_model = "";
+    /// <summary>19.2б-3: задание швартовки (enabled = false — не швартовка; у записей до 19.2б-3 поля нет).</summary>
+    public SessionMooringTask mooring = new SessionMooringTask();
 
     public static SessionScenario From(ScenarioDefinition s)
     {
@@ -294,7 +298,9 @@ public class SessionScenario
             end_conditions = s.endConditions.ToString(),
             detection_range_nm = SessionMeta.R(s.detectionRangeNm),
             safe_speed_kn = SessionMeta.R(s.safeSpeedKnots), hide_targets = s.hideTargetsOnPlotter,
-            area = SessionArea.From(s.waterArea)
+            area = SessionArea.From(s.waterArea),
+            motion_model = s.motionModel.ToString(),
+            mooring = SessionMooringTask.From(s)
         };
         if (s.initial != null)
             r.initial = new SessionInitial
@@ -322,6 +328,40 @@ public class SessionScenario
             list.Add(new RouteWaypoint(w.name, new WorldPosition(w.x_e_m, w.y_n_m), (float)w.xte_limit_m, w.narrow_channel));
         return list;
     }
+}
+
+[Serializable]
+public class SessionMooringTask
+{
+    public bool enabled;
+    public int berth_index;
+    public string berth_name = "";
+    public double alongside_gap_m, alongside_angle_deg, stop_gap_m, stop_speed_kn, moored_speed_kn, moored_hold_s, target_time_s;
+
+    public static SessionMooringTask From(ScenarioDefinition s)
+    {
+        var r = new SessionMooringTask();
+        if (s == null || !s.IsMooring) return r;
+        MooringTaskDefinition t = s.mooring;
+        BerthArea b = t.BerthIn(s.waterArea);
+        r.enabled = true;
+        r.berth_index = t.berthIndex;
+        r.berth_name = b != null ? b.name ?? "" : "";
+        r.alongside_gap_m = SessionMeta.R(t.alongsideGapM); r.alongside_angle_deg = SessionMeta.R(t.alongsideAngleDeg);
+        r.stop_gap_m = SessionMeta.R(t.stopGapM); r.stop_speed_kn = SessionMeta.R(t.stopSpeedKnots);
+        r.moored_speed_kn = SessionMeta.R(t.mooredSpeedKnots); r.moored_hold_s = SessionMeta.R(t.mooredHoldS);
+        r.target_time_s = SessionMeta.R(t.targetTimeS);
+        return r;
+    }
+
+    /// <summary>Задание для оценки и прогонов (null — не швартовка).</summary>
+    public MooringTaskDefinition ToDefinition() => !enabled ? null : new MooringTaskDefinition
+    {
+        enabled = true, berthIndex = berth_index,
+        alongsideGapM = (float)alongside_gap_m, alongsideAngleDeg = (float)alongside_angle_deg,
+        stopGapM = (float)stop_gap_m, stopSpeedKnots = (float)stop_speed_kn,
+        mooredSpeedKnots = (float)moored_speed_kn, mooredHoldS = (float)moored_hold_s, targetTimeS = (float)target_time_s
+    };
 }
 
 [Serializable]
@@ -437,6 +477,9 @@ public class SessionSummary
     public string trainer_mode_start = "", trainer_mode_highest = "";
     public double training_mode_from_s = -1, instructor_mode_from_s = -1;
     public int trainer_mode_changes;
+    /// <summary>19.2б-3: сценарий швартовки — выполнено заданий (из 4), время «ошвартован», с (−1 — нет).</summary>
+    public int mooring_stages_done;
+    public double moored_s = -1;
 
     public static SessionSummary From(ExerciseSummary s) => new SessionSummary
     {
@@ -449,6 +492,7 @@ public class SessionSummary
         max_abs_xte_m = Math.Round(s.MaxAbsXte, 2), time_outside_corridor_s = Math.Round(s.TimeOutsideCorridor, 2),
         corridor_exits = s.CorridorExits, shoal_warnings = s.ShoalWarnings, groundings = s.Groundings,
         collisions = s.Collisions,
-        helm_actions = s.HelmActions, telegraph_orders = s.TelegraphOrders, horn_signals = s.HornSignals, weather_changes = s.WeatherChanges
+        helm_actions = s.HelmActions, telegraph_orders = s.TelegraphOrders, horn_signals = s.HornSignals, weather_changes = s.WeatherChanges,
+        mooring_stages_done = s.MooringStagesDone, moored_s = double.IsNaN(s.MooredAt) ? -1 : Math.Round(s.MooredAt, 2)
     };
 }

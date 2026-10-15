@@ -24,6 +24,12 @@
 // Запрос 15: Load берёт сценарий для выбранного типа судна (ShipTypeSwitcher.VariantFor): на катере —
 //   копия «-FB» с пересчитанной начальной скоростью; Restart загружает тот же исходник заново.
 //
+// 19.2б-3: сценарий швартовки (ScenarioDefinition.mooring) — Load ставит модель движения сценария
+//   (ScenarioMotionModel; «как выбрано» возвращает модель, бывшую до сценария с заданной моделью);
+//   в FixedUpdate этапы задания (MooringTaskTracker по BerthReadout и состоянию MooringController) →
+//   события MooringStage; «ошвартован» завершает упражнение (ScenarioEndReason.Moored). На катере
+//   сценарий швартовки грузится на модели 45 м (тип судна переключается сам).
+//
 // Runner не содержит интерфейса: VR-панель и команды меню — ScenarioPanel,
 // вывод событий в консоль — ExerciseConsoleLog (отдельный подписчик шины).
 // ============================================================
@@ -57,6 +63,8 @@ public class ScenarioRunner : MonoBehaviour
     public RouteTracker Route { get; } = new RouteTracker();
     /// <summary>Итог последнего упражнения.</summary>
     public ExerciseSummary LastSummary { get; private set; }
+    /// <summary>19.2б-3: этапы задания швартовки (null — сценарий не швартовка).</summary>
+    public MooringTaskTracker MooringTask { get; private set; }
 
     /// <summary>Сменилась фаза или сценарий (для панели).</summary>
     public event Action StateChanged;
@@ -89,6 +97,7 @@ public class ScenarioRunner : MonoBehaviour
 
     void OnDestroy()
     {
+        if (navigation != null) navigation.MotionModelChanged -= OnMotionModelChanged;
         if (Instance == this) Instance = null;
     }
 
@@ -99,6 +108,7 @@ public class ScenarioRunner : MonoBehaviour
         if (waterArea == null) waterArea = FindAnyObjectByType<WaterAreaView>();
         if (weather == null) weather = FindAnyObjectByType<WeatherController>();
         scenarios.RemoveAll(s => s == null);
+        if (navigation != null) navigation.MotionModelChanged += OnMotionModelChanged;
     }
 
     // ─────────── Управление ───────────
@@ -107,14 +117,24 @@ public class ScenarioRunner : MonoBehaviour
     {
         if (scenario == null) return;
         if (CurrentPhase == Phase.Running) End(ScenarioEndReason.Aborted, true);
-        // Запрос 15: на катере — вариант сценария «-FB» (исходный ассет не меняется)
         ShipTypeSwitcher ship = ShipTypeSwitcher.Instance;
+        // 19.2б-3: швартовка — только модель 45 м (на катере силы причала выключены): тип судна — сам.
+        // Current сбрасывается, чтобы переключатель не перезагрузил прежний сценарий.
+        if (ScenarioVariants.SourceOf(scenario).IsMooring && ship != null && ship.Type == ShipType.FastBoat)
+        {
+            Debug.Log($"[Сценарий] «{scenario.title}» — сценарий швартовки, только на модели 45 м: тип судна переключён.");
+            Current = null;
+            CurrentPhase = Phase.Idle;
+            ship.SetType(ShipType.Model45m);
+        }
+        // Запрос 15: на катере — вариант сценария «-FB» (исходный ассет не меняется)
         scenario = ship != null ? ship.VariantFor(scenario) : ScenarioVariants.SourceOf(scenario);
 
         foreach (string p in scenario.Validate())
             Debug.LogWarning($"[Сценарий] «{scenario.title}»: {p}", scenario);
 
         Current = scenario;
+        MooringTask = scenario.IsMooring ? new MooringTaskTracker(scenario.mooring) : null;
         if (navigation != null) navigation.Paused = true;
         ApplyScenario(scenario);
         CurrentPhase = Phase.Briefing;
@@ -134,6 +154,7 @@ public class ScenarioRunner : MonoBehaviour
         ExerciseTime = 0;
         ExerciseEvents.BeginExercise(Current.id);
         Route.Reset(Current.route);
+        MooringTask?.Reset();
         CurrentPhase = Phase.Running;
         LastSummary = null;
         Publish(new ExerciseEvent(ExerciseEventType.ExerciseStarted) { Subject = Current.title });
@@ -199,6 +220,8 @@ public class ScenarioRunner : MonoBehaviour
 
         TrackRoute(dt);
         if (CurrentPhase != Phase.Running) return;
+        TrackMooring(dt);
+        if (CurrentPhase != Phase.Running) return;
 
         if (Current.Ends(ScenarioEndConditions.TimeLimit) && Current.timeLimitSeconds > 0f && ExerciseTime >= Current.timeLimitSeconds)
             End(ScenarioEndReason.TimeLimit, false);
@@ -227,6 +250,33 @@ public class ScenarioRunner : MonoBehaviour
                     return;
             }
         }
+    }
+
+    // 19.2б-3: этапы задания швартовки — по причалу задания (зазоры, угол — BerthReadout) и состоянию
+    // MooringController (касание кранцев, концы — только если считается именно этот причал)
+    private void TrackMooring(double dt)
+    {
+        ShipDynamicsModel m = navigation != null ? navigation.Model : null;
+        if (MooringTask == null || m == null) return;
+        BerthArea berth = Current.mooring.BerthIn(Current.waterArea);
+        var x = new MooringTaskInput
+        {
+            Readout = BerthReadout.Compute(berth, navigation.parameters, m),
+            SpeedOverGroundKn = Math.Sqrt(m.VelocityEast * m.VelocityEast + m.VelocityNorth * m.VelocityNorth) / ShipParameters.KnotsToMs
+        };
+        MooringController mc = MooringController.Instance;
+        if (mc != null && berth != null && mc.ActiveBerth == berth)
+        {
+            x.FenderContact = mc.System.InContact;
+            MooringTasks.LinesFast(mc.System.Lines, out x.BowLineFast, out x.SternLineFast);
+        }
+        foreach (MooringStage st in MooringTask.Update(x, ExerciseTime, dt))
+            Publish(new ExerciseEvent(ExerciseEventType.MooringStage)
+            {
+                Index = (int)st, Subject = MooringTasks.Title(st),
+                Value = x.Readout.Valid ? Math.Max(x.Readout.BowGapM, x.Readout.SternGapM) : double.NaN, Value2 = x.SpeedOverGroundKn
+            });
+        if (MooringTask.Moored && Current.Ends(ScenarioEndConditions.Moored)) End(ScenarioEndReason.Moored, false);
     }
 
     // Посадка и столкновение — из шины (источник — GroundingMonitor, в B3 — модуль целей)
@@ -261,6 +311,7 @@ public class ScenarioRunner : MonoBehaviour
         ShipParameters ship = s.shipParameters != null ? s.shipParameters
             : ShipTypeSwitcher.Instance != null ? ShipTypeSwitcher.Instance.ActiveParameters : null;
         if (navigation != null && ship != null) navigation.parameters = ship;
+        ApplyMotionModel(s);
         if (waterArea != null && s.waterArea != null && waterArea.area != s.waterArea)
         {
             waterArea.area = s.waterArea;
@@ -277,6 +328,36 @@ public class ScenarioRunner : MonoBehaviour
         if (s.visibilityMeters > 0f)
             Debug.Log($"[Сценарий] Видимость {s.visibilityMeters:F0} м ({s.visibilityMeters / 1852f:F2} мили), плотность тумана {WeatherVisibility.DensityFor(s.visibilityMeters):F5}.");
         PlaceShip(s);
+    }
+
+    // 19.2б-3: модель движения сценария. Модель до первого сценария с заданной моделью запоминается
+    // и возвращается при загрузке сценария «как выбрано»; если её сменили сами (меню, «Судно к причалу») —
+    // остаётся выбранная.
+    private ShipNavigation.MotionChoice? motionBeforeScenario;
+    private bool settingMotion;
+
+    private void ApplyMotionModel(ScenarioDefinition s)
+    {
+        if (navigation == null) return;
+        settingMotion = true;
+        try
+        {
+            if (s.motionModel == ScenarioMotionModel.AsSelected)
+            {
+                if (motionBeforeScenario.HasValue) navigation.SetMotionModel(motionBeforeScenario.Value);
+                motionBeforeScenario = null;
+                return;
+            }
+            if (!motionBeforeScenario.HasValue) motionBeforeScenario = navigation.motionModel;
+            navigation.SetMotionModel(s.motionModel == ScenarioMotionModel.Nomoto
+                ? ShipNavigation.MotionChoice.Course1Dof : ShipNavigation.MotionChoice.Manoeuvring3Dof);
+        }
+        finally { settingMotion = false; }
+    }
+
+    private void OnMotionModelChanged(bool to3Dof)
+    {
+        if (!settingMotion) motionBeforeScenario = null;
     }
 
     private void PlaceShip(ScenarioDefinition s)

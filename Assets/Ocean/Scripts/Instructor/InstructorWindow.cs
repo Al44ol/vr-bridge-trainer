@@ -384,6 +384,17 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
             string vis = weather.VisibilityOverrideM > 0 ? $"{ScenarioText.Num(weather.VisibilityOverrideM / 1852.0, 2)} мили (задана)" : $"{ScenarioText.Num(weather.VisibilityM / 1852.0, 1)} мили (по погоде)";
             b.AppendLine($"{ScenarioText.WeatherTitle(weather.CurrentPresetId)}, {ScenarioText.TimeOfDayTitle(weather.CurrentTimeOfDay).ToLowerInvariant()}, видимость {vis}");
         }
+        // 19.2б-3: сценарий швартовки — выполненные задания и строка причала
+        MooringTaskTracker mt = runner != null && runner.CurrentPhase != ScenarioRunner.Phase.Idle ? runner.MooringTask : null;
+        if (mt != null)
+        {
+            var done = new StringBuilder();
+            for (int i = 1; i <= MooringTaskTracker.StageCount; i++) done.Append(mt.Done((MooringStage)i) ? " +" : " –");
+            string hold = !mt.Moored && mt.HoldTime > 0.0 ? $", ошвартован через {ScenarioText.Num(Math.Max(0.0, mt.Task.mooredHoldS - mt.HoldTime))} с" : "";
+            b.AppendLine($"Швартовка: заданий {mt.DoneCount} из {MooringTaskTracker.StageCount} ({done.ToString().Trim()}){hold}");
+            BerthReadout br = BerthReadout.Compute(runner.Current.mooring.BerthIn(runner.Current.waterArea), navigation.parameters, navigation.Model);
+            if (br.Valid) b.AppendLine(br.Format().Replace("\n", "   "));
+        }
         if (inputs != null && (inputs.EngineFailed || inputs.SteeringFailed))
             b.AppendLine($"<color=#FFC85A><b>Вводные: {(inputs.EngineFailed ? "отказ ГД " : "")}{(inputs.SteeringFailed ? "отказ руля" : "")}</b>" +
                          $"{(inputs.announceFailures ? "" : " (обучающийся не оповещён)")}</color>");

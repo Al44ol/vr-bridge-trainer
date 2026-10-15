@@ -100,6 +100,14 @@ Unity Test Runner → EditMode (сейчас **250**): `TestResults.xml` — п�
   - **лог Setup 19.2 Berth, шаг 7** — пол у штурвала, край галереи и борт по каждому борту, построена ли площадка `WingPlatform_*` / невидимый пол `WingFloor_*`, координаты точек; высота клюзов (верх Hull над ватерлинией).
 - Формулы провиса и строки причала — `MooringLineShape`, `BerthReadout` (Core), ThesisNotes 19.19.2, 19.19.4.
 
+### 2.6ж. Сценарий швартовки (запрос 19.2б-3, часть «а»)
+- 👓 В шлеме видно: сценарий 19-01 «Швартовка к причалу лагом» в списке выбора, брифинг с четырьмя заданиями и их условиями, вкладка «Задание» планшета с отметками «выполнено мм:сс», итог «ошвартован», критерий M1 на вкладке «Критерии». Не видно в шлеме:
+  - **ассеты** `Assets/Ocean/Scenarios/Scenario_19-01_Berth.asset` и `Assessment_Berthing.asset` (маршрутные критерии выключены) — создаёт `Tools/VR Bridge/Setup 19.2 Berth Scenario`, заново — `Rebuild Demo Berth Scenario`; Setup дописывает M1 в `Assessment_Default.asset`;
+  - **события** `MooringStage` (этап задания: зазор до кромки, ход) и `ExerciseEnded` с причиной `Moored` — в `events.csv` и журнале `report.html`;
+  - **`session.json`**: `scenario.motion_model`, `scenario.mooring` (причал, пороги этапов, контрольное время), `summary.mooring_stages_done`, `summary.moored_s`; по ним офлайн-оценка считает M1 бит в бит как в шлеме;
+  - **строка «Швартовка: заданий N из 4 (+ + – –)»** и строка причала в окне инструктора;
+  - **сквозной прогон швартовки в тесте** `BerthScenarioTests.EndToEnd_LinesHauledToMoored` (вывод теста: время этапов, скорость навала) — ThesisNotes 19.21.6.
+
 ### 2.7. Источники значений параметров
 `Assets/Ocean/Settings/ShipParameters_Sources.md` — откуда взято каждое значение ShipParameters (Mariner, KCS, Model45m, допущения).
 

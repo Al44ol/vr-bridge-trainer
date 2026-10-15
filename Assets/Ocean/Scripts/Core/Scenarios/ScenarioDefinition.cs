@@ -18,7 +18,9 @@
 //   • оценка (C2): набор критериев (AssessmentCriteria; пусто — значения по
 //     умолчанию), дистанция обнаружения целей (0 — по видимости и времени суток),
 //     у путевой точки — признак «участок — узкость» (правило 9 МППСС),
-//     у цели — допустимая дистанция расхождения CPA_доп.
+//     у цели — допустимая дистанция расхождения CPA_доп;
+//   • 19.2б-3: модель движения на время сценария (по умолчанию — как выбрано в тренажёре)
+//     и задание швартовки (MooringTaskDefinition: причал, условия этапов, финиш «ошвартован»).
 // Досрочное завершение инструктором доступно всегда и в условиях не задаётся.
 // ============================================================
 using System;
@@ -65,7 +67,16 @@ public enum ScenarioEndConditions
     [InspectorName("Посадка на мель")] Grounding = 2,
     [InspectorName("Столкновение (B3)")] Collision = 4,
     [InspectorName("Истечение времени")] TimeLimit = 8,
+    [InspectorName("Ошвартован (сценарий швартовки)")] Moored = 16,
     All = Arrival | Grounding | Collision | TimeLimit
+}
+
+/// <summary>Модель движения своего судна на время сценария (19.2б-3).</summary>
+public enum ScenarioMotionModel
+{
+    [InspectorName("Как выбрано в тренажёре")] AsSelected,
+    [InspectorName("Номото (курс)")] Nomoto,
+    [InspectorName("3 СС (малые скорости, швартовка)")] Manoeuvring3Dof
 }
 
 /// <summary>Начальные условия своего судна.</summary>
@@ -120,6 +131,8 @@ public class ScenarioDefinition : ScriptableObject
     public WaterArea waterArea;
     [Tooltip("Пусто — параметры, назначенные в сцене")]
     public ShipParameters shipParameters;
+    [Tooltip("Модель движения на время сценария (19.2б-3); «как выбрано» — прежнее поведение. Сценарий швартовки — 3 СС (силы причала только в ней)")]
+    public ScenarioMotionModel motionModel = ScenarioMotionModel.AsSelected;
 
     [Header("Начальные условия своего судна")]
     public OwnShipInitialState initial = new OwnShipInitialState();
@@ -151,6 +164,12 @@ public class ScenarioDefinition : ScriptableObject
     public AssessmentCriteria assessment;
     [Tooltip("Дистанция обнаружения целей, мили; 0 — по видимости и времени суток (днём — видимость, ночью — дальность огней)")]
     public float detectionRangeNm;
+
+    [Header("Швартовка (19.2б-3)")]
+    public MooringTaskDefinition mooring = new MooringTaskDefinition();
+
+    /// <summary>Сценарий швартовки (задания вместо маршрута).</summary>
+    public bool IsMooring => mooring != null && mooring.enabled;
 
     public bool Ends(ScenarioEndConditions c) => (endConditions & c) != 0;
 
@@ -204,7 +223,26 @@ public class ScenarioDefinition : ScriptableObject
         if (safeSpeedKnots < 0f) problems.Add("Безопасная скорость отрицательная.");
         if (detectionRangeNm < 0f) problems.Add("Дистанция обнаружения целей отрицательная.");
         ValidateTraffic(problems);
+        ValidateMooring(problems);
         return problems;
+    }
+
+    // Швартовка (19.2б-3)
+    private void ValidateMooring(List<string> problems)
+    {
+        if (!IsMooring)
+        {
+            if (Ends(ScenarioEndConditions.Moored)) problems.Add("Условие «ошвартован» включено, но задание швартовки выключено.");
+            return;
+        }
+        if (waterArea != null && mooring.BerthIn(waterArea) == null)
+            problems.Add($"Швартовка: в акватории нет причала № {mooring.berthIndex} (причалов {(waterArea.berths != null ? waterArea.berths.Count : 0)}).");
+        if (motionModel != ScenarioMotionModel.Manoeuvring3Dof)
+            problems.Add("Швартовка: силы причала и концов действуют только в модели 3 СС — выберите её в «Модель движения».");
+        if (!Ends(ScenarioEndConditions.Moored)) problems.Add("Швартовка: не включено условие завершения «ошвартован».");
+        if (Ends(ScenarioEndConditions.Arrival)) problems.Add("Швартовка: условие «прибытие в последнюю точку» завершит упражнение раньше швартовки.");
+        if (mooring.alongsideGapM <= 0f || mooring.stopGapM <= 0f || mooring.mooredHoldS < 0f || mooring.mooredSpeedKnots <= 0f || mooring.stopSpeedKnots <= 0f)
+            problems.Add("Швартовка: пороги этапов должны быть больше 0.");
     }
 
     // Другие суда (B3)

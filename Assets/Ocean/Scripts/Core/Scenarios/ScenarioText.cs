@@ -109,6 +109,7 @@ public static class ScenarioText
             case ScenarioEndReason.Collision: return "столкновение";
             case ScenarioEndReason.TimeLimit: return "истекло время";
             case ScenarioEndReason.Aborted: return "завершено досрочно";
+            case ScenarioEndReason.Moored: return "ошвартован";
             default: return "—";
         }
     }
@@ -163,6 +164,7 @@ public static class ScenarioText
         if (s.Ends(ScenarioEndConditions.Arrival)) parts.Add("прибытие в последнюю точку");
         if (s.Ends(ScenarioEndConditions.Grounding)) parts.Add("посадка на мель");
         if (s.Ends(ScenarioEndConditions.Collision)) parts.Add("столкновение");
+        if (s.Ends(ScenarioEndConditions.Moored)) parts.Add("ошвартован");
         if (s.Ends(ScenarioEndConditions.TimeLimit) && s.timeLimitSeconds > 0) parts.Add("истечение времени");
         return parts.Count > 0 ? string.Join(", ", parts) : "только по команде инструктора";
     }

@@ -27,7 +27,8 @@ public enum AssessmentGroup
     Reaction,     // время реакции
     Route,        // маршрут
     Accidents,    // аварии — провал, в балл не входят
-    Visibility    // ограниченная видимость (C4): туманные сигналы, безопасная скорость, правило 19
+    Visibility,   // ограниченная видимость (C4): туманные сигналы, безопасная скорость, правило 19
+    Mooring       // швартовка (19.2б-3): задание сценария швартовки
 }
 
 /// <summary>Описание критерия (методика, задаётся в коде).</summary>
@@ -122,6 +123,11 @@ public class AssessmentSettings
     public double MakingWayKnots => makingWayKnots > 0 ? makingWayKnots : 0.5;
     public double SafeSpeedGraceS => safeSpeedGraceS > 0 ? safeSpeedGraceS : 120.0;
     public double MinimumSteerageSf => minimumSteerageSf > 0 ? minimumSteerageSf : 0.2;
+
+    // ── Швартовка (19.2б-3). В снимках до 19.2б-3 поля нет (0) — вес по умолчанию; группа там и не оценивается.
+    [UnityEngine.Tooltip("Вес группы «Швартовка» (19.2б-3)")]
+    public double weightMooring = 1.0;
+    public double WeightMooring => weightMooring > 0 ? weightMooring : 1.0;
     public List<CriterionSetting> criteria = new List<CriterionSetting>();
 
     public AssessmentSettings() { }
@@ -160,7 +166,8 @@ public class AssessmentSettings
 
     public double GroupWeight(AssessmentGroup g) =>
         g == AssessmentGroup.Encounters ? weightEncounters : g == AssessmentGroup.Reaction ? weightReaction :
-        g == AssessmentGroup.Route ? weightRoute : g == AssessmentGroup.Visibility ? WeightVisibility : 0.0;
+        g == AssessmentGroup.Route ? weightRoute : g == AssessmentGroup.Visibility ? WeightVisibility :
+        g == AssessmentGroup.Mooring ? WeightMooring : 0.0;
 
     /// <summary>Добавить недостающие критерии каталога (после обновления методики).</summary>
     public int AddMissing()
@@ -181,10 +188,11 @@ public static class AssessmentCatalog
     public const string A1 = "A1", A2 = "A2";
     public const string F1 = "F1", F2 = "F2", F3 = "F3", F4 = "F4", F5 = "F5", F6 = "F6";
     public const string N1 = "N1", N2 = "N2";
+    public const string M1 = "M1";
 
     /// <summary>Группы, входящие в балл (порядок вывода).</summary>
     public static readonly AssessmentGroup[] ScoredGroups =
-        { AssessmentGroup.Encounters, AssessmentGroup.Reaction, AssessmentGroup.Route, AssessmentGroup.Visibility };
+        { AssessmentGroup.Encounters, AssessmentGroup.Reaction, AssessmentGroup.Route, AssessmentGroup.Visibility, AssessmentGroup.Mooring };
 
     private static CriterionInfo C(string code, AssessmentGroup g, string title, string rule, string unit, bool higher,
                                    bool mandatory, double full, double pass, double zero, double weight, string basis) =>
@@ -254,6 +262,9 @@ public static class AssessmentCatalog
           true, 30, 60, 120, 8, "от первого слышимого сигнала невидимой цели впереди траверза до команды «Самый малый вперёд» или ниже; нормы времени нет — предварительно"),
         C(F6, AssessmentGroup.Visibility, "В тумане — не влево на судно впереди траверза", "правило 19 г", "1 — нет, 0 — нарушение", true,
           true, 1, 1, 0, 8, "норма (направление): нет перекладки влево на известную, но невидимую цель впереди траверза (кроме обгоняемой) и поворота в сторону цели на траверзе или позади него"),
+        // ── Швартовка (19.2б-3; оценивается только в сценарии швартовки) ──
+        C(M1, AssessmentGroup.Mooring, "Задание швартовки выполнено (ошвартован)", "задание сценария", "доля заданий", true,
+          true, 1, 1, 0, 10, "выполнено заданий из 4 (лагом, у кранцев, концы с носа и кормы, ошвартован — концы поданы, у кранцев, ход ≤ 0,1 уз 30 с); как R4 «пройдены все путевые точки»: зачёт — только всё задание"),
         // ── Аварии ──
         C(A1, AssessmentGroup.Accidents, "Посадка на мель", "провал", "число", false,
           true, 0, 0, 1, 0, "посадка — провал упражнения независимо от баллов"),
@@ -280,6 +291,7 @@ public static class AssessmentCatalog
             case AssessmentGroup.Reaction: return "Время реакции";
             case AssessmentGroup.Route: return "Маршрут";
             case AssessmentGroup.Visibility: return "Ограниченная видимость";
+            case AssessmentGroup.Mooring: return "Швартовка";
             default: return "Аварии";
         }
     }

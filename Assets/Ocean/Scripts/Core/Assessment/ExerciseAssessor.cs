@@ -194,6 +194,8 @@ public sealed class ExerciseAssessor
     private double visibilityOverride;
     private readonly List<bool> ownRestricted = new List<bool>();
     private readonly List<SoundBlast> blasts = new List<SoundBlast>();
+    // 19.2б-3: выполненные задания швартовки (события MooringStage)
+    private readonly HashSet<int> mooringStages = new HashSet<int>();
 
     private const double Nm = NavigationLights.MetersPerNm;
 
@@ -296,6 +298,9 @@ public sealed class ExerciseAssessor
                 break;
             case ExerciseEventType.WaypointPassed:
                 passedWaypoints.Add(e.Index);
+                break;
+            case ExerciseEventType.MooringStage:
+                mooringStages.Add(e.Index);
                 break;
             case ExerciseEventType.EngineFailure:
             case ExerciseEventType.SteeringFailure:
@@ -783,6 +788,7 @@ public sealed class ExerciseAssessor
         EvaluateRoute(r, final, aborted);
         EvaluateVisibility(r, final);
         EvaluateFailures(r, final);
+        EvaluateMooring(r, final, aborted);
 
         Add(r, AssessmentCatalog.A1, "", groundings, groundings > 0 ? $"посадка на мель «{firstGrounding}»" : "нет");
         Add(r, AssessmentCatalog.A2, "", collisions, collisions > 0 ? $"столкновение с «{firstCollision}»" : "нет");
@@ -803,6 +809,20 @@ public sealed class ExerciseAssessor
             Passed = AssessmentResult.Meets(value, set.pass, info.HigherIsBetter),
             Score = AssessmentResult.ScoreOf(value, set, info.HigherIsBetter), Note = note ?? ""
         });
+    }
+
+    // 19.2б-3: задание швартовки — как R4 «пройдены все путевые точки»: по завершении, кроме досрочного
+    private void EvaluateMooring(AssessmentResult r, bool final, bool aborted)
+    {
+        if (Context.Mooring == null || !final) return;
+        if (aborted) { Skip(r, AssessmentCatalog.M1, "", "завершено досрочно"); return; }
+        int done = 0;
+        var missing = new List<string>();
+        for (int i = 1; i <= MooringTaskTracker.StageCount; i++)
+            if (mooringStages.Contains(i)) done++; else missing.Add(MooringTasks.Title((MooringStage)i).ToLowerInvariant());
+        Add(r, AssessmentCatalog.M1, "", (double)done / MooringTaskTracker.StageCount,
+            missing.Count == 0 ? $"все {MooringTaskTracker.StageCount} задания выполнены, ошвартован {ScenarioText.Clock(EndTime)}"
+                               : $"выполнено {done} из {MooringTaskTracker.StageCount}; не выполнено: {string.Join(", ", missing)}");
     }
 
     private void Skip(AssessmentResult r, string code, string subject, string why)
