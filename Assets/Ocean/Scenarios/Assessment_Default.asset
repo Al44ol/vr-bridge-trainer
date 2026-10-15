@@ -46,6 +46,7 @@ MonoBehaviour:
     makingWayKnots: 0.5
     safeSpeedGraceS: 120
     minimumSteerageSf: 0.2
+    weightMooring: 1
     criteria:
     - code: E1
       enabled: 1
@@ -243,3 +244,10 @@ MonoBehaviour:
       pass: 30
       zero: 60
       weight: 1
+    - code: M1
+      enabled: 1
+      mandatory: 1
+      full: 1
+      pass: 1
+      zero: 0
+      weight: 10
