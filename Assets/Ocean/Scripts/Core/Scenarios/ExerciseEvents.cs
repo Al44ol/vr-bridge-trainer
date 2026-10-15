@@ -59,6 +59,20 @@
 //   TrainerModeChanged   Index — новый режим (TrainerMode: 0 экзамен, 1 обучение, 2 инструктор);
 //                        Value — прежний режим, −1 — состояние на начало упражнения (при ExerciseStarted);
 //                        ByInstructor — переключено из окна инструктора
+// Швартовка (19.2б; источники — MooringController по событиям MooringSystem, ShipControlOrders):
+//   BerthingImpact       навал на кранцы: Value — скорость точки контакта к кромке, уз; Value2 — энергия,
+//                        поглощённая кранцами, кДж; Index — наибольшее обжатие, % номинала; Subject — число кранцев
+//   FenderOverload       кранец обжат сверх номинала: Index — кранец (с 0), Value — δ/δ_н
+//   QuayImpact           удар корпусом о кромку причала: Value — скорость к кромке, уз
+//   LineMadeFast         конец подан: Index — конец (MooringLineKind), Subject — название, Value — длина, м; Value2 — кнехт (с 0)
+//   LineReleased         конец отдан: Index, Subject
+//   LineOverload         натяжение > 0,5·MBL: Index, Subject, Value — T, кН; Value2 — T/MBL
+//   LineOverloadCleared  натяжение < 0,45·MBL: Index, Subject
+//   LineBroken           обрыв: Index, Subject, Value — наибольшее натяжение, кН
+//   ThrusterChanged      положение рычага подруливающего: Index — ThrusterOrder (0 ЛБ 100 … 4 ПБ 100),
+//                        Value — команда, % (> 0 — ПБ); Value2 — прежняя, %; Subject — «рычаг» / «меню»
+//   ControlOrder         команда из меню «Управление» (кнопка B, «как рулевому»): Subject — орган
+//                        («руль» / «машина» / «подруливающее»), Value — новое значение (°, SF, %), Value2 — прежнее
 // XTE > 0 — судно правее линии пути.
 // ============================================================
 using System;
@@ -104,7 +118,18 @@ public enum ExerciseEventType
     // Навигационный планшет (D2)
     PlotterRevealTargets,
     // Режим тренажёра (перед 19.2)
-    TrainerModeChanged
+    TrainerModeChanged,
+    // Швартовка (19.2б)
+    BerthingImpact,
+    FenderOverload,
+    QuayImpact,
+    LineMadeFast,
+    LineReleased,
+    LineOverload,
+    LineOverloadCleared,
+    LineBroken,
+    ThrusterChanged,
+    ControlOrder
 }
 
 public enum ScenarioEndReason
@@ -202,6 +227,20 @@ public struct ExerciseEvent
                     ? $"Режим тренажёра на начало: {TrainerModes.Title(TrainerModes.FromIndex(Index))}"
                     : $"РЕЖИМ ТРЕНАЖЁРА: {TrainerModes.Title(TrainerModes.FromIndex(Index))} (был: {TrainerModes.Title(TrainerModes.FromIndex((int)Value))})" +
                       (ByInstructor ? " (окно инструктора)" : "");
+            case ExerciseEventType.BerthingImpact:
+                return $"Навал на кранцы: {ScenarioText.Num(Value, 2)} уз, энергия {ScenarioText.Num(Value2, 1)} кДж, " +
+                       $"обжатие {Index} % номинала, кранцев {Subject}";
+            case ExerciseEventType.FenderOverload: return $"КРАНЕЦ {Index + 1} ПЕРЕГРУЖЕН: обжатие {ScenarioText.Num(Value * 100.0)} % номинала";
+            case ExerciseEventType.QuayImpact: return $"УДАР О ПРИЧАЛ корпусом: {ScenarioText.Num(Value, 2)} уз";
+            case ExerciseEventType.LineMadeFast: return $"Подан {Subject}: {ScenarioText.Num(Value, 1)} м, кнехт {ScenarioText.Num(Value2 + 1)}";
+            case ExerciseEventType.LineReleased: return $"Отдан {Subject}";
+            case ExerciseEventType.LineOverload: return $"ПЕРЕГРУЗКА: {Subject}, {ScenarioText.Num(Value)} кН ({ScenarioText.Num(Value2 * 100.0)} % MBL)";
+            case ExerciseEventType.LineOverloadCleared: return $"Натяжение в норме: {Subject}";
+            case ExerciseEventType.LineBroken: return $"ОБРЫВ: {Subject}, {ScenarioText.Num(Value)} кН";
+            case ExerciseEventType.ThrusterChanged:
+                return $"Подруливающее: {ThrusterOrders.TitleOfPercent(Value)} ({Subject})";
+            case ExerciseEventType.ControlOrder:
+                return $"Команда «{Subject}»: {ControlOrders.ValueText(Subject, Value)} (было {ControlOrders.ValueText(Subject, Value2)})";
         }
         return $"{Type} {Subject}";
     }

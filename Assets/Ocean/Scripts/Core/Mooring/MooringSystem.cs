@@ -30,7 +30,7 @@ public enum MooringEventType
     QuayImpact,           // корпус ударил о кромку причала: Value — v_n, м/с
     LineMadeFast,         // конец подан: Index — конец, Value — длина, м; Value2 — кнехт
     LineReleased,         // конец отдан: Index
-    LineOverload,         // натяжение > 0,5·MBL: Index, Value — T, Н
+    LineOverload,         // натяжение > 0,5·MBL: Index, Value — T, Н; Value2 — T/MBL
     LineOverloadCleared,  // натяжение < 0,45·MBL: Index
     LineBroken            // обрыв: Index, Value — T_max, Н
 }
@@ -286,7 +286,7 @@ public sealed class MooringSystem
             switch (ev)
             {
                 case MooringLineEvent.Overload:
-                    Events.Add(new MooringEvent { Type = MooringEventType.LineOverload, Time = time, Index = i, Value = line.Tension, Subject = line.Title() });
+                    Events.Add(new MooringEvent { Type = MooringEventType.LineOverload, Time = time, Index = i, Value = line.Tension, Value2 = line.Tension / line.Mbl, Subject = line.Title() });
                     break;
                 case MooringLineEvent.OverloadCleared:
                     Events.Add(new MooringEvent { Type = MooringEventType.LineOverloadCleared, Time = time, Index = i, Subject = line.Title() });

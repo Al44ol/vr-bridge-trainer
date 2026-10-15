@@ -14,6 +14,9 @@
 //   • фарватеры — ось (ломаная) и ширина: рекомендованный путь, по нему
 //     строится маршрут сценария (B2);
 //   • границы района и глубина по умолчанию (вне мелей).
+//   • причалы (запрос 19.2б) — кромка с кранцами и кнехтами (BerthArea); для
+//     детектора посадки это не суша: у кромки нет «НА МЕЛИ» и предупреждения 1 кбт,
+//     контакт с причалом считает MooringSystem (только модель 3 СС).
 //
 // Редактирование — в Scene View мышью (WaterAreaViewEditor), в сцене
 // акваторию показывает WaterAreaView. Сборка VRBridge.Core — без MonoBehaviour,
@@ -116,6 +119,8 @@ public class WaterArea : ScriptableObject
     public List<ShoalArea> shoals = new List<ShoalArea>();
     public List<LandArea> land = new List<LandArea>();
     public List<FairwayLine> fairways = new List<FairwayLine>();
+    [Tooltip("Причалы (19.2б): кромка, кранцы, кнехты — BerthArea. Для детектора посадки причал НЕ суша")]
+    public List<BerthArea> berths = new List<BerthArea>();
 
     [Tooltip("Счётчик изменений (растёт при правке в редакторе; WaterAreaView пересобирает модели)")]
     public int revision;
@@ -140,6 +145,21 @@ public class WaterArea : ScriptableObject
             if (s != null && s.depth < depth && Polygon2D.Contains(s.vertices, p))
                 depth = s.depth;
         return depth;
+    }
+
+    /// <summary>Ближайший к точке причал (19.2б): номер в berths, −1 — причалов нет; distance — до кромки, м.</summary>
+    public int NearestBerth(WorldPosition p, out double distance)
+    {
+        int best = -1;
+        distance = double.PositiveInfinity;
+        if (berths == null) return best;
+        for (int i = 0; i < berths.Count; i++)
+        {
+            if (berths[i] == null || berths[i].Length < 1.0) continue;
+            double d = berths[i].DistanceTo(p);
+            if (d < distance) { distance = d; best = i; }
+        }
+        return best;
     }
 
     /// <summary>Внутри границ района.</summary>

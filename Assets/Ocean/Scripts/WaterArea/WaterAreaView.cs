@@ -18,6 +18,9 @@
 // Мели на воде не видны. Отладочный слой (команда меню A «Подсказки» → «Показать мели»; до 19.2 — «Отладка»)
 // рисует их контуры над водой: красные — опасные для своего судна
 // (глубина < d + Δ, по GroundingMonitor), жёлтые — прочие; голубым — фарватер.
+// Причалы (запрос 19.2б): пирс (кромка, тыл structureWidthM, до berthBottomDepth под водой), полоса
+// по кромке, кранцы (цилиндры вдоль кромки; обжатие из MooringController — кранец сплющивается)
+// и кнехты. Пирс неподвижен на среднем уровне; корень — в точке A кромки (точность float у кранцев).
 // Порядок выполнения −60: после WorldOrigin, ShipNavigation, OceanWaves, ShipMotion.
 // ============================================================
 using System.Collections.Generic;
@@ -63,6 +66,16 @@ public class WaterAreaView : MonoBehaviour
     [Tooltip("Ширина откоса в высотах берега")]
     public float landSlopeFactor = 2.5f;
 
+    [Header("Причалы (19.2б; материалы ставит Setup 19.2 Berth, пусто — простые)")]
+    public Material berthConcreteMaterial;
+    public Material berthEdgeMaterial;
+    public Material fenderMaterial;
+    public Material bollardMaterial;
+    [Tooltip("Пирс уходит под воду на, м")]
+    public float berthBottomDepth = 4f;
+    [Tooltip("Верх кранца ниже кромки на, м")]
+    public float fenderDropM = 0.25f;
+
     [Header("Отладка")]
     [Tooltip("Контуры мелей и фарватера на воде (переключается из меню мостика)")]
     public bool showShoalsOnWater;
@@ -86,7 +99,18 @@ public class WaterAreaView : MonoBehaviour
     private readonly List<Buoy> buoys = new List<Buoy>();
     private readonly Dictionary<AidType, WaterAreaMeshes.BuoyMesh> meshCache = new Dictionary<AidType, WaterAreaMeshes.BuoyMesh>();
     private readonly List<Mesh> landMeshes = new List<Mesh>();
-    private Transform buoyRoot, landRoot, debugRoot;
+    private Transform buoyRoot, landRoot, debugRoot, berthRoot;
+
+    private sealed class BerthView
+    {
+        public BerthArea Berth;
+        public Transform Root;
+        public Transform[] Fenders;
+        public float Diameter;
+        public bool Deflected;
+    }
+    private readonly List<BerthView> berthViews = new List<BerthView>();
+    private readonly List<Material> runtimeMaterials = new List<Material>();
     private int builtRevision = int.MinValue;
     private WaterArea builtArea;
     private bool builtDebug;
@@ -168,12 +192,16 @@ public class WaterAreaView : MonoBehaviour
         meshCache.Clear();
         foreach (Mesh m in landMeshes) if (m != null) Destroy(m);
         landMeshes.Clear();
+        foreach (Material m in runtimeMaterials) if (m != null) Destroy(m);
+        runtimeMaterials.Clear();
     }
+
+    private int BerthCount => area != null && area.berths != null ? area.berths.Count : 0;
 
     void Update()
     {
         if (area == null || Origin == null) return;
-        if (area != builtArea || area.revision != builtRevision || buoys.Count != area.aids.Count) Rebuild();
+        if (area != builtArea || area.revision != builtRevision || buoys.Count != area.aids.Count || berthViews.Count != BerthCount) Rebuild();
         if (showShoalsOnWater != builtDebug || (showShoalsOnWater && !Mathf.Approximately(builtDangerDepth, DangerDepth))) RebuildDebug();
         if (landRoot != null && landRoot.gameObject.activeSelf != showLand) landRoot.gameObject.SetActive(showLand);
 
@@ -181,6 +209,7 @@ public class WaterAreaView : MonoBehaviour
         UpdateBuoys();
         PlaceAnchored(landRoot);
         PlaceAnchored(debugRoot, debugLineHeight);
+        UpdateBerths();
         watch.Stop();
         updateTimeUs = Mathf.Lerp(updateTimeUs, (float)(watch.Elapsed.TotalMilliseconds * 1000.0), 0.05f);
     }
@@ -290,7 +319,114 @@ public class WaterAreaView : MonoBehaviour
         }
         landRoot.gameObject.SetActive(showLand);
 
+        berthRoot = new GameObject("Berths").transform;
+        berthRoot.SetParent(transform, false);
+        for (int i = 0; i < BerthCount; i++) berthViews.Add(BuildBerth(area.berths[i]));
+
         RebuildDebug();
+    }
+
+    // ─────────── Причалы (19.2б) ───────────
+    // Локальные оси корня: +X — вдоль кромки (t, от A к B), +Y — вверх от среднего уровня,
+    // +Z — от кромки в сторону берега (−n). Корень — в точке A, поворот LookRotation(−n).
+    private BerthView BuildBerth(BerthArea b)
+    {
+        var view = new BerthView { Berth = b, Diameter = b != null ? b.fenderOuterDiameterM : 0f };
+        var root = new GameObject(b != null && !string.IsNullOrEmpty(b.name) ? b.name : "Причал").transform;
+        root.SetParent(berthRoot, false);
+        view.Root = root;
+        if (b == null || b.Length < 1.0) { view.Fenders = new Transform[0]; return view; }
+
+        float len = (float)b.Length, h = b.quayHeightM, w = Mathf.Max(2f, b.structureWidthM), bottom = Mathf.Max(0.5f, berthBottomDepth);
+        Material concrete = BerthMaterial(berthConcreteMaterial, "Berth_Concrete_rt", new Color(0.55f, 0.55f, 0.53f));
+        Material edge = BerthMaterial(berthEdgeMaterial, "Berth_Edge_rt", new Color(0.9f, 0.75f, 0.1f));
+        Material rubber = BerthMaterial(fenderMaterial, "Berth_Fender_rt", new Color(0.06f, 0.06f, 0.06f));
+        Material iron = BerthMaterial(bollardMaterial, "Berth_Bollard_rt", new Color(0.18f, 0.2f, 0.22f));
+
+        BerthPart(PrimitiveType.Cube, "Pier", root, new Vector3(0.5f * len, 0.5f * (h - bottom), 0.5f * w),
+                  Quaternion.identity, new Vector3(len, h + bottom, w), concrete);
+        BerthPart(PrimitiveType.Cube, "EdgeStripe", root, new Vector3(0.5f * len, h + 0.02f, 0.15f),
+                  Quaternion.identity, new Vector3(len, 0.04f, 0.3f), edge);
+
+        // Кранцы: цилиндр по кромке (ось цилиндра Unity — Y → поворот на 90° вокруг Z)
+        float d = Mathf.Max(0.05f, b.fenderOuterDiameterM), fl = Mathf.Max(0.2f, b.fenderLengthM);
+        float yF = Mathf.Max(0.5f * d + 0.2f, h - fenderDropM - 0.5f * d);
+        List<double> ft = b.FenderPositions();
+        view.Fenders = new Transform[ft.Count];
+        for (int i = 0; i < ft.Count; i++)
+            view.Fenders[i] = BerthPart(PrimitiveType.Cylinder, $"Fender_{i + 1}", root, new Vector3((float)ft[i], yF, -0.5f * d),
+                                        Quaternion.Euler(0f, 0f, 90f), new Vector3(d, 0.5f * fl, d), rubber);
+
+        // Кнехты: тумба и шляпка, в bollardSetbackM от кромки
+        List<double> bt = b.BollardPositions();
+        for (int i = 0; i < bt.Count; i++)
+        {
+            float t = (float)bt[i], z = b.bollardSetbackM;
+            BerthPart(PrimitiveType.Cylinder, $"Bollard_{i + 1}", root, new Vector3(t, h + 0.25f, z), Quaternion.identity, new Vector3(0.35f, 0.25f, 0.35f), iron);
+            BerthPart(PrimitiveType.Cylinder, $"BollardCap_{i + 1}", root, new Vector3(t, h + 0.52f, z), Quaternion.identity, new Vector3(0.5f, 0.03f, 0.5f), iron);
+        }
+        return view;
+    }
+
+    private static Transform BerthPart(PrimitiveType type, string name, Transform parent, Vector3 pos, Quaternion rot, Vector3 scale, Material mat)
+    {
+        GameObject go = GameObject.CreatePrimitive(type);
+        go.name = name;
+        Collider c = go.GetComponent<Collider>();
+        if (c != null) Destroy(c);
+        go.transform.SetParent(parent, false);
+        go.transform.localPosition = pos;
+        go.transform.localRotation = rot;
+        go.transform.localScale = scale;
+        go.GetComponent<MeshRenderer>().sharedMaterial = mat;
+        return go.transform;
+    }
+
+    private Material BerthMaterial(Material assigned, string name, Color color)
+    {
+        if (assigned != null) return assigned;
+        foreach (Material m in runtimeMaterials) if (m != null && m.name == name) return m;
+        Shader lit = Shader.Find("Universal Render Pipeline/Lit");
+        var mat = new Material(lit != null ? lit : Shader.Find("Standard")) { name = name };
+        mat.SetColor("_BaseColor", color);
+        mat.color = color;
+        runtimeMaterials.Add(mat);
+        return mat;
+    }
+
+    private void UpdateBerths()
+    {
+        if (berthViews.Count == 0) return;
+        WorldOrigin origin = Origin;
+        float mean = MeanLevel;
+        MooringController mc = MooringController.Instance;
+        int active = mc != null ? mc.ActiveBerthIndex : -1;
+        double[] defl = active >= 0 && mc.System != null ? mc.System.FenderDeflection : null;
+        for (int i = 0; i < berthViews.Count; i++)
+        {
+            BerthView v = berthViews[i];
+            if (v.Root == null || v.Berth == null) continue;
+            Vector3 p = origin.WorldToScene(v.Berth.a);
+            p.y = mean;
+            WorldPosition n = v.Berth.NAxis;
+            v.Root.SetPositionAndRotation(p, Quaternion.LookRotation(new Vector3((float)-n.East, 0f, (float)-n.North), Vector3.up));
+
+            // Обжатие кранцев: наружная сторона сдвигается к кромке, кранец сплющивается
+            bool any = i == active && defl != null && defl.Length == v.Fenders.Length;
+            if (!any && !v.Deflected) continue;
+            for (int k = 0; k < v.Fenders.Length; k++)
+            {
+                Transform f = v.Fenders[k];
+                if (f == null) continue;
+                float d = v.Diameter;
+                float e = any ? Mathf.Clamp(d - (float)defl[k], 0.2f * d, d) : d;
+                Vector3 lp = f.localPosition;
+                f.localPosition = new Vector3(lp.x, lp.y, -0.5f * e);
+                Vector3 ls = f.localScale;
+                f.localScale = new Vector3(ls.x, ls.y, e);
+            }
+            v.Deflected = any;
+        }
     }
 
     private void RebuildDebug()
@@ -347,10 +483,11 @@ public class WaterAreaView : MonoBehaviour
     private void ClearChildren()
     {
         buoys.Clear();
+        berthViews.Clear();
         foreach (Mesh m in landMeshes) if (m != null) Destroy(m);
         landMeshes.Clear();
         for (int i = transform.childCount - 1; i >= 0; i--)
             Destroy(transform.GetChild(i).gameObject);
-        buoyRoot = landRoot = debugRoot = null;
+        buoyRoot = landRoot = debugRoot = berthRoot = null;
     }
 }

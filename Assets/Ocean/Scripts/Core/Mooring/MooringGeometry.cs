@@ -53,7 +53,32 @@ public class BerthArea
     /// <summary>Кнехт — в b_кн м от кромки на причале.</summary>
     public float bollardSetbackM = 1f;
 
+    // ── Вид в сцене (19.2б; на силы не влияет) ──
+    /// <summary>Ширина пирса за кромкой (в сторону берега), м — только модель в сцене.</summary>
+    public float structureWidthM = 14f;
+
     public double Length => (b - a).Magnitude;
+
+    /// <summary>Середина кромки.</summary>
+    public WorldPosition Middle => new WorldPosition(0.5 * (a.East + b.East), 0.5 * (a.North + b.North));
+
+    /// <summary>Расстояние от точки до отрезка кромки, м.</summary>
+    public double DistanceTo(WorldPosition p)
+    {
+        ToLocal(p, out double t, out double n);
+        double dt = t < 0.0 ? -t : t > Length ? t - Length : 0.0;
+        return Math.Sqrt(dt * dt + n * n);
+    }
+
+    /// <summary>
+    /// Положение судна лагом к причалу (19.2б: «Судно к причалу», начальные условия): мидель на t,
+    /// борт — в gap м от кромки (по воде, без кранцев), курс — по кромке A→B: причал по левому борту.
+    /// </summary>
+    public WorldPosition AlongsidePosition(double t, double gap, double beam, out double headingDeg)
+    {
+        headingDeg = BearingDeg;
+        return ToWorld(t, gap + 0.5 * beam);
+    }
 
     /// <summary>Единичный вектор вдоль кромки (A→B).</summary>
     public WorldPosition TAxis
@@ -129,33 +154,40 @@ public class BerthArea
     /// C_E = 0,5, коэффициент аварийного навала 2; геометрическое подобие кранца, E ∝ D_н³),
     /// кнехты — через 0,2·L. Кромка — от (0, 0) на восток, вода — к югу (n < 0 по северу).
     /// </summary>
-    public static BerthArea ForShip(ShipParameters p, double lengthFactor = 1.6)
+    public static BerthArea ForShip(ShipParameters p, double lengthFactor = 1.6) =>
+        ForShip(p.length, p.beam, p.draft, p.blockCoefficient, lengthFactor);
+
+    /// <summary>То же по размерениям (демо-причал акватории, DemoWaterArea — без ассета параметров).</summary>
+    public static BerthArea ForShip(double length, double beam, double draft, double blockCoefficient, double lengthFactor = 1.6)
     {
-        double mass = ShipMass(p);
-        double eDesign = 2.0 * PiancBerthingEnergy(mass, p.draft, p.beam, 0.15, 0.5);
-        FenderSpec f = FenderSpec.ForEnergy(eDesign, Math.Max(1.0, 0.035 * p.length));
-        double len = lengthFactor * p.length;
+        double mass = ShipMass(length, beam, draft, blockCoefficient);
+        double eDesign = 2.0 * PiancBerthingEnergy(mass, draft, beam, 0.15, 0.5);
+        FenderSpec f = FenderSpec.ForEnergy(eDesign, Math.Max(1.0, 0.035 * length));
+        double len = lengthFactor * length;
         return new BerthArea
         {
             name = "Причал стенда",
             a = new WorldPosition(0, 0),
             b = new WorldPosition(len, 0),
-            quayHeightM = p.length > 100 ? 3f : 2.5f,
-            depthM = (float)(p.draft + 3.0),
+            quayHeightM = length > 100 ? 3f : 2.5f,
+            depthM = (float)(draft + 3.0),
             fenderOuterDiameterM = (float)f.OuterDiameter,
             fenderRatedDeflectionM = (float)f.RatedDeflection,
             fenderRatedReactionKn = (float)(f.RatedReaction / 1000.0),
             fenderLengthM = (float)f.Length,
-            fenderSpacingM = (float)Math.Max(6.0, Math.Round(0.15 * p.length)),
+            fenderSpacingM = (float)Math.Max(6.0, Math.Round(0.15 * length)),
             fenderEndMarginM = 4f,
-            bollardSpacingM = (float)Math.Max(8.0, Math.Round(0.2 * p.length)),
+            bollardSpacingM = (float)Math.Max(8.0, Math.Round(0.2 * length)),
             bollardEndMarginM = 3f,
             bollardSetbackM = 1f
         };
     }
 
     /// <summary>Водоизмещение, кг: ρ·L·B·d·C_B.</summary>
-    public static double ShipMass(ShipParameters p) => 1025.0 * p.length * p.beam * p.draft * p.blockCoefficient;
+    public static double ShipMass(ShipParameters p) => ShipMass(p.length, p.beam, p.draft, p.blockCoefficient);
+
+    public static double ShipMass(double length, double beam, double draft, double blockCoefficient) =>
+        1025.0 * length * beam * draft * blockCoefficient;
 }
 
 /// <summary>Контур корпуса для швартовки и действия сил в точке корпуса.</summary>

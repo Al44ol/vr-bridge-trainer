@@ -16,6 +16,8 @@
 //     (W-кардинальный; для судна сцены с осадкой 3 м безопасна, для глубокосидящего — нет);
 //   • камень 1,5 м со знаком отдельной опасности на подходе;
 //   • суша: западный и северный берег (12 м), остров на востоке (25 м) — ориентиры.
+//   • причал №1 (19.2б): кромка 80 м вдоль второго колена (060°) в 500 м за концом
+//     фарватера и в 120 м левее оси; кранцы под Model45m, швартовка левым бортом.
 // Корректность расстановки проверяют тесты WaterAreaTests (стороны буёв,
 // мели вне коридора, кардинальные знаки с нужной стороны мели).
 // ============================================================
@@ -45,13 +47,47 @@ public static class DemoWaterArea
         };
     }
 
+    // ── Причал (запрос 19.2б) ──
+    /// <summary>Начало кромки — за концом фарватера по его оси, м.</summary>
+    public const double BerthBeyondFairwayEnd = 500.0;
+    /// <summary>Сдвиг кромки влево от оси фарватера, м (судно, прошедшее финиш B2 прямо, проходит в 120 м от причала).</summary>
+    public const double BerthOffsetLeft = 120.0;
+    public const double BerthLength = 80.0;
+    /// <summary>Шаг кранцев, м: у стенда 7 м (0,15·L); на демо-причале чаще — острый нос Model45m под углом 5–10° не проходит между ними (ThesisNotes 19.15).</summary>
+    public const float BerthFenderSpacing = 5f;
+    /// <summary>Размерения судна, под которое подобраны кранцы (как ShipParameters_Model45m: L, B, d, C_B).</summary>
+    public const double BerthShipLength = 45.0, BerthShipBeam = 8.71, BerthShipDraft = 3.0, BerthShipBlock = 0.6;
+
+    /// <summary>
+    /// Демо-причал: кромка параллельна второму колену фарватера (060°), вода — справа от A→B, т. е. к юго-востоку:
+    /// судно, идущее курсом 060°, швартуется левым бортом. Кранцы — по PIANC под Model45m (BerthArea.ForShip).
+    /// </summary>
+    public static BerthArea Berth()
+    {
+        WorldPosition[] axis = Axis();
+        WorldPosition end = axis[axis.Length - 1], prev = axis[axis.Length - 2];
+        WorldPosition d = end - prev;
+        double len = d.Magnitude;
+        var u = new WorldPosition(d.East / len, d.North / len);   // по оси
+        var left = new WorldPosition(-u.North, u.East);           // влево от оси
+        var a = new WorldPosition(end.East + BerthBeyondFairwayEnd * u.East + BerthOffsetLeft * left.East,
+                                  end.North + BerthBeyondFairwayEnd * u.North + BerthOffsetLeft * left.North);
+        BerthArea b = BerthArea.ForShip(BerthShipLength, BerthShipBeam, BerthShipDraft, BerthShipBlock);
+        b.name = "Причал №1";
+        b.a = a;
+        b.b = new WorldPosition(a.East + BerthLength * u.East, a.North + BerthLength * u.North);
+        b.fenderSpacingM = BerthFenderSpacing;
+        b.depthM = 8f;
+        return b;
+    }
+
     /// <summary>Заполнить акваторию демонстрационными объектами (прежнее содержимое удаляется).</summary>
     public static void Fill(WaterArea area)
     {
         area.areaName = "Демонстрационная акватория";
         area.description = "Фарватер 2 кбт с поворотом вправо на 60°, отмели с кардинальными знаками, " +
                            "камень со знаком отдельной опасности. Система МАМС, регион A. Старт сценария: " +
-                           "E 0, N −2500, курс 000°.";
+                           "E 0, N −2500, курс 000°. Причал №1 — в 500 м за концом фарватера, левее оси на 120 м (19.2б).";
         area.boundsMin = new WorldPosition(-4000, -4000);
         area.boundsMax = new WorldPosition(7000, 8000);
         area.defaultDepth = 30f;
@@ -59,6 +95,7 @@ public static class DemoWaterArea
         area.shoals = new List<ShoalArea>();
         area.land = new List<LandArea>();
         area.fairways = new List<FairwayLine>();
+        area.berths = new List<BerthArea>();
 
         WorldPosition[] axis = Axis();
         area.fairways.Add(new FairwayLine { name = "Фарватер №1", width = (float)FairwayWidth, axis = new List<WorldPosition>(axis) });
@@ -116,6 +153,9 @@ public static class DemoWaterArea
             6000, 10000, -6000, 10000));
         area.land.Add(Land("Остров Восточный", 25f,
             4600, 2300, 4850, 2050, 5250, 2080, 5480, 2350, 5420, 2750, 5150, 2950, 4800, 2900, 4580, 2650));
+
+        // ── Причал (19.2б) ──
+        area.berths.Add(Berth());
 
         area.MarkChanged();
     }

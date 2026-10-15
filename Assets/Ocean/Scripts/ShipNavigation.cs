@@ -59,6 +59,10 @@
 // вне упражнения; в «Отладке» — сила в борт и пара сил (только 3 СС), чтобы почувствовать дрейф
 // и разворот на месте. Позиция при этом — с поперечной скоростью, курс по-прежнему ψ.
 //
+// Запрос 19.2б: внешние силы — событие BeforeStep (модель, dt) перед model.Step на каждом шаге
+// (MooringController: причал, кранцы, концы, подруливающее — MooringSystem.Apply); SetMotionModel —
+// смена модели движения кодом (отладка «Судно к причалу», сценарий швартовки), только вне упражнения.
+//
 // Тест циркуляции (контекстное меню компонента, меню A «Отладка»; F5 — при keyboardShortcuts): скорость удерживается
 // равной V_эксп, руль 35° ПБ; в лог — координаты каждые 30° изменения курса,
 // выдвиг (90°), тактический диаметр (180°), диаметр установившейся
@@ -157,6 +161,13 @@ public class ShipNavigation : MonoBehaviour
     public bool EngineFailed { get; set; }
     /// <summary>D1: вводная «отказ рулевого устройства» — руль заклинило (ShipDynamicsModel.SteeringFailed).</summary>
     public bool SteeringFailed { get; set; }
+    /// <summary>
+    /// 19.2б: внешние силы на шаг — вызывается перед model.Step (ShipDynamicsModel.AddForce / AddMoment;
+    /// действуют только в модели 3 СС). Параметры: модель, шаг dt, с.
+    /// </summary>
+    public event Action<ShipDynamicsModel, double> BeforeStep;
+    /// <summary>Смена модели движения (меню, SetMotionModel): true — теперь 3 СС.</summary>
+    public event Action<bool> MotionModelChanged;
 
     void OnEnable()
     {
@@ -206,9 +217,21 @@ public class ShipNavigation : MonoBehaviour
     private void StepMotion()
     {
         if (model == null || !OutsideExercise) return;
-        bool to3Dof = !model.Uses3Dof;
-        motionModel = to3Dof ? MotionChoice.Manoeuvring3Dof : MotionChoice.Course1Dof;
+        SetMotionModel(model.Uses3Dof ? MotionChoice.Course1Dof : MotionChoice.Manoeuvring3Dof);
+    }
+
+    /// <summary>
+    /// 19.2б: модель движения кодом (отладка «Судно к причалу», сценарий швартовки) — только вне упражнения.
+    /// false — не сменилась (упражнение идёт или модель ещё не создана).
+    /// </summary>
+    public bool SetMotionModel(MotionChoice choice)
+    {
+        if (model == null || !OutsideExercise) return false;
+        bool was3Dof = model.Uses3Dof;
+        motionModel = choice;
         ApplyMotionModel();
+        bool to3Dof = model.Uses3Dof;
+        if (to3Dof == was3Dof) return true;
         if (to3Dof)
         {
             Manoeuvring3DofCoefficients c = model.Coefficients3Dof;   // построить сразу, а не на первом шаге
@@ -221,6 +244,8 @@ public class ShipNavigation : MonoBehaviour
             debugPush = debugSpin = 0;
             Debug.Log("[Навигация] Модель движения: Номото (поперечная скорость обнулена)");
         }
+        MotionModelChanged?.Invoke(to3Dof);
+        return true;
     }
 
     private void ApplyMotionModel()
@@ -363,6 +388,7 @@ public class ShipNavigation : MonoBehaviour
         model.EngineFailed = EngineFailed;
         model.SteeringFailed = SteeringFailed;
         ApplyDebugForces();
+        BeforeStep?.Invoke(model, dt);   // 19.2б: причал, концы, подруливающее
         model.Step(dt);
     }
 

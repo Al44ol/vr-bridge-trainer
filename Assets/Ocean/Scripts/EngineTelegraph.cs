@@ -64,6 +64,8 @@ public class EngineTelegraph : MonoBehaviour
 
     public float SpeedFactor => currentSpeedFactor;
     public string PositionName => currentPosition;
+    /// <summary>Номер положения в positions (19.2б: меню «Управление»).</summary>
+    public int PositionIndex => currentIndex;
     /// <summary>Рычаг держат рукой (запись действий C1).</summary>
     public bool IsGrabbed => isGrabbed;
     /// <summary>Последнее положение поставлено кодом (SetSpeedFactor / SetStop), а не рукой.</summary>
@@ -186,7 +188,13 @@ public class EngineTelegraph : MonoBehaviour
     /// Перевести телеграф в положение с ближайшим SF (начальные условия сценария, B2).
     /// Рычаг доворачивается сам; если его держат рукой — слежение прерывается.
     /// </summary>
-    public void SetSpeedFactor(float speedFactor)
+    public void SetSpeedFactor(float speedFactor) => SetSpeedFactor(speedFactor, true);
+
+    /// <summary>
+    /// 19.2б: fromCode = false — команда обучающегося из меню «Управление» (кнопка B, «как рулевому»):
+    /// в журнал (TelegraphChanged) идёт как его действие, а не как постановка инструктором.
+    /// </summary>
+    public void SetSpeedFactor(float speedFactor, bool fromCode)
     {
         int target = currentIndex;
         float best = float.MaxValue;
@@ -198,7 +206,7 @@ public class EngineTelegraph : MonoBehaviour
         tracking = false;
         if (target == currentIndex) return;
         currentIndex = target;
-        ApplyPosition(currentIndex, fromCode: true);
+        ApplyPosition(currentIndex, fromCode);
         if (audioSource != null && clickClip != null) audioSource.PlayOneShot(clickClip);
     }
 
