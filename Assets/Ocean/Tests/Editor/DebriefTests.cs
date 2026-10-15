@@ -113,7 +113,7 @@ public class DebriefTests
             Assert.IsTrue(map.HasRoute, "маршрут");
             SessionArea area = s.Meta.scenario.area;
             Assert.Greater(area.aids.Count, 0);
-            Assert.AreEqual(area.shoals.Count + area.land.Count, map.Polygons.Count);
+            Assert.AreEqual(area.shoals.Count + area.land.Count, map.Polygons.FindAll(p => p.Layer == MapLayer.Shoal || p.Layer == MapLayer.Land).Count);   // 19.2б-3б: и пирс, кранцы
             Assert.AreEqual(area.aids.Count, map.Markers.FindAll(m => m.Layer == MapLayer.Aid).Count);
             Assert.AreEqual(3, map.TargetIds.Count, "T1, T2, T3");
 

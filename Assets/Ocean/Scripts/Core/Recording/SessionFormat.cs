@@ -7,7 +7,9 @@
 //   events.csv   — все события шины ExerciseEvents за упражнение, по одному
 //                  на строку, в порядке доставки (n — порядковый номер);
 //   session.json — метаданные: сценарий (с маршрутом), судно, приложение,
-//                  начало/конец, причина завершения, предварительный итог.
+//                  начало/конец, причина завершения, предварительный итог;
+//   mooring.csv  — 19.2б-3б: состояние у причала (зазоры, кранцы, концы) в те же
+//                  моменты, что track.csv; только если причал понадобился (MooringRecording.cs).
 // Время t_s — время упражнения (симуляционное) от «Начать», с.
 // Координаты: x_e_m — восток, y_n_m — север, м (WorldPosition); курс 0 = N,
 // по часовой; руль и XTE > 0 — правый борт / правее линии пути.
@@ -64,6 +66,9 @@ public static class SessionFormat
     public const string AssessmentFile = "assessment.csv";
     /// <summary>Отчёт по упражнению (C3): самодостаточная страница для браузера и печати.</summary>
     public const string ReportFile = "report.html";
+    /// <summary>19.2б-3б: состояние у причала (MooringRecording); только если причал понадобился.</summary>
+    public const string MooringFile = "mooring.csv";
+    public static string MooringHeader => MooringRecording.Header;
 
     public const string TrackHeader =
         "t_s;x_e_m;y_n_m;heading_deg;cog_deg;speed_kn;rot_deg_min;rudder_ordered_deg;rudder_actual_deg;telegraph_sf;telegraph;xte_m;leg;xte_limit_m;grounded";
@@ -148,6 +153,10 @@ public static class SessionFormat
         East = CsvFormat.Round(s.East, 2), North = CsvFormat.Round(s.North, 2),
         HeadingDeg = CsvFormat.Round(s.HeadingDeg, 2), SpeedKnots = CsvFormat.Round(s.SpeedKnots, 3)
     };
+
+    public static void AppendMooring(StringBuilder b, in MooringSample s) => MooringRecording.Append(b, s);
+
+    public static MooringSample Quantize(in MooringSample s) => MooringRecording.Quantize(s);
 
     public static ExerciseEvent Quantize(in ExerciseEvent e) => new ExerciseEvent(e.Type)
     {
@@ -453,10 +462,13 @@ public class SessionRecording
     public List<string> files = new List<string> { SessionFormat.TrackFile, SessionFormat.TargetsFile, SessionFormat.EventsFile, SessionFormat.MetaFile, SessionFormat.AssessmentFile, SessionFormat.ReportFile };
     /// <summary>Названия положений телеграфа по номеру (столбец telegraph, index события TelegraphChanged).</summary>
     public List<string> telegraph_positions = new List<string>();
+    /// <summary>19.2б-3б: состояния концов по номеру (столбцы *_state в mooring.csv, MooringLineStatus).</summary>
+    public List<string> mooring_line_states = new List<string>();
 
     public SessionRecording()
     {
         foreach (TelegraphOrder o in Enum.GetValues(typeof(TelegraphOrder))) telegraph_positions.Add(ScenarioText.Telegraph(o));
+        mooring_line_states = MooringRecording.StatusTitles();
     }
 }
 
@@ -469,6 +481,8 @@ public class SessionSummary
     public int collisions;
     public int helm_actions, telegraph_orders, horn_signals, weather_changes;
     public int track_rows, event_rows, target_rows;
+    /// <summary>19.2б-3б: строк mooring.csv (0 — файла нет).</summary>
+    public int mooring_rows;
     /// <summary>
     /// Режим тренажёра (перед 19.2, п. B; TrainerMode): на начало, наибольший за упражнение,
     /// с какого момента был режим обучения / инструктора, с (−1 — не было), переключений.

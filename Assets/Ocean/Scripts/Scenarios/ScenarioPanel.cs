@@ -382,6 +382,9 @@ public class ScenarioPanel : MonoBehaviour
         for (int i = 0; i < map.TargetNames.Count; i++)
             leg.Append($"   <color=#{ColorUtility.ToHtmlStringRGB(DebriefMapGraphic.TargetColor(i))}>——</color> {map.TargetNames[i]}");
         if (map.HasRoute) leg.Append($"   <color=#{ColorUtility.ToHtmlStringRGB(DebriefMapGraphic.RouteColor)}>——</color> маршрут и коридор");
+        if (map.Views[mapView].ShowHulls)   // 19.2б-3б: вид «У причала»
+            leg.Append($"\n<color=#{ColorUtility.ToHtmlStringRGB(DebriefMapGraphic.HullColor)}>——</color> контур судна через {ScenarioText.Num(DebriefMap.HullOutlineStepS)} с · " +
+                       $"<color=#{ColorUtility.ToHtmlStringRGB(DebriefMapGraphic.FailureColor)}>●</color> навал / <color=#{ColorUtility.ToHtmlStringRGB(DebriefMapGraphic.BadColor)}>●</color> удар о причал");
         leg.Append($"\n<color=#{ColorUtility.ToHtmlStringRGB(DebriefMapGraphic.OkColor)}>●</color>/<color=#{ColorUtility.ToHtmlStringRGB(DebriefMapGraphic.BadColor)}>●</color> наименьшая дистанция (допустимо / меньше допустимой) · ○ начало манёвра · " +
                    $"точки — каждые {ScenarioText.Num(map.Views[mapView].TickStepS / 60.0)} мин · сетка {ScenarioText.Num(g.GridStepM)} м");
         Text(leg.ToString(), 14f, MutedColor, ref y);
@@ -390,7 +393,7 @@ public class ScenarioPanel : MonoBehaviour
             int n = map.Views.Count;
             ButtonRow(ref y, ButtonHeight,
                 ("<", ButtonColor, () => { mapView = (mapView + n - 1) % n; ShowDebrief(); }),
-                (map.Views[mapView].Key == "all" ? "Весь маршрут" : $"Сближение с {map.Views[mapView].Key}", NeutralColor, () => { mapView = (mapView + 1) % n; ShowDebrief(); }),
+                (map.Views[mapView].Key == "all" ? "Весь маршрут" : map.Views[mapView].Key == "berth" ? "У причала" : $"Сближение с {map.Views[mapView].Key}", NeutralColor, () => { mapView = (mapView + 1) % n; ShowDebrief(); }),
                 (">", ButtonColor, () => { mapView = (mapView + 1) % n; ShowDebrief(); }));
         }
     }

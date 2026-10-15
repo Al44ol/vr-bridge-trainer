@@ -15,6 +15,8 @@
 //     ScenarioRunner −88, GroundingMonitor −85) с частотой trackRateHz по
 //     времени упражнения; XTE и участок — ScenarioRunner.Route (RouteTracker);
 //   events.csv — каждое событие шины упражнения в момент доставки.
+//   mooring.csv — 19.2б-3б: состояние у причала в моменты строк track.csv (BuildMooringSample);
+//     в сценарии швартовки — всегда, иначе — с первого момента, когда причал считается.
 //   assessment.csv и блок assessment в session.json — оценка по критериям (C2,
 //     ExerciseAssessmentMonitor) в момент конца упражнения;
 //   report.html — отчёт по упражнению (C3): после закрытия записи в фоновом
@@ -63,6 +65,8 @@ public class ExerciseRecorder : MonoBehaviour
     [Header("Сцена (пусто — найти)")]
     public ScenarioRunner runner;
     public ShipNavigation navigation;
+    [Tooltip("19.2б-3б: место обучающегося (у штурвала / крыло) для mooring.csv")]
+    public BridgeStationSwitch stations;
 
     [Header("Состояние (только чтение)")]
     [SerializeField] private string currentSession = "";
@@ -146,6 +150,7 @@ public class ExerciseRecorder : MonoBehaviour
     {
         if (runner == null) runner = ScenarioRunner.Instance != null ? ScenarioRunner.Instance : FindAnyObjectByType<ScenarioRunner>();
         if (navigation == null) navigation = runner != null && runner.navigation != null ? runner.navigation : FindAnyObjectByType<ShipNavigation>();
+        if (stations == null) stations = FindAnyObjectByType<BridgeStationSwitch>();
     }
 
     // ─────────── Шина ───────────
@@ -192,6 +197,40 @@ public class ExerciseRecorder : MonoBehaviour
         BuildTargetSamples(t, targetBuffer);
         foreach (TargetSample ts in targetBuffer) rec.AddTarget(ts);
         trackRows = rec.TrackRows;
+        // 19.2б-3б: mooring.csv — с первого момента, когда причал понадобился, и до конца упражнения
+        bool berthNear = BuildMooringSample(navigation, runner, stations, t, out MooringSample ms);
+        if (ms.Lines != null && (berthNear || rec.MooringRows > 0)) rec.AddMooring(ms);
+    }
+
+    /// <summary>
+    /// 19.2б-3б: срез у причала в момент t — строка mooring.csv (MooringSampler.Build, Core — тот же срез у прогона
+    /// «за обучающегося»). Причал: в сценарии швартовки — причал задания, иначе — причал, который считает
+    /// MooringController (ближе 600 м, модель 3 СС). true — строку надо писать (сценарий швартовки или причал рядом).
+    /// </summary>
+    public static bool BuildMooringSample(ShipNavigation navigation, ScenarioRunner runner, BridgeStationSwitch stations, double t, out MooringSample sample)
+    {
+        sample = default;
+        ShipDynamicsModel m = navigation != null ? navigation.Model : null;
+        if (m == null) return false;
+        MooringController mc = MooringController.Instance;
+        ScenarioDefinition sc = runner != null ? runner.Current : null;
+        bool task = sc != null && sc.IsMooring;
+        BerthArea berth;
+        int index;
+        if (task)
+        {
+            index = sc.mooring.berthIndex;
+            berth = sc.mooring.BerthIn(sc.waterArea);
+        }
+        else
+        {
+            index = mc != null ? mc.ActiveBerthIndex : -1;
+            berth = index >= 0 ? mc.ActiveBerth : null;
+        }
+        sample = MooringSampler.Build(t, berth, index, navigation.parameters, m, mc != null ? mc.System : null,
+            mc != null ? mc.ThrusterIndex : ThrusterOrders.ZeroIndex, stations != null ? stations.Current : BridgeStation.Helm,
+            task ? runner.MooringTask : null);
+        return task || berth != null;
     }
 
     /// <summary>Срез своего судна в момент t — строка track.csv; тот же срез получает оценка (C2).</summary>

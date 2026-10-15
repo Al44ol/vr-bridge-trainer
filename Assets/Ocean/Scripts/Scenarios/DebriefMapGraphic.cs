@@ -11,6 +11,8 @@
 // D1: тот же класс — неподвижный слой карты окна инструктора (DebriefMap.BuildStatic),
 // наследник InstructorMapGraphic — подвижный (суда, следы, векторы); примитивы — protected.
 // Отметка вводной (MapLayer.Failure) — кольцо.
+// 19.2б-3б: причал (пирс, кромка, кранцы, кнехты) — во всех слоях на его основе (разбор, окно
+// инструктора, планшет); контуры судна — только вид «У причала»; навал — ромб, удар о кромку — красный ромб.
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -41,6 +43,13 @@ public class DebriefMapGraphic : MaskableGraphic
     public static readonly Color BadColor = new Color(1f, 0.35f, 0.3f);
     public static readonly Color GridColor = new Color(1f, 1f, 1f, 0.07f);
     public static readonly Color FailureColor = new Color(1f, 0.78f, 0.2f);
+    // 19.2б-3б: причал
+    public static readonly Color PierColor = new Color(0.42f, 0.44f, 0.47f, 1f);
+    public static readonly Color QuayColor = new Color(0.92f, 0.92f, 0.92f, 1f);
+    public static readonly Color FenderColor = new Color(0.12f, 0.12f, 0.12f, 1f);
+    public static readonly Color HullColor = new Color(0.55f, 0.9f, 1f, 0.45f);
+    /// <summary>Кнехты — при масштабе не мельче, единиц холста на метр.</summary>
+    public const double BollardMinScale = 0.5;
 
     private DebriefMapData data;
     private int viewIndex;
@@ -91,7 +100,20 @@ public class DebriefMapGraphic : MaskableGraphic
             Segment(vh, new WorldPosition(view.MinE, n), new WorldPosition(view.MaxE, n), 1f, GridColor);
 
         foreach (MapPolygon p in data.Polygons)
-            Polygon(vh, p.Points, p.Layer == MapLayer.Land ? LandColor : ShoalColor);
+            if (p.Layer == MapLayer.Land || p.Layer == MapLayer.Shoal) Polygon(vh, p.Points, p.Layer == MapLayer.Land ? LandColor : ShoalColor);
+        // 19.2б-3б: причал — пирс, кромка, кранцы, кнехты (крупный масштаб); контуры судна — вид «У причала»
+        foreach (MapPolygon p in data.Polygons)
+            if (p.Layer == MapLayer.Pier) Polygon(vh, p.Points, PierColor);
+        foreach (MapLine l in data.Lines)
+            if (l.Layer == MapLayer.Quay) Polyline(vh, l.Points, 2.4f, QuayColor);
+        foreach (MapPolygon p in data.Polygons)
+            if (p.Layer == MapLayer.Fender) Polygon(vh, p.Points, FenderColor);
+        if (scale >= BollardMinScale)
+            foreach (MapMarker m in data.Markers)
+                if (m.Layer == MapLayer.Bollard) Dot(vh, m.Position, 2.2f, QuayColor);
+        if (View.ShowHulls)
+            foreach (MapPolygon p in data.Polygons)
+                if (p.Layer == MapLayer.HullOutline) ClosedPolyline(vh, p.Points, 1.2f, HullColor);
         foreach (MapLine l in data.Lines)
             if (l.Layer == MapLayer.Fairway) Polyline(vh, l.Points, 1.2f, FairwayColor, dashed: true);
         foreach (MapLine l in data.Lines)
@@ -121,6 +143,7 @@ public class DebriefMapGraphic : MaskableGraphic
                 case MapLayer.Start: Dot(vh, m.Position, 4.5f, Color.white); break;
                 case MapLayer.Accident: Cross(vh, m.Position, 9f, 3f, BadColor); break;
                 case MapLayer.Failure: Ring(vh, m.Position, 7f, 2.5f, FailureColor); break;   // D1: вводная
+                case MapLayer.Berthing: Diamond(vh, m.Position, 6f, m.Ok ? FailureColor : BadColor); break;   // 19.2б-3б: навал / удар о кромку
             }
     }
 
@@ -144,12 +167,12 @@ public class DebriefMapGraphic : MaskableGraphic
             }
         }
         foreach (MapMarker m in data.Markers)
-            if ((m.Layer == MapLayer.Manoeuvre || m.Layer == MapLayer.Accident || m.Layer == MapLayer.Failure) && view.Contains(m.Position))
+            if ((m.Layer == MapLayer.Manoeuvre || m.Layer == MapLayer.Accident || m.Layer == MapLayer.Failure || m.Layer == MapLayer.Berthing) && view.Contains(m.Position))
                 list.Add(new Label
                 {
                     Local = ToLocal(m.Position) + new Vector2(10, -10),
                     Text = m.Layer == MapLayer.Manoeuvre ? $"манёвр ({m.Label})" : m.Label,
-                    Color = m.Layer == MapLayer.Manoeuvre ? OwnColor : m.Layer == MapLayer.Failure ? FailureColor : BadColor
+                    Color = m.Layer == MapLayer.Manoeuvre ? OwnColor : m.Layer == MapLayer.Failure || (m.Layer == MapLayer.Berthing && m.Ok) ? FailureColor : BadColor
                 });
         return list;
     }
@@ -184,6 +207,13 @@ public class DebriefMapGraphic : MaskableGraphic
                 Segment(vh, new WorldPosition(a.East + de * s0 / len, a.North + dn * s0 / len),
                             new WorldPosition(a.East + de * s1 / len, a.North + dn * s1 / len), width, c);
         }
+    }
+
+    /// <summary>Замкнутый контур (19.2б-3б: контур корпуса).</summary>
+    protected void ClosedPolyline(VertexHelper vh, List<WorldPosition> pts, float width, Color c)
+    {
+        if (pts == null || pts.Count < 2) return;
+        for (int i = 0; i < pts.Count; i++) Segment(vh, pts[i], pts[(i + 1) % pts.Count], width, c);
     }
 
     protected void Segment(VertexHelper vh, WorldPosition a, WorldPosition b, float width, Color c)

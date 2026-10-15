@@ -11,6 +11,9 @@
 //   (левой стороны — квадрат, правой — треугольник, кардинальные — ромб,
 //   прочие — круг); манёвр — кружок; наименьшая дистанция — отрезок между
 //   судами с подписью; авария — крест.
+//   19.2б-3б: пирс — серая заливка, кромка — толстая линия, кранцы — чёрные
+//   прямоугольники, кнехты — кружки (крупный масштаб); навал — ромб, удар о
+//   кромку — залитый ромб; контуры судна (вид «У причала») — тонкие.
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -21,6 +24,8 @@ public static class DebriefSvg
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
     private static readonly SvgPlot.Dash[] TargetDash = { SvgPlot.Dash.Dashed, SvgPlot.Dash.DashDot, SvgPlot.Dash.Dotted };
+    /// <summary>19.2б-3б: кнехты рисуются при масштабе не мельче, пикс./м (окно ≲ 1,2 км).</summary>
+    public const double BollardMinScale = 0.5;
 
     /// <summary>SVG вида view. id — уникальный префикс (несколько схем на одной странице).</summary>
     public static string Map(DebriefMapData d, DebriefMapView view, string id = "map", float width = 680, float maxHeight = 720)
@@ -71,7 +76,7 @@ public static class DebriefSvg
         // Суша, мели
         foreach (MapPolygon p in d.Polygons)
         {
-            if (p.Points.Count < 3) continue;
+            if (p.Points.Count < 3 || (p.Layer != MapLayer.Land && p.Layer != MapLayer.Shoal)) continue;
             bool land = p.Layer == MapLayer.Land;
             sb.AppendLine($"<polygon points=\"{Pts(p.Points)}\" fill=\"{(land ? "#bdbdbd" : "#ebebeb")}\" stroke=\"black\" stroke-width=\"0.6\"{(land ? "" : " stroke-dasharray=\"3,2\"")}/>");
             if (!land && p.Label.Length > 0)
@@ -100,6 +105,26 @@ public static class DebriefSvg
         foreach (MapMarker m in d.Markers)
             if (m.Layer == MapLayer.Aid && r.Contains(m.Position))
                 sb.AppendLine(AidShape(X(m.Position.East), Y(m.Position.North), m.Aid));
+
+        // 19.2б-3б: причал — пирс (серая заливка), кромка (толстая), кранцы (чёрные), кнехты (при крупном масштабе);
+        // контуры судна — только вид «У причала»
+        foreach (MapPolygon p in d.Polygons)
+            if (p.Layer == MapLayer.Pier && p.Points.Count >= 3)
+                sb.AppendLine($"<polygon points=\"{Pts(p.Points)}\" fill=\"#d9d9d9\" stroke=\"black\" stroke-width=\"0.6\"/>");
+        foreach (MapLine l in d.Lines)
+            if (l.Layer == MapLayer.Quay)
+                sb.AppendLine($"<polyline points=\"{Pts(l.Points)}\" fill=\"none\" stroke=\"black\" stroke-width=\"1.6\"/>");
+        foreach (MapPolygon p in d.Polygons)
+            if (p.Layer == MapLayer.Fender && p.Points.Count >= 3)
+                sb.AppendLine($"<polygon points=\"{Pts(p.Points)}\" fill=\"black\" stroke=\"black\" stroke-width=\"0.4\"/>");
+        if (scale >= BollardMinScale)
+            foreach (MapMarker m in d.Markers)
+                if (m.Layer == MapLayer.Bollard && r.Contains(m.Position))
+                    sb.AppendLine($"<circle cx=\"{N(X(m.Position.East))}\" cy=\"{N(Y(m.Position.North))}\" r=\"2.2\" fill=\"white\" stroke=\"black\" stroke-width=\"0.8\"/>");
+        if (view.ShowHulls)
+            foreach (MapPolygon p in d.Polygons)
+                if (p.Layer == MapLayer.HullOutline && p.Points.Count >= 3)
+                    sb.AppendLine($"<polygon points=\"{Pts(p.Points)}\" fill=\"none\" stroke=\"black\" stroke-width=\"0.6\"/>");
 
         // Траектории
         foreach (MapLine l in d.Lines)
@@ -152,6 +177,11 @@ public static class DebriefSvg
                     sb.AppendLine($"<path d=\"M{N(x)},{N(y - 7)} L{N(x + 6)},{N(y + 4)} L{N(x - 6)},{N(y + 4)} Z\" fill=\"none\" stroke=\"black\" stroke-width=\"1.4\"/>");
                     sb.AppendLine($"<text x=\"{N(x + 8)}\" y=\"{N(y - 6)}\" font-size=\"12\">{SvgPlot.Xml(m.Label)}</text>");
                     break;
+                case MapLayer.Berthing:   // 19.2б-3б: навал — ромб, удар о кромку — залитый ромб и жирная подпись
+                    if (!r.Contains(m.Position)) break;
+                    sb.AppendLine($"<path d=\"M{N(x)},{N(y - 6)} L{N(x + 5)},{N(y)} L{N(x)},{N(y + 6)} L{N(x - 5)},{N(y)} Z\" fill=\"{(m.Ok ? "white" : "black")}\" stroke=\"black\" stroke-width=\"1.2\"/>");
+                    sb.AppendLine($"<text x=\"{N(x + 8)}\" y=\"{N(y + 16)}\" font-size=\"12\"{(m.Ok ? "" : " font-weight=\"bold\"")}>{SvgPlot.Xml(m.Label)}</text>");
+                    break;
             }
         }
         // Подписи целей у конца видимой части траектории
@@ -180,6 +210,8 @@ public static class DebriefSvg
             legend.Add(("маршрут", "stroke-width=\"0.8\""));
             legend.Add(("коридор (± XTE доп.)", "stroke-width=\"0.7\" stroke-dasharray=\"2,3\""));
         }
+        if (view.ShowHulls) legend.Add(("контур судна", "stroke-width=\"0.6\""));
+        if (d.HasBerths && d.Lines.Exists(l => l.Layer == MapLayer.Quay && l.Points.Exists(r.Contains))) legend.Add(("кромка причала", "stroke-width=\"1.6\""));
         // Угол легенды — тот, где меньше всего линий (по умолчанию правый верхний, как в SvgPlot)
         const float lw = 234;
         float lh = 20 * legend.Count;

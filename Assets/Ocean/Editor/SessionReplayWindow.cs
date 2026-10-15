@@ -16,6 +16,8 @@
 //   • «Сохранить» — метка keep: сессия не удаляется ротацией записи;
 //   • C3: «Отчёт (report.html)» — отчёт по записи (в том числе для старой сессии)
 //     и открыть в браузере; «Сводка по папке…» — сводная таблица по сессиям.
+//   • 19.2б-3б: причалы (пирс, кромка, кранцы, кнехты — из снимка session.json), судно
+//     на крупном масштабе — контуром в масштабе; строка причала из mooring.csv в состоянии.
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -222,6 +224,18 @@ public class SessionReplayWindow : EditorWindow
         Row("XTE", double.IsNaN(s.XteM) ? "—" : $"{ScenarioText.Num(s.XteM)} м (доп. {ScenarioText.Num(s.XteLimitM)} м), участок {s.Leg}");
         string st = s.Grounded ? "НА МЕЛИ" : !double.IsNaN(s.XteM) && Math.Abs(s.XteM) > s.XteLimitM ? "вне коридора" : "в коридоре";
         Row("Состояние", st);
+        // 19.2б-3б: строка mooring.csv в момент t (если причал понадобился)
+        MooringSample? ms = session.MooringAt(t);
+        if (ms.HasValue && ms.Value.HasBerth)
+        {
+            MooringSample m = ms.Value;
+            Row("Причал: нос / корма", $"{ScenarioText.Num(m.BowGapM, 1)} / {ScenarioText.Num(m.SternGapM, 1)} м, угол {ScenarioText.Num(m.AngleDeg)}°");
+            Row("К причалу", $"нос {ScenarioText.Num(m.BowSpeedKn, 2)} · корма {ScenarioText.Num(m.SternSpeedKn, 2)} уз");
+            Row("Кранцы", m.FenderContact ? $"обжаты до {ScenarioText.Num(m.FenderDeflectionRatio * 100.0)} %, {ScenarioText.Num(m.FenderForceKn, 1)} кН" : m.QuayContact ? "УДАР О ПРИЧАЛ" : "нет касания");
+            int fast = 0;
+            if (m.Lines != null) foreach (MooringLineSample l in m.Lines) if (l.Fast) fast++;
+            Row("Концы / подрул.", $"подано {fast} · {ThrusterOrders.TitleOfPercent(m.ThrusterOrderPct)}" + (m.StagesDone >= 0 ? $" · заданий {m.StagesDone}" : ""));
+        }
         EditorGUILayout.Space(4f);
     }
 
@@ -346,6 +360,7 @@ public class SessionReplayWindow : EditorWindow
         GUI.BeginClip(rect);
         EditorGUI.DrawRect(new Rect(0, 0, rect.width, rect.height), Water);
         if (area != null) DrawArea();
+        DrawBerths();
         DrawRoute();
         DrawTrack();
         DrawTargets();
@@ -404,6 +419,42 @@ public class SessionReplayWindow : EditorWindow
         {
             Handles.color = MarkToColor(IalaMarks.Get(a.type).MainColor);
             Handles.DrawSolidDisc(P(a.position), Vector3.forward, 3.5f);
+        }
+    }
+
+    // 19.2б-3б: причалы — из снимка в session.json (запись до 19.2б-3б — из ассета акватории): пирс, кромка,
+    // кранцы (длина × вылет, при крупном масштабе), кнехты
+    private static readonly Color PierColor = new Color(0.5f, 0.52f, 0.55f), QuayColor = new Color(0.95f, 0.95f, 0.95f), FenderColor = new Color(0.1f, 0.1f, 0.1f);
+
+    private void DrawBerths()
+    {
+        var berths = new List<BerthArea>();
+        SessionArea snap = session.Meta.scenario.area;
+        if (snap != null && snap.berths != null && snap.berths.Count > 0)
+            for (int i = 0; i < snap.berths.Count; i++) berths.Add(snap.Berth(i));
+        else if (area != null && area.berths != null) berths.AddRange(area.berths);
+        foreach (BerthArea b in berths)
+        {
+            if (b == null || b.Length < 1.0) continue;
+            double w = Math.Max(1.0, b.structureWidthM);
+            Handles.color = PierColor;
+            Handles.DrawAAConvexPolygon(P(b.a), P(b.b), P(b.ToWorld(b.Length, -w)), P(b.ToWorld(0, -w)));
+            Handles.color = QuayColor;
+            Handles.DrawAAPolyLine(2.5f, P(b.a), P(b.b));
+            if (mpp < 1.0)
+            {
+                double fl = 0.5 * b.fenderLengthM, fd = Math.Max(b.fenderOuterDiameterM, 0.5 * mpp);
+                Handles.color = FenderColor;
+                foreach (double ft in b.FenderPositions())
+                    Handles.DrawAAConvexPolygon(P(b.ToWorld(ft - fl, 0)), P(b.ToWorld(ft + fl, 0)), P(b.ToWorld(ft + fl, fd)), P(b.ToWorld(ft - fl, fd)));
+            }
+            if (mpp < 2.0)
+            {
+                Handles.color = QuayColor;
+                for (int k = 0; k < b.BollardPositions().Count; k++) Handles.DrawSolidDisc(P(b.BollardWorld(k)), Vector3.forward, 2f);
+            }
+            Vector3 c = P(b.ToWorld(0.5 * b.Length, -0.5 * w));
+            GUI.Label(new Rect(c.x - 60f, c.y - 8f, 120f, 16f), b.name, Centered(mapLabel, QuayColor));
         }
     }
 
@@ -543,6 +594,20 @@ public class SessionReplayWindow : EditorWindow
     private void DrawShip(TrackSample s)
     {
         if (session.Track.Count == 0) return;
+        // 19.2б-3б: на крупном масштабе — контур корпуса в масштабе (MooringHull), как на схеме «У причала»
+        double L = session.Meta.ship.length_m, B = session.Meta.ship.beam_m;
+        if (L > 0 && B > 0 && L / mpp >= 40.0)
+        {
+            List<WorldPosition> hull = DebriefMap.HullOutline(s.Position, s.HeadingDeg, L, B);
+            var pts = new Vector3[hull.Count + 1];
+            for (int i = 0; i < hull.Count; i++) pts[i] = P(hull[i]);
+            pts[hull.Count] = pts[0];
+            Handles.color = new Color(ShipColor.r, ShipColor.g, ShipColor.b, 0.35f);
+            Handles.DrawAAConvexPolygon(pts[0], pts[1], pts[2], pts[3], pts[4]);
+            Handles.color = ShipColor;
+            Handles.DrawAAPolyLine(2f, pts);
+            return;
+        }
         Vector3 c = P(s.East, s.North);
         float len = Mathf.Max((float)(session.Meta.ship.length_m / mpp), 16f);
         float wid = Mathf.Max((float)(session.Meta.ship.beam_m / mpp), len * 0.35f);

@@ -10,6 +10,8 @@
 //     (VectorMinutes), силуэт корпуса по курсу (в масштабе, но не меньше MinHullPx),
 //     отметки вводных; перестраивается с частотой обновления окна (5 Гц).
 // Окно (границы вида) у обоих слоёв общее — DebriefMapData.Views[0].Bounds.
+// 19.2б-3б: силуэт — контур MooringHull; поданные концы (MooringLines) с цветом натяжения
+// заполняет только окно инструктора — на планшете их нет (подсказка).
 // Подписи судов — текстом TextMeshPro (InstructorWindow, LocalOf).
 // ============================================================
 using System;
@@ -40,8 +42,16 @@ public class InstructorMapGraphic : DebriefMapGraphic
     [Tooltip("Наименьшая длина силуэта судна на карте, пикселей")]
     public float minHullPx = 16f;
 
+    /// <summary>19.2б-3б: поданный конец — от клюза к кнехту, цвет по натяжению (только окно инструктора).</summary>
+    public struct Line
+    {
+        public WorldPosition From, To;
+        public Color Color;
+    }
+
     public readonly List<Ship> Ships = new List<Ship>();
     public readonly List<Marker> Failures = new List<Marker>();
+    public readonly List<Line> MooringLines = new List<Line>();
 
     /// <summary>Точка карты в координатах этой графики (для подписей).</summary>
     public Vector2 LocalOf(WorldPosition p)
@@ -78,10 +88,12 @@ public class InstructorMapGraphic : DebriefMapGraphic
             Segment(vh, s.Position, end, 1.6f, s.Color);
         }
         foreach (Ship s in Ships) Hull(vh, s);
+        foreach (Line l in MooringLines) Segment(vh, l.From, l.To, 2f, l.Color);
         foreach (Marker m in Failures) Ring(vh, m.Position, 7f, 2.5f, FailureColor);
     }
 
-    // Силуэт: нос — точка, плечи — B от носа, корма — прямая; поворот по курсу (по часовой от N)
+    // Силуэт — контур корпуса швартовки (MooringHull, 19.2б-3б: на крупной шкале борт касается кранцев на карте
+    // так же, как в модели): цилиндрическая вставка до 0,25·L, сужение к форштевню, транец; поворот по курсу
     private readonly List<WorldPosition> hull = new List<WorldPosition>(5);
 
     private void Hull(VertexHelper vh, Ship s)
@@ -89,14 +101,9 @@ public class InstructorMapGraphic : DebriefMapGraphic
         double L = Math.Max(1.0, s.LengthM), B = Math.Max(0.5, s.BeamM);
         double k = Math.Max(1.0, minHullPx / (L * scale));   // мелко — увеличить до minHullPx
         L *= k; B *= k;
-        double psi = s.HeadingDeg * Math.PI / 180.0, sn = Math.Sin(psi), cs = Math.Cos(psi);
+        double psi = s.HeadingDeg * Math.PI / 180.0;
         hull.Clear();
-        void P(double x, double y) => hull.Add(new WorldPosition(s.Position.East + x * cs + y * sn, s.Position.North - x * sn + y * cs));
-        P(0, 0.5 * L);
-        P(0.5 * B, 0.5 * L - Math.Min(B, 0.4 * L));
-        P(0.5 * B, -0.5 * L);
-        P(-0.5 * B, -0.5 * L);
-        P(-0.5 * B, 0.5 * L - Math.Min(B, 0.4 * L));
+        foreach ((double x, double y) in MooringHull.Outline(L, B)) hull.Add(MooringHull.ToWorld(s.Position.East, s.Position.North, psi, x, y));
         Polygon(vh, hull, s.Color);
     }
 }

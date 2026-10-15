@@ -22,6 +22,8 @@ public sealed class SessionRecorder
     public int TrackRows { get; private set; }
     public int TargetRows { get; private set; }
     public int EventRows { get; private set; }
+    /// <summary>19.2б-3б: строк mooring.csv (0 — файл не создан).</summary>
+    public int MooringRows { get; private set; }
     public SessionFileWriter Writer => writer;
     /// <summary>Время последней строки траектории, с (NaN — строк ещё нет).</summary>
     public double LastTrackTime { get; private set; } = double.NaN;
@@ -30,6 +32,7 @@ public sealed class SessionRecorder
     private readonly StringBuilder track = new StringBuilder(4096);
     private readonly StringBuilder targets = new StringBuilder(1024);
     private readonly StringBuilder events = new StringBuilder(1024);
+    private readonly StringBuilder mooring = new StringBuilder(1024);
 
     public SessionRecorder(string folder, SessionMeta meta, bool background = true)
     {
@@ -65,12 +68,29 @@ public sealed class SessionRecorder
         SessionFormat.AppendEvent(events, EventRows, e);
     }
 
+    /// <summary>
+    /// 19.2б-3б: строка mooring.csv. Файл (с заголовком) создаётся первой строкой — у упражнений без
+    /// причала его нет; имя файла добавляется в session.json → recording.files.
+    /// </summary>
+    public void AddMooring(in MooringSample s)
+    {
+        if (!IsOpen) return;
+        if (MooringRows == 0)
+        {
+            writer.Append(SessionFormat.MooringFile, SessionFormat.MooringHeader + "\n");
+            if (!Meta.recording.files.Contains(SessionFormat.MooringFile)) Meta.recording.files.Add(SessionFormat.MooringFile);
+        }
+        SessionFormat.AppendMooring(mooring, s);
+        MooringRows++;
+    }
+
     /// <summary>Отдать накопленные строки писателю (не ждёт записи на диск).</summary>
     public void Flush()
     {
         Take(track, SessionFormat.TrackFile);
         Take(targets, SessionFormat.TargetsFile);
         Take(events, SessionFormat.EventsFile);
+        Take(mooring, SessionFormat.MooringFile);
     }
 
     /// <summary>Дождаться записи на диск (пауза приложения).</summary>
@@ -88,6 +108,7 @@ public sealed class SessionRecorder
         Meta.summary.track_rows = TrackRows;
         Meta.summary.target_rows = TargetRows;
         Meta.summary.event_rows = EventRows;
+        Meta.summary.mooring_rows = MooringRows;
         WriteMeta();
         IsOpen = false;
         return writer.Close(timeoutMs);

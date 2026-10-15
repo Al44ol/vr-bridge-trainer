@@ -240,6 +240,7 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         tracks.TrailMaxPoints = trailMaxPoints;
         tracks.Update(navigation);
         tracks.Fill(mapLive);
+        FillMooringLines();
 
         viewport.Track(tracks.Own.Position);
         if (viewport.Version != builtVersion)
@@ -252,6 +253,28 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         Labels();
         scaleText.text = $"1 пикс. = {ScenarioText.Num(viewport.MetersPerPixel, viewport.MetersPerPixel < 10 ? 1 : 0)} м · сетка {ScenarioText.Num(mapStatic.GridStepM)} м" +
                          (viewport.Follow ? " · за судном" : "") + " · колесо — масштаб, перетаскивание — сдвиг";
+    }
+
+    // 19.2б-3б: поданные концы — от клюза к кнехту, цвет по натяжению (как MooringLinesView в «обучении»):
+    // T < 0,3·MBL — зелёный, < 0,5·MBL — жёлтый, ≥ 0,5·MBL (перегрузка) — красный. Только окно инструктора.
+    private static readonly Color LineSlack = new Color(0.25f, 0.85f, 0.35f), LineLoaded = new Color(1f, 0.82f, 0.2f), LineOverload = new Color(0.95f, 0.2f, 0.15f);
+
+    private void FillMooringLines()
+    {
+        mapLive.MooringLines.Clear();
+        MooringController mc = MooringController.Instance;
+        BerthArea berth = mc != null ? mc.ActiveBerth : null;
+        if (berth == null || navigation.Model == null) return;
+        foreach (MooringLine l in mc.System.Lines)
+        {
+            if (l.State != MooringLineState.Fast) continue;
+            double share = l.Mbl > 0 ? l.Tension / l.Mbl : 0.0;
+            mapLive.MooringLines.Add(new InstructorMapGraphic.Line
+            {
+                From = mc.System.Fairlead(navigation.Model, l), To = berth.BollardWorld(l.Bollard),
+                Color = share >= MooringLine.OverloadFraction ? LineOverload : share >= 0.3 ? LineLoaded : LineSlack
+            });
+        }
     }
 
     private void Labels()

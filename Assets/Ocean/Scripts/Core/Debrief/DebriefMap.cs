@@ -12,6 +12,10 @@
 // цели (оба судна в этот момент и отрезок между ними), посадка и столкновение.
 // Виды: «весь маршрут» и окно вокруг каждого завершённого сближения
 // (в масштабе маршрута 7 км расхождение на 100 м не разглядеть).
+// 19.2б-3б: причалы из снимка акватории — пирс, кромка, кранцы, кнехты; навалы на кранцы
+// (скорость, уз) и удары о кромку — в точке касания; вид «У причала» (окно ≥ 150 м,
+// контуры судна L × B каждые 15 с и в конце) — в сценарии швартовки или если судно подходило
+// к кромке ближе 300 м.
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -20,7 +24,14 @@ public enum MapLayer
 {
     Land, Shoal, Fairway, Corridor, Route, Waypoint, Aid,
     TargetTrack, OwnTrack, TimeTick, Start, Manoeuvre, MinLink, MinPoint, Accident,
-    Failure   // D1: вводная инструктора (отказ)
+    Failure,     // D1: вводная инструктора (отказ)
+    // 19.2б-3б: причал и швартовка
+    Pier,        // пирс (многоугольник за кромкой)
+    Quay,        // кромка причала (линия A→B)
+    Fender,      // кранец (прямоугольник: длина × вылет)
+    Bollard,     // кнехт (значок; Series — номер причала)
+    HullOutline, // контур корпуса L × B (вид «У причала»: каждые 15 с и в конце)
+    Berthing     // навал на кранцы (Ok) / удар о кромку (не Ok): значок в точке касания, подпись — скорость
 }
 
 public sealed class MapLine
@@ -61,6 +72,8 @@ public sealed class DebriefMapView
     public MapRect Bounds;
     /// <summary>Шаг отметок времени на траектории, с.</summary>
     public double TickStepS = 300;
+    /// <summary>19.2б-3б: рисовать контуры корпуса (MapLayer.HullOutline) — только вид «У причала».</summary>
+    public bool ShowHulls;
 }
 
 public sealed class DebriefMapData
@@ -73,6 +86,8 @@ public sealed class DebriefMapData
     public readonly List<string> TargetNames = new List<string>();
     public readonly List<string> TargetIds = new List<string>();
     public bool HasArea, HasRoute;
+    /// <summary>19.2б-3б: на схеме есть причал.</summary>
+    public bool HasBerths;
 }
 
 public static class DebriefMap
@@ -155,8 +170,144 @@ public static class DebriefMap
                 d.Markers.Add(new MapMarker { Layer = MapLayer.Failure, Position = e.Position, Time = e.Time, Label = FailureLabel(e.Type) });
         }
 
-        AddViews(d, s, result, tracks);
+        AddBerthing(d, s, area);
+        AddViews(d, s, result, tracks, area);
         return d;
+    }
+
+    // ─────────── Причал (19.2б-3б) ───────────
+
+    /// <summary>Подходил ли к кромке ближе, м — вид «У причала» и контуры корпуса.</summary>
+    public const double BerthViewWithinM = 300.0;
+    /// <summary>Наименьший размер окна «У причала», м; контуры корпуса — через, с.</summary>
+    public const double BerthWindowMinM = 150.0, HullOutlineStepS = 15.0;
+
+    // Навалы и удары о кромку: значок в точке касания (вершина контура корпуса, ближайшая к кромке, — на кромку)
+    private static void AddBerthing(DebriefMapData d, RecordedSession s, SessionArea area)
+    {
+        if (area == null || area.berths == null || area.berths.Count == 0) return;
+        double L = s.Meta?.ship != null ? s.Meta.ship.length_m : 0, B = s.Meta?.ship != null ? s.Meta.ship.beam_m : 0;
+        foreach (ExerciseEvent e in s.Events)
+        {
+            bool fender = e.Type == ExerciseEventType.BerthingImpact, quay = e.Type == ExerciseEventType.QuayImpact;
+            if (!fender && !quay) continue;
+            WorldPosition p = ContactPoint(area, e.Position, e.HeadingDeg, L, B);
+            string speed = ScenarioText.Num(e.Value, 2);
+            // Повторные касания в том же месте (ближе 5 м) — одна отметка, скорости через «·»: «навал 0,29 · 0,05 уз»
+            MapMarker same = d.Markers.Find(x => x.Layer == MapLayer.Berthing && x.Ok == fender && (x.Position - p).Magnitude < BerthingMergeM);
+            if (same != null)
+            {
+                same.Label = same.Label.Substring(0, same.Label.Length - 3) + " · " + speed + " уз";
+                continue;
+            }
+            d.Markers.Add(new MapMarker
+            {
+                Layer = MapLayer.Berthing, Position = p, Time = e.Time, Ok = fender,
+                Label = $"{(fender ? "навал" : "удар о причал")} {speed} уз"
+            });
+        }
+    }
+
+    /// <summary>Навалы ближе, м, — одна отметка на схеме.</summary>
+    public const double BerthingMergeM = 5.0;
+
+    /// <summary>Точка касания: ближайшая к кромке вершина контура корпуса (MooringHull), перенесённая на кромку ближайшего причала.</summary>
+    public static WorldPosition ContactPoint(SessionArea area, WorldPosition ship, double headingDeg, double length, double beam)
+    {
+        BerthArea b = NearestBerth(area, ship, out _, out _);
+        if (b == null || length <= 0 || beam <= 0) return ship;
+        double psi = headingDeg * Math.PI / 180.0, bestN = double.MaxValue, bestT = 0;
+        foreach ((double x, double y) in MooringHull.Outline(length, beam))
+        {
+            b.ToLocal(MooringHull.ToWorld(ship.East, ship.North, psi, x, y), out double t, out double n);
+            if (n < bestN) { bestN = n; bestT = t; }
+        }
+        return b.ToWorld(Math.Max(0.0, Math.Min(b.Length, bestT)), 0.0);
+    }
+
+    /// <summary>Ближайший к точке причал снимка (null — нет); index — номер, distance — до кромки, м.</summary>
+    public static BerthArea NearestBerth(SessionArea area, WorldPosition p, out int index, out double distance)
+    {
+        index = -1;
+        distance = double.MaxValue;
+        BerthArea best = null;
+        if (area == null || area.berths == null) return null;
+        for (int i = 0; i < area.berths.Count; i++)
+        {
+            BerthArea b = area.Berth(i);
+            if (b == null || b.Length < 1.0) continue;
+            double dist = b.DistanceTo(p);
+            if (dist < distance) { distance = dist; index = i; best = b; }
+        }
+        return best;
+    }
+
+    /// <summary>Контур корпуса L × B (MooringHull) в точке с курсом, мировые координаты.</summary>
+    public static List<WorldPosition> HullOutline(WorldPosition ship, double headingDeg, double length, double beam)
+    {
+        var pts = new List<WorldPosition>(5);
+        double psi = headingDeg * Math.PI / 180.0;
+        foreach ((double x, double y) in MooringHull.Outline(length, beam)) pts.Add(MooringHull.ToWorld(ship.East, ship.North, psi, x, y));
+        return pts;
+    }
+
+    // Причал вида «У причала»: причал задания швартовки, иначе ближайший, к которому судно подходило ближе 300 м
+    private static BerthArea ViewBerth(RecordedSession s, SessionArea area, out int index)
+    {
+        index = -1;
+        if (area == null || area.berths == null || area.berths.Count == 0 || s.Track.Count == 0) return null;
+        SessionMooringTask task = s.Meta?.scenario?.mooring;
+        if (task != null && task.enabled)
+        {
+            BerthArea tb = area.Berth(task.berth_index);
+            if (tb != null && tb.Length >= 1.0) { index = task.berth_index; return tb; }
+        }
+        var berths = new List<BerthArea>();
+        for (int i = 0; i < area.berths.Count; i++) berths.Add(area.Berth(i));
+        BerthArea best = null;
+        double bestD = BerthViewWithinM;
+        foreach (TrackSample t in s.Track)
+            for (int i = 0; i < berths.Count; i++)
+            {
+                if (berths[i] == null || berths[i].Length < 1.0) continue;
+                double dist = berths[i].DistanceTo(t.Position);
+                if (dist <= bestD) { bestD = dist; best = berths[i]; index = i; }
+            }
+        return best;
+    }
+
+    // Вид «У причала»: кромка и пирс, траектория у кромки (≤ 100 м), контуры корпуса каждые 15 с и в конце
+    private static void AddBerthView(DebriefMapData d, RecordedSession s, SessionArea area)
+    {
+        BerthArea b = ViewBerth(s, area, out _);
+        if (b == null) return;
+        double L = s.Meta?.ship != null ? s.Meta.ship.length_m : 0, B = s.Meta?.ship != null ? s.Meta.ship.beam_m : 0;
+        MapRect r = MapRect.Empty;
+        double back = Math.Min(b.structureWidthM, 20.0);
+        foreach (WorldPosition p in new[] { b.a, b.b, b.ToWorld(0, -back), b.ToWorld(b.Length, -back) }) r.Include(p);
+        const double NearM = 100.0;
+        foreach (TrackSample t in s.Track) if (b.DistanceTo(t.Position) <= NearM) r.Include(t.Position);
+
+        if (L > 0 && B > 0 && s.Track.Count > 0)
+        {
+            double end = s.Track[s.Track.Count - 1].Time;
+            var times = new List<double>();
+            for (double t = 0; t < end - 1e-6; t += HullOutlineStepS) times.Add(t);
+            times.Add(end);
+            foreach (double t in times)
+            {
+                TrackSample st = s.StateAt(t);
+                if (b.DistanceTo(st.Position) > BerthViewWithinM) continue;
+                List<WorldPosition> hull = HullOutline(st.Position, st.HeadingDeg, L, B);
+                d.Polygons.Add(new MapPolygon { Layer = MapLayer.HullOutline, Points = hull, Label = ScenarioText.Clock(t) });
+                if (b.DistanceTo(st.Position) <= NearM) foreach (WorldPosition p in hull) r.Include(p);
+            }
+        }
+        d.Views.Add(new DebriefMapView
+        {
+            Key = "berth", Title = $"У причала «{b.name}»: контуры судна через {ScenarioText.Num(HullOutlineStepS)} с",
+            Bounds = r.Padded(0.08, BerthWindowMinM), TickStepS = 60, ShowHulls = true
+        });
     }
 
     /// <summary>Подпись вводной на схеме: «отказ ГД», «отказ руля».</summary>
@@ -194,6 +345,23 @@ public static class DebriefMap
         if (a.aids != null)
             foreach (SessionAid x in a.aids)
                 d.Markers.Add(new MapMarker { Layer = MapLayer.Aid, Position = x.Position, Aid = x.Type, Label = x.name });
+        // 19.2б-3б: причалы — пирс за кромкой (ширина как в сцене), кромка, кранцы (длина × вылет), кнехты
+        if (a.berths != null)
+            for (int i = 0; i < a.berths.Count; i++)
+            {
+                BerthArea b = a.Berth(i);
+                if (b == null || b.Length < 1.0) continue;
+                d.HasBerths = true;
+                double w = Math.Max(1.0, b.structureWidthM);
+                d.Polygons.Add(new MapPolygon { Layer = MapLayer.Pier, Points = { b.a, b.b, b.ToWorld(b.Length, -w), b.ToWorld(0, -w) }, Label = b.name });
+                d.Lines.Add(new MapLine { Layer = MapLayer.Quay, Series = i, Points = { b.a, b.b }, Label = b.name });
+                double fl = 0.5 * b.fenderLengthM, fd = b.fenderOuterDiameterM;
+                foreach (double t in b.FenderPositions())
+                    d.Polygons.Add(new MapPolygon { Layer = MapLayer.Fender, Points = { b.ToWorld(t - fl, 0), b.ToWorld(t + fl, 0), b.ToWorld(t + fl, fd), b.ToWorld(t - fl, fd) } });
+                List<double> bp = b.BollardPositions();
+                for (int k = 0; k < bp.Count; k++)
+                    d.Markers.Add(new MapMarker { Layer = MapLayer.Bollard, Position = b.BollardWorld(k), Series = i, Label = (k + 1).ToString() });
+            }
     }
 
     private static void AddRoute(DebriefMapData d, SessionScenario sc)
@@ -219,7 +387,7 @@ public static class DebriefMap
         d.Lines.Add(route);
     }
 
-    private static void AddViews(DebriefMapData d, RecordedSession s, AssessmentResult result, Dictionary<string, List<TargetSample>> tracks)
+    private static void AddViews(DebriefMapData d, RecordedSession s, AssessmentResult result, Dictionary<string, List<TargetSample>> tracks, SessionArea area)
     {
         // Весь маршрут: своё судно, маршрут, цели за время упражнения
         MapRect all = MapRect.Empty;
@@ -229,6 +397,7 @@ public static class DebriefMap
         foreach (List<TargetSample> list in tracks.Values)
             foreach (TargetSample t in list) all.Include(new WorldPosition(t.East, t.North));
         d.Views.Add(new DebriefMapView { Key = "all", Title = "Весь маршрут", Bounds = all.Padded(0.05, 500), TickStepS = 300 });
+        AddBerthView(d, s, area);   // 19.2б-3б
 
         if (result == null) return;
         foreach (EncounterSummary e in result.Encounters)

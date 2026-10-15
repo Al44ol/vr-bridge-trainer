@@ -7,6 +7,7 @@
 //     тот же поток событий, что и подписчики шины в реальном времени;
 //   • столбцы ищутся по заголовку (лишние и новые столбцы не мешают);
 //   • файл можно читать, пока он пишется (FileShare.ReadWrite).
+// 19.2б-3б: mooring.csv (если есть) → Mooring, MooringAt(t) — строка не позже t.
 // StateAt(t) — состояние судна в любой момент: линейная интерполяция между
 // строками траектории, курс — по кратчайшей дуге (359° → 1° через 0°),
 // дискретные величины (телеграф, участок, на мели) — по предыдущей строке.
@@ -24,6 +25,8 @@ public sealed class RecordedSession
     public readonly List<TrackSample> Track = new List<TrackSample>();
     public readonly List<ExerciseEvent> Events = new List<ExerciseEvent>();
     public readonly List<TargetSample> Targets = new List<TargetSample>();
+    /// <summary>19.2б-3б: строки mooring.csv (пусто — файла нет: причал не понадобился или запись до 19.2б-3б).</summary>
+    public readonly List<MooringSample> Mooring = new List<MooringSample>();
     /// <summary>Замечания при чтении (нет файла, нераспознанные строки).</summary>
     public readonly List<string> Warnings = new List<string>();
 
@@ -77,6 +80,19 @@ public sealed class RecordedSession
         return s;
     }
 
+    /// <summary>Строка mooring.csv с Time ≤ t (null — строк нет или t раньше первой).</summary>
+    public MooringSample? MooringAt(double t)
+    {
+        int lo = 0, hi = Mooring.Count - 1, ans = -1;
+        while (lo <= hi)
+        {
+            int mid = (lo + hi) >> 1;
+            if (Mooring[mid].Time <= t + 1e-9) { ans = mid; lo = mid + 1; }
+            else hi = mid - 1;
+        }
+        return ans >= 0 ? Mooring[ans] : (MooringSample?)null;
+    }
+
     private static double Lerp(double a, double b, double k) => a + (b - a) * k;
 
     /// <summary>Интерполяция угла 0…360° по кратчайшей дуге.</summary>
@@ -108,6 +124,10 @@ public static class SessionReader
             if (TryParseEvent(c, f, out ExerciseEvent e)) s.Events.Add(e);
             else s.Warnings.Add($"{SessionFormat.EventsFile}: неизвестный тип события «{Get(c, f, "type")}»");
         });
+        // 19.2б-3б: mooring.csv есть не у всех сессий — без файла замечания нет
+        string mooring = Path.Combine(folder, SessionFormat.MooringFile);
+        if (File.Exists(mooring))
+            ReadTable(mooring, s, (c, f) => s.Mooring.Add(MooringRecording.Parse(name => Get(c, f, name))));
         return s;
     }
 
