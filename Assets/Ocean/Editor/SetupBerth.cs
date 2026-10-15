@@ -10,6 +10,7 @@
 //   4. рычаг подруливающего ThrusterHead на пульте — слева от TelegraphHead (подвинуть в Scene View):
 //      корпус, шкала ЛБ 100 · 50 · 0 · 50 · 100 ПБ, ось LeverPivot (качается вбок), рукоятка Knob —
 //      единственный коллайдер взаимодействия; ThrusterLever + XRSimpleInteractable + GrabHighlight;
+//      масштаб модели 0,5 (решение пользователя; уже построенный в масштабе 1 — уменьшается);
 //   5. Ship/ControlMenu — меню «Управление» на кнопке B правого контроллера (BridgeMenu + ShipControlOrders);
 //   6. проверка: корпус Hull в сцене против L × B ассета (контакт с кранцами считается по ассету),
 //      кнопка B не занята панелью погоды (PanelToggle.controllerButton).
@@ -115,6 +116,7 @@ public static class SetupBerth
             }
         }
         else log.AppendLine("  = рычаг подруливающего уже есть (" + lever.name + ")");
+        if (lever != null) ApplyHeadScale(lever.transform, log);
         if (lever != null)
         {
             Undo.RecordObject(mc, "Link thruster lever");
@@ -278,8 +280,36 @@ public static class SetupBerth
         var highlight = Undo.AddComponent<GrabHighlight>(headGo);
         highlight.interactable = interactable;
         highlight.renderers = new Renderer[] { knob.GetComponent<Renderer>(), arm.GetComponent<Renderer>() };
-        log.AppendLine($"  + {parent.name}/{HeadName} — рычаг подруливающего слева от телеграфа (локально {localPos.x:F2}; {localPos.y:F2}; {localPos.z:F2}) — подвиньте в Scene View, если мешает");
+        head.localScale = Vector3.one * HeadScale;
+        sphere.radius = 0.9f / HeadScale * 0.75f;
+        log.AppendLine($"  + {parent.name}/{HeadName} (масштаб {HeadScale}) — рычаг подруливающего слева от телеграфа (локально {localPos.x:F2}; {localPos.y:F2}; {localPos.z:F2}) — подвиньте в Scene View, если мешает");
         return lever;
+    }
+
+    /// <summary>
+    /// Масштаб модели рычага (решение пользователя 15.10.2026: вдвое меньше первой постройки).
+    /// Применяется, только пока ThrusterHead в масштабе 1 (как построен) — ручная правка масштаба не затирается.
+    /// Коллайдер рукоятки — с запасом: ≈ 3 см радиусом в мире, чтобы за маленькую рукоятку было легко взяться.
+    /// </summary>
+    private const float HeadScale = 0.5f;
+
+    private static void ApplyHeadScale(Transform head, StringBuilder log)
+    {
+        if ((head.localScale - Vector3.one).sqrMagnitude > 1e-6f)
+        {
+            log.AppendLine($"  = масштаб {head.name}: {head.localScale.x:0.##} (не меняется)");
+            return;
+        }
+        Undo.RecordObject(head, "Scale ThrusterHead");
+        head.localScale = Vector3.one * HeadScale;
+        Transform knob = head.Find("LeverPivot/Knob");
+        var sphere = knob != null ? knob.GetComponent<SphereCollider>() : null;
+        if (sphere != null)
+        {
+            Undo.RecordObject(sphere, "Knob collider");
+            sphere.radius = 0.9f / HeadScale * 0.75f;   // 0,9 при масштабе 1 → 1,35: в мире ≈ 3 см вместо 2 см
+        }
+        log.AppendLine($"  + {head.name}: масштаб {HeadScale} (вдвое меньше), коллайдер рукоятки увеличен до ≈ 3 см");
     }
 
     // ─────────── Проверка корпуса ───────────

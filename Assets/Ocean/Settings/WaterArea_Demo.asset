@@ -358,4 +358,25 @@ MonoBehaviour:
       North: 3200
     - East: 3031.088913245535
       North: 4950
-  revision: 1
+  berths:
+  - name: "\u041F\u0440\u0438\u0447\u0430\u043B \u21161"
+    a:
+      East: 3404.1016151377544
+      North: 5303.923048454133
+    b:
+      East: 3473.3836474405093
+      North: 5343.923048454133
+    quayHeightM: 2.5
+    depthM: 8
+    fenderOuterDiameterM: 0.37112048
+    fenderRatedDeflectionM: 0.18556024
+    fenderRatedReactionKn: 165.2765
+    fenderLengthM: 1.575
+    fenderSpacingM: 5
+    fenderEndMarginM: 4
+    fenderFriction: 0.3
+    bollardSpacingM: 9
+    bollardEndMarginM: 3
+    bollardSetbackM: 1
+    structureWidthM: 14
+  revision: 2
