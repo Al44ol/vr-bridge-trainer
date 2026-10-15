@@ -4360,3 +4360,9 @@ k_∞ подбирается бисекцией по ln k на 0,05…20 так,
 5. Söding H. Prediction of ship steering capabilities. Schiffstechnik, 1982, S. 3–29 (по ссылке в MSS addedMassSurge.m).
 6. Nomoto K., Taguchi T., Honda K., Hirano S. On the steering qualities of ships. International Shipbuilding Progress, 1957, 4(35).
 7. Chislett M.S., Strøm-Tejsen J. Planar Motion Mechanism Tests and Full-Scale Steering and Manoeuvring Predictions for a Mariner Class Vessel. Hy-5, Lyngby, 1965.
+
+### 19.10. Итог проверки (15.10.2026) — запрос 19.1 закрыт
+
+- **Шлем (пользователь, 3–4 запуска Play Mode):** «вроде всё работает»: переключатель «Модель движения», ход в 3 СС, отладочная сила в борт — судно идёт лагом.
+- **Наблюдение, не связанное с моделью:** один раз после 3–4 переключений кнопкой меню Quest на рабочий стол Virtual Desktop и обратно изображение в глазах разошлось (на одном — кадр с меню, на другом — рывки без меню). Повторить не удалось, лог не сохранился. При нажатии кнопки меню сессия OpenXR штатно переходит FOCUSED → VISIBLE (`Editor.log`); тренажёр не рисует глаза по отдельности, поэтому вероятная причина — компоновщик рантайма XR на переходах фокуса. Обход — перезапуск Play Mode.
+- **Тесты:** вне Unity 232/232; результат Unity Test Runner пользователь не сообщал.

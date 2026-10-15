@@ -173,13 +173,13 @@ XR Origin — дочерний объект Ship, игрок качается в
 - Тесты: `DebriefTests` +2 (`Plots_SeriesFromTrack_BreaksMarksSafeSpeed`, `Plots_ReportAndPanelSameSeriesAndAxes`); всего 218. Проверено в шлеме — закрыт 12.10.2026. Подробно — ThesisNotes, раздел 17 (итог — 17.8).
 
 ## Модель 3 СС для малых скоростей (запрос 19.1 — буксир и швартовка, часть 1)
-- Запрос 19 разбит: **19.1** модель 3 СС (код готов 15.10.2026), **19.2** причал, кранцы, концы (перед началом — решить, какое судно швартуем), **19.3** буксиры, ветер, оценка (Plan.md).
+- Запрос 19 разбит: **19.1** модель 3 СС (закрыт 15.10.2026), **19.2** причал, кранцы, концы (перед началом — решить, какое судно швартуем), **19.3** буксиры, ветер, оценка (Plan.md).
 - Core `Core/Manoeuvring/Manoeuvring3Dof.cs`: `ClarkeDerivatives` (регрессия Clarke 1983, MSS clarke83.m), `HullForces` (Хёрнер, Söding), `Manoeuvring3DofCoefficients` — согласование: k_N (демпфирование рыскания) и Y'_δ по K', T' ассета; k_∞ — множитель C_d на ходу (≥ 0,5·V_эксп, переход от 0,25·V_эксп) по диаметру установившейся циркуляции 35° модели ассета; кэш по значениям параметров (построение 3–90 мс). Центробежные −m·u·r добавлены явно; N_v — с u со знаком (с |u| было ложное вращение при дрейфе). `LowSpeedTrials` — дрейф, разворот на месте, «толчок» с обдувом руля и без, задний ход; `CompareMotionModels`.
 - `ShipDynamicsModel`: `V` (поперечная, > 0 — ПБ), `MotionOverride` / `ActiveMotionModel` / `Uses3Dof`, `AddForce(fx, fy, xPoint)` / `AddMoment` (сбрасываются после шага; Номото их игнорирует), `VelocityEast/North`, `SpeedThroughWater`. При Course1Dof — бит в бит прежняя модель.
 - `ShipParameters`: `motionModel` (по умолчанию Course1Dof у всех ассетов — цели и прогоны не меняются), `yawGyrationRadiusL` 0,25, `centreOfGravityX` 0, `crossFlowDragCoeff` 0 (= Хёрнер), `matchTurningCircle` вкл., `rudderLeverL` −0,5, `rudderSlipstreamFactor` 0,5, `propellerSideForceFactor` 0,05.
 - Сцена (Setup не нужен): `ShipNavigation.motionModel` (AsAsset), меню A «Судно» → «Модель движения: Номото / 3 СС» (вне упражнения), «Отладка» → «Сила в борт», «Пара сил» (3 СС, вне упражнения; `debugForceTonnes`, 0 — 0,002·Δ·g); NavDisplay — строка «лагом»; `session.json → ship.motion_model`; `cog_deg` — по скорости относительно грунта при V ≠ 0.
 - Стенд: окно Manoeuvring Trials — «Модель движения», «Малые скорости», «Сравнение моделей» → `lowspeed_*`, `comparison_3dof.*`, `model_3dof.md`.
-- Тесты: `LowSpeedModelTests` (14 с TestCase); всего 232. Подробно — ThesisNotes, раздел 19.
+- Тесты: `LowSpeedModelTests` (14 с TestCase); всего 232. Проверено в шлеме — закрыт 15.10.2026. Подробно — ThesisNotes, раздел 19 (итог — 19.10).
 
 ## Сборка (после запроса 17)
 - Пока только PC (Windows) — пробная сборка для проверки окна инструктора, PiP и замера вне редактора; инструкция — `Docs/Build.md`. В сборке: сессии — `Документы/VRBridgeTrainer/Sessions`; замеры — `<папка сборки>/ThesisData/Performance` (путь от `Application.dataPath`); лог — `%USERPROFILE%/AppData/LocalLow/DefaultCompany/VR_BridgeTrainer_1/Player.log`; список сценариев — сохранённый в сцене (`ScenarioLibrarySync` работает только при входе в Play Mode).
