@@ -49,6 +49,12 @@
 //     критерий не оценивается (как F5);
 //   • маршрутные критерии R1–R3, R8a не учитывают время отказа (от отказа до возврата
 //     в коридор после устранения — как манёвр расхождения).
+//
+// 19.2б-3 — швартовка (только в сценарии швартовки, Context.Mooring): M1 — по событиям MooringStage;
+// 19.2б-3в — M2 скорость навала (BerthingImpact), M3 обжатие кранцев (строки mooring.csv и пик эпизода),
+// M4 удар о кромку (QuayImpact), M5 угол и M9 место при первом касании (mooring.csv), M6 обрыв и M7 время
+// перегрузки концов (LineBroken, LineOverload → Cleared), M8 время «ошвартован» / контрольное. Строки
+// mooring.csv — AddMooring (в шлеме — тот же срез с Quantize, по записи — из файла): бит в бит.
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -196,6 +202,16 @@ public sealed class ExerciseAssessor
     private readonly List<SoundBlast> blasts = new List<SoundBlast>();
     // 19.2б-3: выполненные задания швартовки (события MooringStage)
     private readonly HashSet<int> mooringStages = new HashSet<int>();
+    // 19.2б-3в: навалы, удары о кромку, концы (события) и срезы mooring.csv
+    private readonly List<ExerciseEvent> berthings = new List<ExerciseEvent>(), quayImpacts = new List<ExerciseEvent>(), linesBroken = new List<ExerciseEvent>();
+    private readonly Dictionary<int, double> overloadFrom = new Dictionary<int, double>();
+    private readonly List<(double from, double to, string line)> overloads = new List<(double, double, string)>();
+    private readonly List<MooringSample> mooring = new List<MooringSample>();
+    private int linesMadeFast;
+    private double mooredAt = double.NaN;
+
+    /// <summary>19.2б-3в: строки mooring.csv в порядке времени (для раздела отчёта и графика).</summary>
+    public IReadOnlyList<MooringSample> Mooring => mooring;
 
     private const double Nm = NavigationLights.MetersPerNm;
 
@@ -301,6 +317,21 @@ public sealed class ExerciseAssessor
                 break;
             case ExerciseEventType.MooringStage:
                 mooringStages.Add(e.Index);
+                if (e.Index == (int)MooringStage.Moored && double.IsNaN(mooredAt)) mooredAt = e.Time;
+                break;
+            case ExerciseEventType.BerthingImpact: berthings.Add(e); break;
+            case ExerciseEventType.QuayImpact: quayImpacts.Add(e); break;
+            case ExerciseEventType.LineMadeFast: linesMadeFast++; break;
+            case ExerciseEventType.LineBroken:
+                linesBroken.Add(e);
+                CloseOverload(e.Index, e.Time, e.Subject);
+                break;
+            case ExerciseEventType.LineOverload:
+                if (!overloadFrom.ContainsKey(e.Index)) overloadFrom[e.Index] = e.Time;
+                break;
+            case ExerciseEventType.LineOverloadCleared:
+            case ExerciseEventType.LineReleased:
+                CloseOverload(e.Index, e.Time, e.Subject);
                 break;
             case ExerciseEventType.EngineFailure:
             case ExerciseEventType.SteeringFailure:
@@ -339,6 +370,23 @@ public sealed class ExerciseAssessor
                 EndTime = e.Time;
                 break;
         }
+    }
+
+    private void CloseOverload(int line, double t, string subject)
+    {
+        if (!overloadFrom.TryGetValue(line, out double from)) return;
+        overloadFrom.Remove(line);
+        overloads.Add((from, t, subject ?? ""));
+    }
+
+    /// <summary>
+    /// 19.2б-3в: строка mooring.csv (в шлеме — тот же срез MooringSampler.Build с Quantize, по записи — из файла).
+    /// Критерии швартовки по строкам от порядка событий не зависят: строка просто копится.
+    /// </summary>
+    public void AddMooring(in MooringSample s)
+    {
+        if (Finished) return;
+        mooring.Add(s);
     }
 
     private TargetTrack Track(string id)
@@ -789,6 +837,7 @@ public sealed class ExerciseAssessor
         EvaluateVisibility(r, final);
         EvaluateFailures(r, final);
         EvaluateMooring(r, final, aborted);
+        EvaluateMooringDetails(r, final);
 
         Add(r, AssessmentCatalog.A1, "", groundings, groundings > 0 ? $"посадка на мель «{firstGrounding}»" : "нет");
         Add(r, AssessmentCatalog.A2, "", collisions, collisions > 0 ? $"столкновение с «{firstCollision}»" : "нет");
@@ -823,6 +872,96 @@ public sealed class ExerciseAssessor
         Add(r, AssessmentCatalog.M1, "", (double)done / MooringTaskTracker.StageCount,
             missing.Count == 0 ? $"все {MooringTaskTracker.StageCount} задания выполнены, ошвартован {ScenarioText.Clock(EndTime)}"
                                : $"выполнено {done} из {MooringTaskTracker.StageCount}; не выполнено: {string.Join(", ", missing)}");
+    }
+
+    // 19.2б-3в: M2–M9 — навал, кранцы, кромка, угол, концы, время, крыло. Оцениваются и во время упражнения
+    // (текущий балл) по уже случившемуся; M8 — когда ошвартован. Формулы — ThesisNotes 19.23.
+    private void EvaluateMooringDetails(AssessmentResult r, bool final)
+    {
+        if (Context.Mooring == null) return;
+        double end = final && !double.IsNaN(EndTime) ? EndTime : Time;
+
+        // M2 — наибольшая скорость навала
+        int worst = -1;
+        double energyMax = 0.0;
+        for (int i = 0; i < berthings.Count; i++)
+        {
+            if (worst < 0 || berthings[i].Value > berthings[worst].Value) worst = i;
+            if (berthings[i].Value2 > energyMax) energyMax = berthings[i].Value2;
+        }
+        if (worst < 0) SkipMooring(r, AssessmentCatalog.M2, final, "навала не было");
+        else
+            Add(r, AssessmentCatalog.M2, "", berthings[worst].Value,
+                $"{AssessmentResult.Num(berthings[worst].Value, 2)} уз в {ScenarioText.Clock(berthings[worst].Time)}; навалов {berthings.Count}");
+
+        // M3 — наибольшее обжатие: строки mooring.csv (5 Гц) и пик эпизода навала (Index — % номинала)
+        double ratio = 0.0;
+        bool contact = berthings.Count > 0;
+        foreach (MooringSample m in mooring)
+            if (m.FenderContact) { contact = true; if (m.FenderDeflectionRatio > ratio) ratio = m.FenderDeflectionRatio; }
+        foreach (ExerciseEvent e in berthings) if (e.Index >= 0 && e.Index / 100.0 > ratio) ratio = e.Index / 100.0;
+        if (!contact) SkipMooring(r, AssessmentCatalog.M3, final, "касания кранцев не было");
+        else Add(r, AssessmentCatalog.M3, "", ratio, $"{AssessmentResult.Num(ratio * 100.0, 0)} % номинала; наибольшая энергия навала {AssessmentResult.Num(energyMax, 1)} кДж");
+
+        // M4 — удары о кромку
+        Add(r, AssessmentCatalog.M4, "", quayImpacts.Count, quayImpacts.Count == 0 ? "нет"
+            : $"{quayImpacts.Count}; первый в {ScenarioText.Clock(quayImpacts[0].Time)}, {AssessmentResult.Num(quayImpacts[0].Value, 2)} уз");
+
+        // M5, M9 — первое касание кранцев (строка mooring.csv)
+        int first = mooring.FindIndex(m => m.FenderContact && m.HasBerth);
+        if (first < 0)
+        {
+            SkipMooring(r, AssessmentCatalog.M5, final, "касания кранцев не было");
+            SkipMooring(r, AssessmentCatalog.M9, final, "касания кранцев не было");
+        }
+        else
+        {
+            MooringSample c = mooring[first];
+            Add(r, AssessmentCatalog.M5, "", Math.Abs(c.AngleDeg), $"{AssessmentResult.Num(c.AngleDeg, 1)}° в {ScenarioText.Clock(c.Time)}");
+            BridgeStation st = (BridgeStation)c.Station;
+            BridgeStation wing = WingTowardBerth(c.Time);
+            bool ok = st != BridgeStation.Helm && (wing == BridgeStation.Helm || st == wing);
+            Add(r, AssessmentCatalog.M9, "", ok ? 1.0 : 0.0,
+                $"{BridgeStations.Title(st)}" + (wing != BridgeStation.Helm ? $" (причал — {BridgeStations.Title(wing)})" : ""));
+        }
+
+        // M6, M7 — концы
+        if (linesMadeFast == 0)
+        {
+            SkipMooring(r, AssessmentCatalog.M6, final, "концы не подавались");
+            SkipMooring(r, AssessmentCatalog.M7, final, "концы не подавались");
+        }
+        else
+        {
+            Add(r, AssessmentCatalog.M6, "", linesBroken.Count, linesBroken.Count == 0 ? "нет"
+                : $"{linesBroken.Count}: {linesBroken[0].Subject} в {ScenarioText.Clock(linesBroken[0].Time)}, {AssessmentResult.Num(linesBroken[0].Value, 0)} кН");
+            double total = 0.0;
+            var names = new List<string>();
+            foreach (var o in overloads) { total += Math.Max(0.0, o.to - o.from); if (!names.Contains(o.line)) names.Add(o.line); }
+            foreach (KeyValuePair<int, double> o in overloadFrom) total += Math.Max(0.0, end - o.Value);   // ещё перегружен
+            Add(r, AssessmentCatalog.M7, "", total, total <= 0.0 ? "нет" : $"{AssessmentResult.Num(total, 1)} с" + (names.Count > 0 ? $": {string.Join(", ", names)}" : ""));
+        }
+
+        // M8 — время швартовки
+        double target = Context.Mooring.targetTimeS;
+        if (double.IsNaN(mooredAt)) { if (final) Skip(r, AssessmentCatalog.M8, "", "не ошвартован (M1)"); }
+        else if (target <= 0) Skip(r, AssessmentCatalog.M8, "", "контрольное время не задано");
+        else Add(r, AssessmentCatalog.M8, "", mooredAt / target, $"ошвартован в {ScenarioText.Clock(mooredAt)} при контрольном {ScenarioText.Clock(target)}");
+    }
+
+    // «Не оценивался» — только в итоге (во время упражнения строки нет, пока событие не случилось)
+    private void SkipMooring(AssessmentResult r, string code, bool final, string why)
+    {
+        if (final) Skip(r, code, "", why);
+    }
+
+    // Крыло со стороны причала задания при курсе своего судна в момент t (Helm — причала нет в записи)
+    private BridgeStation WingTowardBerth(double t)
+    {
+        if (Context.MooringBerth == null || own.Count == 0) return BridgeStation.Helm;
+        int i = own.Count - 1;
+        while (i > 0 && own[i].Time > t + 1e-9) i--;
+        return MooringTasks.SideTitle(Context.MooringBerth, own[i].HeadingDeg) == "левым" ? BridgeStation.WingPort : BridgeStation.WingStarboard;
     }
 
     private void Skip(AssessmentResult r, string code, string subject, string why)

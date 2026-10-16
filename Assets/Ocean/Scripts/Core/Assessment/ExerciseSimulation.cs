@@ -462,6 +462,23 @@ public static class DemoAssessmentRuns
     /// </summary>
     public static readonly string[] FailureVariants = { "steer_fast", "steer_late", "steer_none", "engine_fast" };
     public const double FailureTime = 300;
+    /// <summary>
+    /// 19.2б-3в, 19-01 (BerthingSimulation): правильно (подход к линии в 6 м от кромки, «Стоп» за 70 м до середины,
+    /// концы «понемногу», с крыла ЛБ); быстро (концы выбирать без остановок); под углом (курс 20° к кромке, «Стоп» за 25 м,
+    /// без выравнивания); у штурвала (без перехода на крыло); долго (концы поданы, но выбирать — через 10 мин).
+    /// </summary>
+    public static readonly string[] BerthVariants = { "berth_correct", "berth_fast", "berth_angle", "berth_helm", "berth_slow" };
+
+    public static void ConfigureBerth(BerthingPlan plan, string variant)
+    {
+        switch (variant)
+        {
+            case "berth_fast": plan.CarefulHaul = false; break;
+            case "berth_angle": plan.FixedApproachAngleDeg = 20.0; plan.StopLeadM = 25.0; break;
+            case "berth_helm": plan.GoToWing = false; break;
+            case "berth_slow": plan.HaulDelayS = 600.0; break;
+        }
+    }
 
     public static string Title(string variant)
     {
@@ -481,6 +498,11 @@ public static class DemoAssessmentRuns
             case "steer_late": return "отказ руля — «Стоп» через 45 с";
             case "steer_none": return "отказ руля — без реакции";
             case "engine_fast": return "отказ ГД — «Стоп» через 10 с";
+            case "berth_correct": return "швартовка: правильные действия";
+            case "berth_fast": return "швартовка: концы выбирать без остановок";
+            case "berth_angle": return "швартовка: подход под углом 20°";
+            case "berth_helm": return "швартовка: у штурвала, без перехода на крыло";
+            case "berth_slow": return "швартовка: концы выбирать через 10 мин";
             default: return variant;
         }
     }

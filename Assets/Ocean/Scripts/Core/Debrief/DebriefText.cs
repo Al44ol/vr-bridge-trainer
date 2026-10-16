@@ -71,6 +71,14 @@ public static class DebriefText
         { AssessmentCatalog.N1, "Запоздалая реакция на отказ рулевого устройства (ход не снижен)" },
         { AssessmentCatalog.N2, "Запоздалая реакция на отказ главного двигателя (не дан «Стоп»)" },
         { AssessmentCatalog.M1, "Задание швартовки не выполнено: судно не ошвартовано" },
+        { AssessmentCatalog.M2, "Навал на кранцы со слишком большой скоростью" },
+        { AssessmentCatalog.M3, "Кранцы обжаты сверх номинала" },
+        { AssessmentCatalog.M4, "Удар корпусом о кромку причала" },
+        { AssessmentCatalog.M5, "Подход к причалу под большим углом (навал скулой)" },
+        { AssessmentCatalog.M6, "Обрыв швартовного конца" },
+        { AssessmentCatalog.M7, "Перегрузка швартовных концов" },
+        { AssessmentCatalog.M8, "Швартовка заняла больше контрольного времени" },
+        { AssessmentCatalog.M9, "Подход к кранцам не с крыла со стороны причала" },
         { AssessmentCatalog.A1, "Посадка на мель" },
         { AssessmentCatalog.A2, "Столкновение" }
     };

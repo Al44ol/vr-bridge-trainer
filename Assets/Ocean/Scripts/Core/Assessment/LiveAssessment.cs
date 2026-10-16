@@ -70,6 +70,14 @@ public sealed class LiveAssessment
         LastSampleTime = own.Time;
     }
 
+    /// <summary>19.2б-3в: срез с строкой mooring.csv (та же строка, что в файле, — после Quantize).</summary>
+    public void AddSample(in TrackSample own, IReadOnlyList<TargetSample> targets, in MooringSample mooring)
+    {
+        if (!Running) return;
+        AddSample(own, targets);
+        if (mooring.Lines != null) Assessor.AddMooring(SessionFormat.Quantize(mooring));
+    }
+
     public AssessmentResult End()
     {
         if (!Running) return Result;
@@ -101,6 +109,7 @@ public static class SessionAssessment
             a.AddSample(own, tgts);
         }
         while (ei < s.Events.Count) a.AddEvent(s.Events[ei++]);
+        foreach (MooringSample m in s.Mooring) a.AddMooring(m);   // 19.2б-3в: строки mooring.csv
         return a.Finish();
     }
 }

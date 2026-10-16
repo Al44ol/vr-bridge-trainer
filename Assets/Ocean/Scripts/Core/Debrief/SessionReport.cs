@@ -78,6 +78,7 @@ public static class SessionReport
         Violations(h, r);
         Maps(h, map);
         Encounters(h, r);
+        Mooring(h, s, sc);
         Criteria(h, r);
         Plots(h, s, r);
         Events(h, s);
@@ -208,6 +209,83 @@ public static class SessionReport
             h.Append("<figure>\n").Append(DebriefSvg.Map(map, v, "map" + i, 680, i == 0 ? 860 : 620));
             h.Append($"<figcaption>Рисунок {i + 1} — {H(v.Title)}</figcaption>\n</figure>\n");
         }
+    }
+
+    // 19.2б-3в: швартовка — этапы задания, навалы и удары о кромку, концы, место обучающегося.
+    // Только в сценарии швартовки или если был причал (mooring.csv); прочие отчёты не меняются.
+    private static void Mooring(StringBuilder h, RecordedSession s, SessionScenario sc)
+    {
+        MooringTaskDefinition task = sc.mooring != null ? sc.mooring.ToDefinition() : null;
+        if (task == null && s.Mooring.Count == 0) return;
+        h.Append("<h2>Швартовка</h2>\n");
+
+        if (task != null)
+        {
+            var doneAt = new Dictionary<int, double>();
+            foreach (ExerciseEvent e in s.Events)
+                if (e.Type == ExerciseEventType.MooringStage && !doneAt.ContainsKey(e.Index)) doneAt[e.Index] = e.Time;
+            h.Append($"<p>Причал: {H(sc.mooring.berth_name)}; контрольное время {ScenarioText.Clock(task.targetTimeS)}.</p>\n");
+            h.Append("<table>\n<thead><tr><th>Задание</th><th>Условие</th><th>Выполнено</th></tr></thead><tbody>\n");
+            for (int i = 1; i <= MooringTaskTracker.StageCount; i++)
+            {
+                var st = (MooringStage)i;
+                h.Append($"<tr><td>{i}. {H(MooringTasks.Title(st))}</td><td>{H(MooringTasks.Condition(task, st))}</td>" +
+                         $"<td class=\"num\">{(doneAt.TryGetValue(i, out double t) ? ScenarioText.Clock(t) : "нет")}</td></tr>\n");
+            }
+            h.Append("</tbody></table>\n");
+        }
+
+        // Навалы и удары о кромку
+        var hits = s.Events.FindAll(e => e.Type == ExerciseEventType.BerthingImpact || e.Type == ExerciseEventType.QuayImpact);
+        if (hits.Count == 0) h.Append("<p>Касаний причала не было.</p>\n");
+        else
+        {
+            h.Append("<table>\n<thead><tr><th>Время</th><th>Касание</th><th>Скорость к кромке, уз</th><th>Энергия, кДж</th><th>Обжатие, % номинала</th><th>Кранцев</th></tr></thead><tbody>\n");
+            foreach (ExerciseEvent e in hits)
+            {
+                bool fender = e.Type == ExerciseEventType.BerthingImpact;
+                h.Append($"<tr{(fender ? "" : " class=\"fail\"")}><td class=\"num\">{ScenarioText.Clock(e.Time)}</td><td>{(fender ? "навал на кранцы" : "удар корпусом о кромку")}</td>" +
+                         $"<td class=\"num\">{ScenarioText.Num(e.Value, 2)}</td><td class=\"num\">{(fender ? ScenarioText.Num(e.Value2, 1) : "—")}</td>" +
+                         $"<td class=\"num\">{(fender && e.Index >= 0 ? e.Index.ToString(Inv) : "—")}</td><td class=\"num\">{(fender ? H(e.Subject) : "—")}</td></tr>\n");
+            }
+            h.Append("</tbody></table>\n");
+        }
+
+        // Концы: подан / отдан, перегрузки, обрыв, наибольшее натяжение (mooring.csv)
+        var rows = new List<string>();
+        for (int i = 0; i < MooringSample.LineCount; i++)
+        {
+            double given = double.NaN, released = double.NaN, broken = double.NaN, maxT = 0.0;
+            int overloads = 0;
+            foreach (ExerciseEvent e in s.Events)
+            {
+                if (e.Index != i) continue;
+                if (e.Type == ExerciseEventType.LineMadeFast && double.IsNaN(given)) given = e.Time;
+                else if (e.Type == ExerciseEventType.LineReleased) released = e.Time;
+                else if (e.Type == ExerciseEventType.LineOverload) overloads++;
+                else if (e.Type == ExerciseEventType.LineBroken) broken = e.Time;
+            }
+            foreach (MooringSample m in s.Mooring)
+                if (m.Lines != null && m.Lines[i].Fast && m.Lines[i].TensionKn > maxT) maxT = m.Lines[i].TensionKn;
+            if (double.IsNaN(given)) continue;
+            rows.Add($"<tr{(!double.IsNaN(broken) ? " class=\"fail\"" : "")}><td>{H(MooringLine.Title((MooringLineKind)i))}</td><td class=\"num\">{ScenarioText.Clock(given)}</td>" +
+                     $"<td class=\"num\">{(double.IsNaN(released) ? "—" : ScenarioText.Clock(released))}</td><td class=\"num\">{ScenarioText.Num(maxT, 1)}</td>" +
+                     $"<td class=\"num\">{overloads}</td><td class=\"num\">{(double.IsNaN(broken) ? "—" : ScenarioText.Clock(broken))}</td></tr>\n");
+        }
+        if (rows.Count == 0) h.Append("<p>Концы не подавались.</p>\n");
+        else
+        {
+            h.Append("<table>\n<thead><tr><th>Конец</th><th>Подан</th><th>Отдан</th><th>Наибольшее натяжение, кН</th><th>Перегрузок (&gt; 0,5·MBL)</th><th>Обрыв</th></tr></thead><tbody>\n");
+            foreach (string row in rows) h.Append(row);
+            h.Append("</tbody></table>\n");
+        }
+
+        // Место обучающегося
+        var moves = s.Events.FindAll(e => e.Type == ExerciseEventType.StationChanged);
+        h.Append("<p>Место обучающегося: ");
+        if (moves.Count == 0) h.Append("всё упражнение у штурвала");
+        else h.Append(string.Join("; ", moves.ConvertAll(e => $"{ScenarioText.Clock(e.Time)} — {H(BridgeStations.Title((BridgeStation)Math.Max(0, e.Index)))}")));
+        h.Append(".</p>\n");
     }
 
     private static void Encounters(StringBuilder h, AssessmentResult r)

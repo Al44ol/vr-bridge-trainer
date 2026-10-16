@@ -59,6 +59,7 @@ public class ExerciseAssessmentMonitor : MonoBehaviour
     public event Action<AssessmentResult> Finished;
 
     private readonly List<TargetSample> buffer = new List<TargetSample>();
+    private int mooringRows;   // 19.2б-3в: строк mooring.csv в упражнении (как SessionRecorder.MooringRows)
     private readonly List<LiveTarget> liveTargets = new List<LiveTarget>();
     private readonly Stopwatch watch = new Stopwatch();
     private long ticks;
@@ -107,6 +108,7 @@ public class ExerciseAssessmentMonitor : MonoBehaviour
         ScenarioDefinition s = runner != null ? runner.Current : null;
         ShipParameters p = navigation != null ? navigation.parameters : null;
         double rate = recorder != null ? recorder.trackRateHz : 5.0;
+        mooringRows = 0;
         Live.Begin(AssessmentContext.FromScenario(s, p), rate);
         ticks = 0; steps = 0;
         lastResult = "идёт упражнение";
@@ -162,7 +164,10 @@ public class ExerciseAssessmentMonitor : MonoBehaviour
     {
         if (!ExerciseRecorder.BuildTrackSample(navigation, runner, t, out TrackSample own)) return;
         ExerciseRecorder.BuildTargetSamples(t, buffer);
-        Live.AddSample(own, buffer);
+        // 19.2б-3в: строка mooring.csv — тот же срез, что пишет запись (в сценарии швартовки — всегда)
+        bool berth = ExerciseRecorder.BuildMooringSample(navigation, runner, recorder != null ? recorder.stations : null, t, out MooringSample ms);
+        if (berth || mooringRows > 0) { Live.AddSample(own, buffer, ms); mooringRows++; }
+        else Live.AddSample(own, buffer);
     }
 
     private void UpdateLiveTargets()

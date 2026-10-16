@@ -14,6 +14,8 @@
 // Отметки (одни на всех графиках): начало манёвра расхождения (C2),
 // мель / столкновение, вводные инструктора (D1), пауза (D1; время упражнения
 // на паузе стоит — отметка, не полоса).
+// 19.2б-3в: если есть mooring.csv — ещё два графика: зазор борта до кромки (нос, корма) и скорость
+// к причалу (пунктир — 0,3 уз); отметки — навалы (скорость), удар о кромку, «ошвартован».
 // До запроса 17 ряды готовил SessionReport.Plots — код перенесён без изменений:
 // report.html без паузы совпадает с прежним до символа.
 // ============================================================
@@ -21,7 +23,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-public enum PlotMarkKind { Manoeuvre, Accident, Failure, Pause }
+public enum PlotMarkKind { Manoeuvre, Accident, Failure, Pause, Berthing }
 
 public sealed class PlotSeries
 {
@@ -202,6 +204,52 @@ public static class DebriefPlots
                 }
             }
         }
+        AddMooring(plots, s);
         return plots;
+    }
+
+    /// <summary>
+    /// 19.2б-3в: у причала (mooring.csv, строки с причалом) — зазор борта до кромки у носа и у кормы и скорость
+    /// этих точек к причалу (штрих — учебная граница 0,3 уз); отметки — навалы, удары о кромку, «ошвартован».
+    /// </summary>
+    private static void AddMooring(List<DebriefPlot> plots, RecordedSession s)
+    {
+        if (s.Mooring.Count < 2) return;
+        int step = Math.Max(1, s.Mooring.Count / MaxPoints);
+        var bowGap = new List<Vector2>(); var sternGap = new List<Vector2>();
+        var bowV = new List<Vector2>(); var sternV = new List<Vector2>();
+        for (int i = 0; i < s.Mooring.Count; i += step)
+        {
+            MooringSample m = s.Mooring[i];
+            float x = (float)(m.Time / 60.0);
+            if (!m.HasBerth)
+            {
+                foreach (List<Vector2> l in new[] { bowGap, sternGap, bowV, sternV }) if (l.Count > 0 && !float.IsNaN(l[l.Count - 1].y)) l.Add(new Vector2(x, float.NaN));
+                continue;
+            }
+            bowGap.Add(new Vector2(x, (float)m.BowGapM)); sternGap.Add(new Vector2(x, (float)m.SternGapM));
+            bowV.Add(new Vector2(x, (float)m.BowSpeedKn)); sternV.Add(new Vector2(x, (float)m.SternSpeedKn));
+        }
+        if (bowGap.Count < 2) return;
+        var pg = new DebriefPlot { Key = "berth_gap", Title = "Зазор борта до кромки причала", ShortTitle = "зазор", XLabel = "Время, мин", YLabel = "Зазор, м",
+                                   Caption = "Зазор от борта до кромки причала у носа (x = 0,25·L) и у кормы (x = −0,45·L); отметки — навалы (скорость, уз) и «ошвартован»" };
+        pg.Add("нос", SvgPlot.Dash.Solid, bowGap);
+        pg.Add("корма", SvgPlot.Dash.Dashed, sternGap);
+        var pv = new DebriefPlot { Key = "berth_speed", Title = "Скорость к причалу", ShortTitle = "к причалу", XLabel = "Время, мин", YLabel = "Скорость, уз (> 0 — к причалу)",
+                                   Caption = "Скорость носа и кормы к кромке причала; пунктир — учебная граница скорости навала 0,3 уз" };
+        pv.Add("нос", SvgPlot.Dash.Solid, bowV);
+        pv.Add("корма", SvgPlot.Dash.Dashed, sternV);
+        pv.Add("0,3 уз", SvgPlot.Dash.Dotted, new List<Vector2> { new Vector2(bowV[0].x, 0.3f), new Vector2(bowV[bowV.Count - 1].x, 0.3f) });
+        foreach (DebriefPlot p in new[] { pg, pv })
+        {
+            foreach (ExerciseEvent e in s.Events)
+            {
+                float x = (float)(e.Time / 60.0);
+                if (e.Type == ExerciseEventType.BerthingImpact) p.AddMark(x, ScenarioText.Num(e.Value, 2), PlotMarkKind.Berthing);   // скорость навала, уз (подпись короткая — отметки рядом)
+                else if (e.Type == ExerciseEventType.QuayImpact) p.AddMark(x, "удар", PlotMarkKind.Accident);
+                else if (e.Type == ExerciseEventType.MooringStage && e.Index == (int)MooringStage.Moored) p.AddMark(x, "ошвартован", PlotMarkKind.Berthing);
+            }
+            plots.Add(p);
+        }
     }
 }

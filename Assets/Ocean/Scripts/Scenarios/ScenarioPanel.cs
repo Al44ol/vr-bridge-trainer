@@ -439,9 +439,10 @@ public class ScenarioPanel : MonoBehaviour
             if (p.Marks.Exists(m => m.Kind == k)) kinds.Add($"<color=#{ColorUtility.ToHtmlStringRGB(DebriefPlotGraphic.MarkColor(k))}>¦</color> {text}");
         }
         Kind(PlotMarkKind.Manoeuvre, "начало манёвра (цель)");
-        Kind(PlotMarkKind.Accident, "авария");
+        Kind(PlotMarkKind.Accident, p.Key.StartsWith("berth") ? "удар о кромку" : "авария");
         Kind(PlotMarkKind.Failure, "вводная");
         Kind(PlotMarkKind.Pause, "пауза");
+        Kind(PlotMarkKind.Berthing, "навал (скорость, уз) / ошвартован");
         if (kinds.Count > 0) leg.Append("\n").Append(string.Join(" · ", kinds));
         Text(leg.ToString(), 14f, MutedColor, ref y);
         ButtonRow(ref y, ButtonHeight,

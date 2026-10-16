@@ -60,6 +60,7 @@ public static class AssessmentReport
             Criteria(dir, md, settings);
             Detection(dir, md);
             Runs(dir, md, area, model45, mariner, criteria);
+            BerthRuns(dir, md, area, model45);
             LiveVsOffline(dir, md, area, model45, mariner, criteria);
         }
         finally { EditorUtility.ClearProgressBar(); }
@@ -218,6 +219,65 @@ public static class AssessmentReport
         File.WriteAllText(Path.Combine(dir, "runs_criteria.csv"), items.ToString(), Utf8Bom);
         md.AppendLine();
         md.Append(details);
+    }
+
+    // ─────────── 19.2б-3в: прогоны сценария швартовки 19-01 ───────────
+    // BerthingSimulation (модель 3 СС, MooringSystem, задания, запись с mooring.csv, оценка в реальном времени);
+    // папка каждого прогона — berth/<вариант>/ с report.html; berth_runs.csv — значения M1–M9 по вариантам.
+    private static void BerthRuns(string dir, StringBuilder md, WaterArea area, ShipParameters own)
+    {
+        if (area.berths == null || area.berths.Count == 0) { md.AppendLine("Швартовка: в акватории нет причала — прогоны пропущены.\n"); return; }
+        AssessmentCriteria crit = AssetDatabase.LoadAssetAtPath<AssessmentCriteria>("Assets/Ocean/Scenarios/Assessment_Berthing.asset");
+        if (crit == null) { crit = ScriptableObject.CreateInstance<AssessmentCriteria>(); crit.settings = DemoBerthScenario.Assessment(); }
+        string[] codes = { AssessmentCatalog.M1, AssessmentCatalog.M2, AssessmentCatalog.M3, AssessmentCatalog.M4, AssessmentCatalog.M5,
+                           AssessmentCatalog.M6, AssessmentCatalog.M7, AssessmentCatalog.M8, AssessmentCatalog.M9 };
+        var csv = new StringBuilder("variant;title;end_reason;duration_s;moored_s;max_impact_kn;score;passed;mandatory_failed;live_equals_offline");
+        foreach (string c in codes) csv.Append(';').Append(c.ToLowerInvariant());
+        csv.Append('\n');
+        md.AppendLine("## Прогоны сценария швартовки 19-01 (BerthingSimulation)\n");
+        md.AppendLine("| Вариант | Завершение | Время | Навал, уз | Балл | Итог | Не выполнены обязательные | Прочие не выполнены |");
+        md.AppendLine("|---|---|---|---|---|---|---|---|");
+        var log = new StringBuilder();
+        string root = Path.Combine(dir, "berth");
+        foreach (string v in DemoAssessmentRuns.BerthVariants)
+        {
+            EditorUtility.DisplayProgressBar("Отчёт C2", $"19-01: {DemoAssessmentRuns.Title(v)}", 0.9f);
+            var s = ScriptableObject.CreateInstance<ScenarioDefinition>();
+            DemoBerthScenario.Fill(s, area, own, crit);
+            string folder = Path.Combine(root, v);
+            Directory.CreateDirectory(folder);
+            var sim = new BerthingSimulation { Scenario = s, RecordFolder = folder };
+            DemoAssessmentRuns.ConfigureBerth(sim.Plan, v);
+            sim.Run();
+            AssessmentResult r = sim.LiveResult;
+            RecordedSession rec = SessionReader.Load(folder);
+            bool same = SessionAssessment.Assess(rec).ToCsv() == r.ToCsv();
+            SessionReport.BuildForFolder(folder);
+            var others = new List<string>();
+            foreach (CriterionResult c in r.Items) if (c.Evaluated && !c.Passed && !c.Mandatory) others.Add(c.Code);
+            double moored = sim.Task.DoneAt(MooringStage.Moored);
+            csv.Append(v).Append(';').Append(Q(DemoAssessmentRuns.Title(v))).Append(';').Append(sim.EndReason).Append(';').Append(F(sim.EndTime, 1)).Append(';')
+               .Append(F(moored, 1)).Append(';').Append(F(sim.MaxImpactKn, 3)).Append(';').Append(F(r.Score, 1)).Append(';').Append(r.Passed ? 1 : 0).Append(';')
+               .Append(Q(string.Join(" ", r.MandatoryFailed))).Append(';').Append(same ? 1 : 0);
+            foreach (string code in codes)
+            {
+                CriterionResult c = r.Items.Find(x => x.Code == code);
+                csv.Append(';').Append(c != null && c.Evaluated ? F(c.Value, 4) : "");
+            }
+            csv.Append('\n');
+            string verdict = r.Failed ? "провал" : r.Passed ? "зачёт" : "незачёт";
+            md.AppendLine($"| {DemoAssessmentRuns.Title(v)} | {ScenarioText.EndReason(sim.EndReason)} | {ScenarioText.Clock(sim.EndTime)} | {N(sim.MaxImpactKn, 2)} | {N(r.Score, 1)} | {verdict} | {string.Join(", ", r.MandatoryFailed)} | {string.Join(", ", others)} |");
+            log.AppendLine($"### 19-01 — {DemoAssessmentRuns.Title(v)}{(same ? "" : " (оценка по записи НЕ совпала!)")}\n");
+            foreach (string l in sim.Log) log.AppendLine($"- {l}");
+            log.AppendLine();
+            foreach (CriterionResult c in r.Items)
+                if (c.Info.Group == AssessmentGroup.Mooring)
+                    log.AppendLine($"- {c.Code} {c.Info.Title}: {AssessmentResult.ValueText(c)} — {(c.Evaluated ? c.Passed ? "да" : "нет" : "не оценивался")}; {Md(c.Note)}");
+            log.AppendLine();
+        }
+        File.WriteAllText(Path.Combine(dir, "berth_runs.csv"), csv.ToString(), Utf8Bom);
+        md.AppendLine();
+        md.Append(log);
     }
 
     private static void Tracks(string dir, string prefix, string scenarioId, string variant, ExerciseSimulation sim)

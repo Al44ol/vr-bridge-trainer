@@ -41,6 +41,8 @@ public sealed class AssessmentContext
     public readonly List<AssessmentTargetInfo> Targets = new List<AssessmentTargetInfo>();
     /// <summary>19.2б-3: задание швартовки (null — сценарий не швартовка).</summary>
     public MooringTaskDefinition Mooring;
+    /// <summary>19.2б-3в: причал задания из снимка акватории (борт швартовки для M9; null — нет в записи).</summary>
+    public BerthArea MooringBerth;
 
     public AssessmentTargetInfo Target(string id)
     {
@@ -75,6 +77,7 @@ public sealed class AssessmentContext
                 c.Targets.Add(new AssessmentTargetInfo { Id = x.id ?? "", Name = x.name ?? "", Index = i, LengthM = x.length_m, RequiredCpaNm = x.required_cpa_nm });
             }
         c.Mooring = s.mooring != null ? s.mooring.ToDefinition() : null;
+        c.MooringBerth = c.Mooring != null && s.area != null ? s.area.Berth(s.mooring.berth_index) : null;
         c.Own = ShipFrom(m.ship);
         return c;
     }

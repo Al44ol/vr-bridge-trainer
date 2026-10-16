@@ -45,10 +45,32 @@ public static class SetupBerthScenario
     public static void EnsureCreated()
     {
         if (AssetDatabase.LoadAssetAtPath<ScenarioDefinition>(ScenarioPath) != null &&
-            AssetDatabase.LoadAssetAtPath<AssessmentCriteria>(CriteriaPath) != null) return;
+            AssetDatabase.LoadAssetAtPath<AssessmentCriteria>(CriteriaPath) != null)
+        {
+            AddMissingCriteria();   // 19.2б-3в: новые критерии (M2–M9) — в существующие наборы
+            return;
+        }
         var log = new StringBuilder("[Setup 19.2б-3] Сценарий швартовки создан автоматически (при входе в Play Mode):\n");
         Create(log);
         Debug.Log(log.ToString().TrimEnd());
+    }
+
+    /// <summary>Дописать в Assessment_Default и Assessment_Berthing критерии каталога, которых там нет (значения по умолчанию).</summary>
+    private static void AddMissingCriteria()
+    {
+        var log = new StringBuilder();
+        foreach (string path in new[] { DefaultCriteriaPath, CriteriaPath })
+        {
+            AssessmentCriteria c = AssetDatabase.LoadAssetAtPath<AssessmentCriteria>(path);
+            if (c == null || c.settings == null) continue;
+            int added = c.settings.AddMissing();
+            if (added == 0) continue;
+            EditorUtility.SetDirty(c);
+            log.AppendLine($"  + {path}: добавлено критериев {added}");
+        }
+        if (log.Length == 0) return;
+        AssetDatabase.SaveAssets();
+        Debug.Log("[Setup 19.2б-3] Новые критерии группы «Швартовка» добавлены в наборы (при входе в Play Mode):\n" + log.ToString().TrimEnd());
     }
 
     private static void Create(StringBuilder log)

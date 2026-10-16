@@ -68,6 +68,7 @@ public class DebriefPlotGraphic : MaskableGraphic
             case PlotMarkKind.Accident: return DebriefMapGraphic.BadColor;
             case PlotMarkKind.Failure: return DebriefMapGraphic.FailureColor;
             case PlotMarkKind.Pause: return PauseColor;
+            case PlotMarkKind.Berthing: return DebriefMapGraphic.OkColor;   // 19.2б-3в: навал, «ошвартован»
             default: return ManoeuvreColor;
         }
     }
