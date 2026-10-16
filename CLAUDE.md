@@ -62,7 +62,7 @@ VR-тренажёр судоводительского мостика. Прот�
 - **19.1 Модель 3 СС** — `Core/Manoeuvring/Manoeuvring3Dof.cs`, `ShipDynamicsModel.AddForce/AddMoment`. ThesisNotes 19.1–19.10.
 - **19.2 Причал, швартовка** — `Core/Mooring` (`BerthArea`, `MooringHull`, кранцы, концы, подруливающее), `MooringController`, сценарий 19-01, критерии M1–M9, mooring.csv. ThesisNotes 19.11–19.23.
 - **19.3 Буксир, ветер** — `Core/Towing` (`WindLoad`, `TugVessel`, `TowingSystem`), `TowingController`, `TugView`, сценарий 19-02, критерии G1–G4. ThesisNotes 19.24–19.27.
-- **19.4 Свой буксир** — тип судна «буксир» (`ShipTypeSwitcher`, вид `TugMeshes` кодом), джойстик → две колонки (Core `Towing/TugJoystick.cs`, `OwnTugDrive`, рукоятка `TugJoystickHandle` на месте телеграфа, меню B «Джойстик»); дальше — упражнение 19-03 (19.4б), критерии (19.4в). ThesisNotes 19.28.
+- **19.4 Свой буксир** — тип судна «буксир» (`ShipTypeSwitcher`, вид `TugMeshes` кодом), джойстик → две колонки (Core `Towing/TugJoystick.cs`, `OwnTugDrive`, рукоятка `TugJoystickHandle` на месте телеграфа, меню B «Джойстик»); упражнение 19-03: Core `Towing/TugWork.cs` (клиент, лоцман, задания), `HullToHull`, `TugWorkSimulation`, `DemoTugWorkScenario` (19.4б-1); сцена — 19.4б-2, критерии — 19.4в. ThesisNotes 19.28–19.29.
 - **Сборка PC** — `Docs/Build.md`; Architecture.md, «Сборка».
 - Пункты `Tools/VR Bridge/…` — полный список в Architecture.md («Навигация (A2)» и разделы запросов). Новые сценарии и ассеты создаются сами при входе в Play Mode (`ScenarioLibrarySync`), без ручного Setup.
 

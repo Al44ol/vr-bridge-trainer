@@ -160,6 +160,12 @@ Unity Test Runner → EditMode (сейчас **250**): `TestResults.xml` — п�
   - **модель буксира** (`TugMeshes`) строится в Play Mode, ассетом не сохраняется;
   - **тесты** `OwnTugTests` (6) — вывод для табл. 19.21–19.22: пределы осей джойстика, установившийся ход, лагом, разворот на месте.
 
+### 2.6п. Упражнение на буксире: клиент, лоцман, задания — Core (запрос 19.4б-1)
+- 👓 В шлеме пока не видно (сцена — 19.4б-2). Закадровое:
+  - **прогон «за обучающегося»** `TugWorkSimulation` (автомат буксира `TugWorkAutopilot` — джойстиком) — ход прогона 19-03 по времени (табл. 19.24), снос клиента без буксира;
+  - **события** `PilotOrder`, `TugWorkStage`, `TugWorkContact` (скорость, угол, место), `TugWorkHullContact` — в events.csv после 19.4б-2;
+  - **тесты** `TugWorkTests` (7) — вывод для табл. 19.23–19.25; `TowingSceneTests`, `TugBerthTests` — проверка, что вынос `HullToHull` не изменил 19.3.
+
 ### 2.7. Источники значений параметров
 `Assets/Ocean/Settings/ShipParameters_Sources.md` — откуда взято каждое значение ShipParameters (Mariner, KCS, Model45m, допущения).
 

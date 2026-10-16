@@ -69,6 +69,7 @@ public enum ScenarioEndConditions
     [InspectorName("Столкновение (B3)")] Collision = 4,
     [InspectorName("Истечение времени")] TimeLimit = 8,
     [InspectorName("Ошвартован (сценарий швартовки)")] Moored = 16,
+    [InspectorName("Задание буксира выполнено (19.4б)")] TugWorkDone = 32,
     All = Arrival | Grounding | Collision | TimeLimit
 }
 
@@ -179,6 +180,12 @@ public class ScenarioDefinition : ScriptableObject
     [Tooltip("Буксир можно вызвать из меню B («Буксир») во время упражнения; в свободном плавании — всегда")]
     public bool tugAvailable;
 
+    [Header("Упражнение на буксире (19.4б)")]
+    [Tooltip("Своё судно — буксир: прижать судно-клиента к причалу (TugWork.cs)")]
+    public TugWorkDefinition tugWork = new TugWorkDefinition();
+    [Tooltip("Параметры судна-клиента; пусто — ShipParameters_Model45m")]
+    public ShipParameters tugWorkClient;
+
     /// <summary>19.3б-2: направление ветра при загрузке: заданное или случайное в секторе (random — источник случайных чисел).</summary>
     public double DrawWindFromDeg(System.Random random)
     {
@@ -190,6 +197,9 @@ public class ScenarioDefinition : ScriptableObject
 
     /// <summary>Сценарий швартовки (задания вместо маршрута).</summary>
     public bool IsMooring => mooring != null && mooring.enabled;
+
+    /// <summary>19.4б: упражнение на своём буксире (судно-клиент, команды лоцмана, задания).</summary>
+    public bool IsTugWork => tugWork != null && tugWork.enabled;
 
     public bool Ends(ScenarioEndConditions c) => (endConditions & c) != 0;
 
@@ -244,6 +254,7 @@ public class ScenarioDefinition : ScriptableObject
         if (detectionRangeNm < 0f) problems.Add("Дистанция обнаружения целей отрицательная.");
         ValidateTraffic(problems);
         ValidateMooring(problems);
+        ValidateTugWork(problems);
         // 19.3б: ветер и буксир — только в модели 3 СС
         if (windKnots < 0f) problems.Add("Ветер отрицательный.");
         if (windKnots > 0f && motionModel != ScenarioMotionModel.Manoeuvring3Dof)
@@ -269,6 +280,26 @@ public class ScenarioDefinition : ScriptableObject
         if (Ends(ScenarioEndConditions.Arrival)) problems.Add("Швартовка: условие «прибытие в последнюю точку» завершит упражнение раньше швартовки.");
         if (mooring.alongsideGapM <= 0f || mooring.stopGapM <= 0f || mooring.mooredHoldS < 0f || mooring.mooredSpeedKnots <= 0f || mooring.stopSpeedKnots <= 0f)
             problems.Add("Швартовка: пороги этапов должны быть больше 0.");
+    }
+
+    // Упражнение на буксире (19.4б)
+    private void ValidateTugWork(List<string> problems)
+    {
+        if (!IsTugWork)
+        {
+            if (Ends(ScenarioEndConditions.TugWorkDone)) problems.Add("Условие «задание буксира выполнено» включено, но упражнение на буксире выключено.");
+            return;
+        }
+        if (waterArea != null && tugWork.BerthIn(waterArea) == null)
+            problems.Add($"Буксир: в акватории нет причала № {tugWork.berthIndex}.");
+        if (motionModel != ScenarioMotionModel.Manoeuvring3Dof)
+            problems.Add("Буксир: колонки, причал и контакт с судном действуют только в модели 3 СС — выберите её в «Модель движения».");
+        if (IsMooring) problems.Add("Буксир: задание швартовки своего судна и упражнение на буксире вместе не используются.");
+        if (!Ends(ScenarioEndConditions.TugWorkDone)) problems.Add("Буксир: не включено условие завершения «задание буксира выполнено».");
+        if (Ends(ScenarioEndConditions.Arrival)) problems.Add("Буксир: условие «прибытие в последнюю точку» завершит упражнение раньше задания.");
+        if (tugWork.clientGapM <= 0f || tugWork.tugDistanceM <= 0f || tugWork.contactZoneM <= 0f || tugWork.atFendersGapM <= 0f ||
+            tugWork.linesGapM <= 0f || tugWork.securedHoldS < 0f || tugWork.securedSpeedKnots <= 0f || tugWork.clearDistanceM <= 0f)
+            problems.Add("Буксир: пороги задания должны быть больше 0.");
     }
 
     // Другие суда (B3)

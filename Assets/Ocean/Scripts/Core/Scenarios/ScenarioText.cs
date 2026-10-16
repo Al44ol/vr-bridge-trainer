@@ -110,6 +110,7 @@ public static class ScenarioText
             case ScenarioEndReason.TimeLimit: return "истекло время";
             case ScenarioEndReason.Aborted: return "завершено досрочно";
             case ScenarioEndReason.Moored: return "ошвартован";
+            case ScenarioEndReason.TugWorkDone: return "задание буксира выполнено";
             default: return "—";
         }
     }

@@ -95,6 +95,12 @@
 //   WindChanged          ветер: Value — скорость, уз (0 — нет); Value2 — откуда, °; Subject — «сценарий» / «меню» / «на начало»
 //   JoystickChanged      19.4а, свой буксир: установившееся положение джойстика — Value — ход, % (> 0 — вперёд),
 //                        Value2 — лагом, % (> 0 — на ПБ), Index — разворот, % (> 0 — нос вправо); Subject — «рукой» / «меню» / «сброс»
+//   PilotOrder           19.4б, упражнение на буксире: команда лоцмана — Index — PilotOrderKind, Subject — текст
+//   TugWorkStage         задание выполнено: Index — TugWorkStage (1 подход … 4 отойти), Subject — название;
+//                        Value — скорость касания, уз / зазор, м / ход судна, уз / расстояние носа до борта, м
+//   TugWorkContact       свой буксир коснулся борта судна-клиента кранцем: Value — скорость по нормали, уз;
+//                        Value2 — отклонение от перпендикуляра к борту, °; Index — место от миделя, м (> 0 — к носу); Subject — борт
+//   TugWorkHullContact   касание корпусом (не кранцем): Value — скорость сближения, уз
 // XTE > 0 — судно правее линии пути.
 // ============================================================
 using System;
@@ -168,7 +174,11 @@ public enum ExerciseEventType
     TowLineBroken,
     TugPushContact,
     WindChanged,
-    JoystickChanged
+    JoystickChanged,
+    PilotOrder,
+    TugWorkStage,
+    TugWorkContact,
+    TugWorkHullContact
 }
 
 public enum ScenarioEndReason
@@ -179,7 +189,8 @@ public enum ScenarioEndReason
     Collision,
     TimeLimit,
     Aborted,
-    Moored      // 19.2б-3: ошвартован (сценарий швартовки)
+    Moored,     // 19.2б-3: ошвартован (сценарий швартовки)
+    TugWorkDone // 19.4б: упражнение на буксире выполнено (все четыре задания)
 }
 
 /// <summary>Событие упражнения.</summary>
@@ -299,6 +310,11 @@ public struct ExerciseEvent
             case ExerciseEventType.WindChanged:
                 return (Value > 0 ? $"Ветер {ScenarioText.Num(Value)} уз, откуда {ScenarioText.Bearing(Value2)}" : "Ветра нет") +
                        (string.IsNullOrEmpty(Subject) ? "" : $" ({Subject})");
+            case ExerciseEventType.PilotOrder: return $"Лоцман: «{Subject}»";
+            case ExerciseEventType.TugWorkStage: return $"Буксир: выполнено «{Subject}»";
+            case ExerciseEventType.TugWorkContact:
+                return $"Буксир упёрся в {Subject}: {ScenarioText.Num(Value, 2)} уз, {ScenarioText.Num(Value2)}° от перпендикуляра, {Index:+0;−0;0} м от миделя";
+            case ExerciseEventType.TugWorkHullContact: return $"Касание корпусом буксира о судно: {ScenarioText.Num(Value, 2)} уз";
             case ExerciseEventType.JoystickChanged:
                 return $"Джойстик: {TugJoystick.Describe(new JoystickState(Value / 100.0, Value2 / 100.0, Index / 100.0))}" +
                        (string.IsNullOrEmpty(Subject) ? "" : $" ({Subject})");

@@ -297,9 +297,6 @@ public sealed class TowingSystem
     /// <summary>19.3б: буксир обходит оконечность судна (смена борта толкания).</summary>
     public bool GoingAround { get; private set; }
 
-    private double prevPen = double.NaN;
-    private bool contactReported;
-
     public TowingSystem(ShipParameters ship, ShipParameters tug, TugSpec spec = null)
     {
         ShipParams = ship;
@@ -387,8 +384,7 @@ public sealed class TowingSystem
         Tug.Model.Teleport(e, n, psiT, 0.0, 0.0);
         Tug.Command = c;
         Tug.OrderX = Tug.OrderY = Tug.OrderN = Tug.ThrustX = Tug.ThrustY = Tug.ThrustN = 0.0;
-        prevPen = double.NaN;
-        contactReported = false;
+        contact.Reset();
         GoingAround = false;
         swingDeg = c.DirectionDeg;
         lastGeometry = geo;
@@ -438,117 +434,25 @@ public sealed class TowingSystem
         tug.Step(dt);
     }
 
+    // 19.4б-1: кранец носа буксира и корпус к корпусу — HullToHull (вынесено без изменений арифметики)
+    private readonly HullToHull contact = new HullToHull();
+
     private void Contact(ShipDynamicsModel ship, WorldPosition bow, double dt, double time)
     {
-        double s = Math.Sin(ship.Psi), c = Math.Cos(ship.Psi);
-        double dE = bow.East - ship.East, dN = bow.North - ship.North;
-        double x = dE * s + dN * c, y = dE * c - dN * s;   // связанные оси судна
-        double half = MooringHull.HalfBeamAt(x, ShipParams);
-        double pen = half - Math.Abs(y);
-        if (half <= 0.0 || pen <= 0.0)
-        {
-            prevPen = double.NaN;
-            if (pen < -0.5) contactReported = false;
-            return;
-        }
-        double rate = double.IsNaN(prevPen) ? 0.0 : (pen - prevPen) / Math.Max(1e-6, dt);
-        prevPen = pen;
-        double force = Math.Max(0.0, Tug.Spec.FenderStiffness * pen + Tug.Spec.FenderDamping * Math.Max(0.0, rate));
-        PushForce = force;
-        int side = y >= 0.0 ? 1 : -1;
-        // Нормаль борта наружу в мировых осях: ŝ = (cos ψ, −sin ψ) — на ПБ
-        double nE = side * c, nN = -side * s;
-        // Трение кранца вдоль борта (ось x судна): F_т = −μ·F·th(v_т/0,05 м/с) — нос буксира не скользит по борту
-        WorldPosition vb = MooringHull.PointVelocity(Tug.Model, bow), vs = MooringHull.PointVelocity(ship, bow);
-        double vt = (vb.East - vs.East) * s + (vb.North - vs.North) * c;
-        double ft = -Tug.Spec.FenderFriction * force * Math.Tanh(vt / 0.05);
-        double tE = ft * s, tN = ft * c;   // вдоль x̂ судна = (sin ψ, cos ψ)
-        MooringHull.ApplyWorldForce(ship, -force * nE - tE, -force * nN - tN, bow);
-        MooringHull.ApplyWorldForce(Tug.Model, force * nE + tE, force * nN + tN, bow);
-        if (!contactReported)
-        {
-            contactReported = true;
-            // 19.3в: скорость сближения носа буксира с бортом по нормали (было — прирост обжатия, на первом шаге касания 0)
-            double closing = -((vb.East - vs.East) * nE + (vb.North - vs.North) * nN);
-            Events.Add(new TowEvent { Type = TowEventType.PushContact, Time = time, Value = Math.Max(0.0, closing) });
-        }
+        if (contact.Fender(ship, ShipParams, Tug.Model, Tug.Spec, bow, dt))
+            Events.Add(new TowEvent { Type = TowEventType.PushContact, Time = time, Value = contact.ContactClosingMs });
+        PushForce = contact.FenderForce;
     }
-
-    // ─────────── 19.3б-2: корпус буксира к корпусу судна ───────────
-    // Контуры обоих (MooringHull, по параметрам) с точками через HullSampleM по периметру. Точка одного корпуса внутри
-    // другого заходит на pen = min(полуширина − |y|, L/2 − |x|) — по нормали к ближайшему борту или к оконечности;
-    // сила F = k·pen + c·v_сбл (v_сбл > 0 — сближение), трение вдоль борта μ·F; к обоим корпусам — равная и противоположная.
-    // Нос буксира (ближе HullBowSkipM к форштевню) — не здесь: это кранец (Contact). k, c, μ — допущения (сталь о сталь
-    // через привальный брус): «жёстко», чтобы корпуса не проходили друг сквозь друга при скорости сближения до 2 уз.
 
     /// <summary>Сила контакта «корпус к корпусу» на последнем шаге (сумма по точкам), Н.</summary>
     public double HullContactForce { get; private set; }
-    public const double HullStiffness = 0.6e6, HullDamping = 0.3e6, HullFriction = 0.3, HullSampleM = 2.0, HullBowSkipM = 2.5;
-
-    private List<(double x, double y)> shipPoints, tugPoints;
-    private ShipParameters shipPointsFor;
-
-    private static List<(double x, double y)> Perimeter((double x, double y)[] outline, double step, double skipNearX, double skipM)
-    {
-        var pts = new List<(double x, double y)>();
-        for (int i = 0; i < outline.Length; i++)
-        {
-            (double ax, double ay) = outline[i];
-            (double bx, double by) = outline[(i + 1) % outline.Length];
-            double len = Math.Sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay));
-            int n = Math.Max(1, (int)Math.Ceiling(len / step));
-            for (int k = 0; k < n; k++)
-            {
-                double u = k / (double)n, x = ax + (bx - ax) * u, y = ay + (by - ay) * u;
-                if (!double.IsNaN(skipNearX) && Math.Sqrt((x - skipNearX) * (x - skipNearX) + y * y) < skipM) continue;
-                pts.Add((x, y));
-            }
-        }
-        return pts;
-    }
+    public const double HullStiffness = HullToHull.HullStiffness, HullDamping = HullToHull.HullDamping, HullFriction = HullToHull.HullFriction,
+                        HullSampleM = HullToHull.HullSampleM, HullBowSkipM = HullToHull.HullBowSkipM;
 
     private void HullContact(ShipDynamicsModel ship)
     {
-        ShipParameters tp = Tug.Model.Parameters;
-        if (ShipParams == null || tp == null) return;
-        double dE = Tug.Model.East - ship.East, dN = Tug.Model.North - ship.North;
-        double reach = 0.5 * (ShipParams.length + tp.length) + 2.0;
-        if (dE * dE + dN * dN > reach * reach) return;
-        if (shipPoints == null || shipPointsFor != ShipParams)
-        {
-            shipPoints = Perimeter(MooringHull.Outline(ShipParams), HullSampleM, double.NaN, 0.0);
-            shipPointsFor = ShipParams;
-        }
-        if (tugPoints == null) tugPoints = Perimeter(MooringHull.Outline(tp), HullSampleM, Tug.Spec.BowX, HullBowSkipM);
-        foreach ((double x, double y) in tugPoints)
-            Penetrate(Tug.Model, ship, ShipParams, MooringHull.ToWorld(Tug.Model.East, Tug.Model.North, Tug.Model.Psi, x, y));
-        foreach ((double x, double y) in shipPoints)
-            Penetrate(ship, Tug.Model, tp, MooringHull.ToWorld(ship.East, ship.North, ship.Psi, x, y));
-    }
-
-    // Точка p корпуса a внутри корпуса b (параметры pb): сила на a — наружу из b, на b — обратная
-    private void Penetrate(ShipDynamicsModel a, ShipDynamicsModel b, ShipParameters pb, WorldPosition p)
-    {
-        ShipAxes(b, p, out double x, out double y);
-        double half = MooringHull.HalfBeamAt(x, pb);
-        if (half <= 0.0) return;
-        double penLat = half - Math.Abs(y);
-        if (penLat <= 0.0) return;
-        double penLong = 0.5 * pb.length - Math.Abs(x);
-        double s = Math.Sin(b.Psi), c = Math.Cos(b.Psi);
-        double nE, nN, pen;
-        if (penLat <= penLong) { double sy = y >= 0.0 ? 1.0 : -1.0; nE = sy * c; nN = -sy * s; pen = penLat; }   // к борту
-        else { double sx = x >= 0.0 ? 1.0 : -1.0; nE = sx * s; nN = sx * c; pen = penLong; }                      // к оконечности
-        WorldPosition va = MooringHull.PointVelocity(a, p), vb = MooringHull.PointVelocity(b, p);
-        double rvE = va.East - vb.East, rvN = va.North - vb.North;
-        double vn = rvE * nE + rvN * nN;                   // > 0 — расходятся
-        double f = Math.Max(0.0, HullStiffness * pen + HullDamping * Math.Max(0.0, -vn));
-        double tE = -nN, tN = nE;                          // касательная
-        double ft = -HullFriction * f * Math.Tanh((rvE * tE + rvN * tN) / 0.05);
-        double fE = f * nE + ft * tE, fN = f * nN + ft * tN;
-        MooringHull.ApplyWorldForce(a, fE, fN, p);
-        MooringHull.ApplyWorldForce(b, -fE, -fN, p);
-        HullContactForce += f;
+        contact.Hulls(ship, ShipParams, Tug.Model, Tug.Spec.BowX);
+        HullContactForce = contact.HullForce;
     }
 
     // ─────────── Автоматика буксира ───────────
