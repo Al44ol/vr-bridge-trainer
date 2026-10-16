@@ -26,7 +26,8 @@
 // 19.4а — третий тип «буксир» (свой ASD-буксир 22 × 8 м, ShipParameters_Tug из Resources, модель 3 СС):
 //   • Setup не нужен: модель (TugMeshes, материалы катера) и коробки корпуса для воды строятся при первом
 //     переключении; место — от рулевой стойки катера (Setup Fast Boat): стойка в ConsoleStation·L впереди миделя
-//     буксира, ДП — как у мостика, палуба TugMeshes.DeckHeight над водой (судно ниже на столько же, как катер);
+//     буксира, ДП — как у мостика; игрок — на полу приподнятой рубки TugMeshes.FloorHeight над водой (судно опускается
+//     на разницу с полом мостика, как катер); цвета — TugMaterials (по фото портового буксира);
 //   • от мостика — та же рулевая стойка, что у катера (hideOnBoat, deactivateOnBoat); штурвал, телеграф и рычаг
 //     подруливающего скрыты (рендеры и коллайдеры), на месте телеграфа — рукоятка джойстика (OwnTugDrive);
 //   • движитель — две азимутальные колонки (OwnTugDrive, ShipNavigation.SetAzimuthDrive), меню B «Джойстик»;
@@ -344,12 +345,13 @@ public class ShipTypeSwitcher : MonoBehaviour
         Vector3 stbd = Vector3.Cross(Vector3.up, bow);
         Vector3 boatOrigin = boatRoot.transform.localPosition;   // мидель катера на ватерлинии (Setup Fast Boat)
         float consoleBow = Vector3.Dot(boatOrigin, bow) - (0.5f - BoatConsoleStation) * boatParameters.length;
-        float deck = TugMeshes.DeckHeight;
+        float deck = TugMeshes.DeckHeight, floor = TugMeshes.FloorHeight;
+        // Игрок — на полу приподнятой рубки (FloorHeight над водой); пол мостика = boatOrigin.y + boatDeckHeight (Ship)
         Vector3 tugOrigin = stbd * Vector3.Dot(boatOrigin, stbd)
                           + bow * (consoleBow - TugMeshes.ConsoleStation * p.length)
-                          + Vector3.up * (boatOrigin.y + boatDeckHeight - deck);
+                          + Vector3.up * (boatOrigin.y + boatDeckHeight - floor);
         tugPivot = tugOrigin;
-        tugVerticalOffset = boatVerticalOffset + (deck - boatDeckHeight);
+        tugVerticalOffset = boatVerticalOffset + (floor - boatDeckHeight);
 
         tugRoot = new GameObject("OwnTug");
         tugRoot.SetActive(false);
@@ -358,7 +360,7 @@ public class ShipTypeSwitcher : MonoBehaviour
         t.localPosition = tugOrigin;
         t.localRotation = Quaternion.LookRotation(bow, Vector3.up);   // +Z модели — нос, +X — ПБ
         tugRoot.AddComponent<MeshFilter>().sharedMesh = TugMeshes.Build(p.length, p.beam, p.draft);
-        tugRoot.AddComponent<MeshRenderer>().sharedMaterials = boatRoot.GetComponent<MeshRenderer>().sharedMaterials;
+        tugRoot.AddComponent<MeshRenderer>().sharedMaterials = TugMaterials(boatRoot.GetComponent<MeshRenderer>().sharedMaterials);
         tugHullBox = Box(t, "HullBox", new Vector3(0f, 0.5f * (deck - p.draft), -0.08f * p.length), new Vector3(0.95f * p.beam, deck + p.draft, 0.82f * p.length));
         tugBowBox = Box(t, "BowBox", new Vector3(0f, 0.5f * (deck - p.draft), 0.38f * p.length), new Vector3(0.7f * p.beam, deck + p.draft, 0.22f * p.length));
 
@@ -379,6 +381,30 @@ public class ShipTypeSwitcher : MonoBehaviour
         CollectControls();
         Debug.Log($"[Судно] Буксир построен: мидель (Ship) {tugOrigin}, палуба {deck} м над водой (судно ниже на {-tugVerticalOffset:F2} м), " +
                   $"скрываемых органов управления: {controlRenderers.Count} рендеров, {controlColliders.Count} коллайдеров.", this);
+    }
+
+    // Материалы буксира (подмеши TugMeshes): копии материала катера с цветами, как у портового буксира на фото
+    private static Material[] TugMaterials(Material[] boat)
+    {
+        Material template = boat != null && boat.Length > 0 ? boat[0] : null;
+        var colors = new[]
+        {
+            new Color(0.12f, 0.42f, 0.72f),   // борт — синий
+            new Color(0.55f, 0.1f, 0.08f),    // подводная часть — красная
+            new Color(0.42f, 0.44f, 0.46f),   // палуба — серая
+            new Color(0.06f, 0.06f, 0.07f),   // кранцы, лебёдки, кнехты — чёрные
+            new Color(0.9f, 0.91f, 0.92f)     // надстройка и рубка — белые
+        };
+        var mats = new Material[TugMeshes.SubCount];
+        for (int i = 0; i < mats.Length; i++)
+        {
+            Material src = boat != null && i < boat.Length && boat[i] != null ? boat[i] : template;
+            mats[i] = src != null ? new Material(src) : new Material(Shader.Find("Universal Render Pipeline/Lit"));
+            mats[i].name = "OwnTug_" + i;
+            if (mats[i].HasProperty("_BaseColor")) mats[i].SetColor("_BaseColor", colors[i]);
+            if (mats[i].HasProperty("_Smoothness")) mats[i].SetFloat("_Smoothness", i == 3 ? 0.15f : 0.35f);
+        }
+        return mats;
     }
 
     private static Transform Box(Transform parent, string name, Vector3 center, Vector3 size)

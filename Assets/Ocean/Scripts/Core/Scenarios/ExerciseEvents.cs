@@ -101,7 +101,8 @@
 //   TugWorkContact       свой буксир коснулся борта судна-клиента кранцем: Value — скорость по нормали, уз;
 //                        Value2 — отклонение от перпендикуляра к борту, °; Index — место от миделя, м (> 0 — к носу); Subject — борт
 //   TugWorkHullContact   касание корпусом (не кранцем): Value — скорость сближения, уз
-//   HeadingHoldChanged   19.4а-2, свой буксир: удержание курса — Value 1 вкл / 0 выкл; Subject — «тумблер» / «меню»
+//   HeadingHoldChanged   19.4а-2, свой буксир: автомат курса — Value 1 вкл / 0 выкл; Subject — «меню»
+//   JoystickHoldChanged  19.4а-3: рукоятка (тумблер «УДЕРЖ. КУРС») — Value 1 держит положение / 0 в ноль при отпускании; Subject — «тумблер» / «меню»
 // XTE > 0 — судно правее линии пути.
 // ============================================================
 using System;
@@ -180,7 +181,8 @@ public enum ExerciseEventType
     TugWorkStage,
     TugWorkContact,
     TugWorkHullContact,
-    HeadingHoldChanged
+    HeadingHoldChanged,
+    JoystickHoldChanged
 }
 
 public enum ScenarioEndReason
@@ -318,7 +320,9 @@ public struct ExerciseEvent
                 return $"Буксир упёрся в {Subject}: {ScenarioText.Num(Value, 2)} уз, {ScenarioText.Num(Value2)}° от перпендикуляра, {Index:+0;−0;0} м от миделя";
             case ExerciseEventType.TugWorkHullContact: return $"Касание корпусом буксира о судно: {ScenarioText.Num(Value, 2)} уз";
             case ExerciseEventType.HeadingHoldChanged:
-                return $"Удержание курса {(Value > 0 ? "включено" : "выключено")}" + (string.IsNullOrEmpty(Subject) ? "" : $" ({Subject})");
+                return $"Автомат курса {(Value > 0 ? "включён" : "выключен")}" + (string.IsNullOrEmpty(Subject) ? "" : $" ({Subject})");
+            case ExerciseEventType.JoystickHoldChanged:
+                return $"Рукоятка джойстика {(Value > 0 ? "держит положение" : "возвращается в ноль")}" + (string.IsNullOrEmpty(Subject) ? "" : $" ({Subject})");
             case ExerciseEventType.JoystickChanged:
                 return $"Джойстик: {TugJoystick.Describe(new JoystickState(Value / 100.0, Value2 / 100.0, Index / 100.0))}" +
                        (string.IsNullOrEmpty(Subject) ? "" : $" ({Subject})");

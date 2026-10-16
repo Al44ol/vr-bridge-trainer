@@ -3,8 +3,10 @@
 //
 // Строится кодом (OwnTugDrive) рядом с рукояткой джойстика — копия тумблера «СВЕТ» (BridgeLightSwitch, Setup B4:
 // основание, рычажок, индикатор, табличка), без его компонента; если тумблера «СВЕТ» в сцене нет — простая модель.
-// Нажатие (рука или луч) — удержание курса вкл/выкл (OwnTugDrive.SetHeadingHold). Рычажок вверх — включено,
-// индикатор горит зелёным; выключено — рычажок вниз, индикатор тлеет. По умолчанию — включено.
+// 19.4а-3 (решение пользователя): нажатие (рука или луч) — рукоятка держит положение / возвращается в ноль
+// (OwnTugDrive.SetHandleHold: при выключении — сразу в ноль, затем после каждого отпускания). Рычажок вверх — держит,
+// индикатор горит зелёным; выключено — рычажок вниз, индикатор тлеет. По умолчанию — держит.
+// Место — на поверхности пульта рядом с рукояткой (OwnTugDrive, ConsoleSurface).
 // Дочерний к рукоятке (Ship/TugJoystick): двигается вместе с ней.
 // ============================================================
 using UnityEngine;
@@ -90,12 +92,12 @@ public class TugHeadingSwitch : MonoBehaviour
 
     private void OnSelect(SelectEnterEventArgs args)
     {
-        if (drive != null) drive.SetHeadingHold(!drive.HeadingHold, "тумблер");
+        if (drive != null) drive.SetHandleHold(!drive.HandleHold, "тумблер");
     }
 
     void Update()
     {
-        bool on = drive == null || drive.HeadingHold;
+        bool on = drive == null || drive.HandleHold;
         shown = Mathf.MoveTowards(shown, on ? 1f : -1f, Time.deltaTime * 12f);
         if (lever != null) lever.localRotation = Quaternion.Euler(-leverAngle * shown, 0f, 0f);
         if (indicator != null)

@@ -26,6 +26,9 @@ public class TugJoystickHandle : MonoBehaviour
     [Tooltip("Высота оси качания над основанием, м; длина стержня до рукоятки, м")]
     public float pivotHeight = 0.07f, stickLength = 0.16f;
 
+    /// <summary>Рукоятку отпустили (19.4а-3: возврат в ноль, если тумблер «УДЕРЖ. КУРС» выключен).</summary>
+    public event Action Released;
+
     /// <summary>Положение сменилось: кодом (меню, сброс) или рукой.</summary>
     public event Action<bool> Changed;
 
@@ -98,6 +101,7 @@ public class TugJoystickHandle : MonoBehaviour
     private void OnRelease(SelectExitEventArgs args)
     {
         grab = grabHand = null;
+        Released?.Invoke();
     }
 
     // Направление кисти в плоскости основания (для поворота рукоятки)
