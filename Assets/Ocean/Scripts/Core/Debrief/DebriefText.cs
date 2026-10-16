@@ -79,6 +79,10 @@ public static class DebriefText
         { AssessmentCatalog.M7, "Перегрузка швартовных концов" },
         { AssessmentCatalog.M8, "Швартовка заняла больше контрольного времени" },
         { AssessmentCatalog.M9, "Подход к кранцам не с крыла со стороны причала" },
+        { AssessmentCatalog.G1, "Обрыв буксирного троса" },
+        { AssessmentCatalog.G2, "Перегрузка буксирного троса" },
+        { AssessmentCatalog.G3, "Тяга буксира дана резко, а не ступенями" },
+        { AssessmentCatalog.G4, "Жёсткое касание буксира о борт" },
         { AssessmentCatalog.A1, "Посадка на мель" },
         { AssessmentCatalog.A2, "Столкновение" }
     };

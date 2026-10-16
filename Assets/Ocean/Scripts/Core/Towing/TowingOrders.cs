@@ -118,7 +118,7 @@ public static class TowEventBus
                 TugMode m = e.Subject == "стоп" ? TugMode.Stop : e.Subject.StartsWith("тянуть", StringComparison.Ordinal) ? TugMode.Pull : TugMode.Push;
                 return new ExerciseEvent(ExerciseEventType.TugOrder) { Subject = e.Subject ?? "", Index = (int)m, Value = e.Value * 100.0, Value2 = e.Value2 };
             }
-            case TowEventType.LineMadeFast: return new ExerciseEvent(ExerciseEventType.TowLineMadeFast) { Value = e.Value };
+            case TowEventType.LineMadeFast: return new ExerciseEvent(ExerciseEventType.TowLineMadeFast) { Value = e.Value, Value2 = e.Value2 / 1000.0 };
             case TowEventType.LineReleased: return new ExerciseEvent(ExerciseEventType.TowLineReleased);
             case TowEventType.LineOverload: return new ExerciseEvent(ExerciseEventType.TowLineOverload) { Value = e.Value / 1000.0, Value2 = e.Value2 };
             case TowEventType.LineOverloadCleared: return new ExerciseEvent(ExerciseEventType.TowLineOverloadCleared);

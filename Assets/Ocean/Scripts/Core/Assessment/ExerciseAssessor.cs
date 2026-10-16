@@ -55,6 +55,9 @@
 // M4 удар о кромку (QuayImpact), M5 угол и M9 место при первом касании (mooring.csv), M6 обрыв и M7 время
 // перегрузки концов (LineBroken, LineOverload → Cleared), M8 время «ошвартован» / контрольное. Строки
 // mooring.csv — AddMooring (в шлеме — тот же срез с Quantize, по записи — из файла): бит в бит.
+// 19.3в — буксир (если вызывался — TugCalled): G1 обрыв троса (TowLineBroken), G2 время перегрузки троса
+// (TowLineOverload → Cleared / отдан / обрыв / буксир отпущен), G3 тяга ступенями — наибольший скачок заданной тяги
+// между соседними командами буксиру (TugOrder, «стоп» — 0 %), G4 скорость касания о борт (TugPushContact).
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -209,6 +212,11 @@ public sealed class ExerciseAssessor
     private readonly List<MooringSample> mooring = new List<MooringSample>();
     private int linesMadeFast;
     private double mooredAt = double.NaN;
+    // 19.3в: буксир — вызов, подача троса (Value2 — MBL, кН), обрывы, перегрузки, касания о борт
+    private bool tugCalled;
+    private readonly List<ExerciseEvent> towFast = new List<ExerciseEvent>(), towBroken = new List<ExerciseEvent>(), tugContacts = new List<ExerciseEvent>(), tugOrders = new List<ExerciseEvent>();
+    private readonly List<(double from, double to)> towOverloads = new List<(double, double)>();
+    private double towOverloadFrom = double.NaN;
 
     /// <summary>19.2б-3в: строки mooring.csv в порядке времени (для раздела отчёта и графика).</summary>
     public IReadOnlyList<MooringSample> Mooring => mooring;
@@ -335,6 +343,23 @@ public sealed class ExerciseAssessor
             case ExerciseEventType.LineReleased:
                 CloseOverload(e.Index, e.Time, e.Subject);
                 break;
+            // 19.3в: буксир
+            case ExerciseEventType.TugCalled: tugCalled = true; tugOrders.Add(e); break;
+            case ExerciseEventType.TugOrder: tugOrders.Add(e); break;
+            case ExerciseEventType.TowLineMadeFast: towFast.Add(e); break;
+            case ExerciseEventType.TowLineOverload:
+                if (double.IsNaN(towOverloadFrom)) towOverloadFrom = e.Time;
+                break;
+            case ExerciseEventType.TowLineBroken:
+                towBroken.Add(e);
+                CloseTowOverload(e.Time);
+                break;
+            case ExerciseEventType.TowLineOverloadCleared:
+            case ExerciseEventType.TowLineReleased:
+            case ExerciseEventType.TugDismissed:
+                CloseTowOverload(e.Time);
+                break;
+            case ExerciseEventType.TugPushContact: tugContacts.Add(e); break;
             case ExerciseEventType.EngineFailure:
             case ExerciseEventType.SteeringFailure:
                 failures.Add(new FailureRecord { Engine = e.Type == ExerciseEventType.EngineFailure, Start = e.Time });
@@ -372,6 +397,13 @@ public sealed class ExerciseAssessor
                 EndTime = e.Time;
                 break;
         }
+    }
+
+    private void CloseTowOverload(double t)
+    {
+        if (double.IsNaN(towOverloadFrom)) return;
+        towOverloads.Add((towOverloadFrom, t));
+        towOverloadFrom = double.NaN;
     }
 
     private void CloseOverload(int line, double t, string subject)
@@ -840,6 +872,7 @@ public sealed class ExerciseAssessor
         EvaluateFailures(r, final);
         EvaluateMooring(r, final, aborted);
         EvaluateMooringDetails(r, final);
+        EvaluateTowing(r, final);
 
         Add(r, AssessmentCatalog.A1, "", groundings, groundings > 0 ? $"посадка на мель «{firstGrounding}»" : "нет");
         Add(r, AssessmentCatalog.A2, "", collisions, collisions > 0 ? $"столкновение с «{firstCollision}»" : "нет");
@@ -949,6 +982,46 @@ public sealed class ExerciseAssessor
         if (double.IsNaN(mooredAt)) { if (final) Skip(r, AssessmentCatalog.M8, "", "не ошвартован (M1)"); }
         else if (target <= 0) Skip(r, AssessmentCatalog.M8, "", "контрольное время не задано");
         else Add(r, AssessmentCatalog.M8, "", mooredAt / target, $"ошвартован в {ScenarioText.Clock(mooredAt)} при контрольном {ScenarioText.Clock(target)}");
+    }
+
+    // 19.3в: G1–G4 — только если буксир вызывался; формулы — ThesisNotes 19.27
+    private void EvaluateTowing(AssessmentResult r, bool final)
+    {
+        if (!tugCalled) return;
+        double end = final && !double.IsNaN(EndTime) ? EndTime : Time;
+        if (towFast.Count == 0)
+        {
+            SkipMooring(r, AssessmentCatalog.G1, final, "трос не подавался");
+            SkipMooring(r, AssessmentCatalog.G2, final, "трос не подавался");
+        }
+        else
+        {
+            Add(r, AssessmentCatalog.G1, "", towBroken.Count, towBroken.Count == 0 ? "нет"
+                : $"в {ScenarioText.Clock(towBroken[0].Time)}, {AssessmentResult.Num(towBroken[0].Value, 0)} кН");
+            double total = 0.0;
+            foreach (var o in towOverloads) total += Math.Max(0.0, o.to - o.from);
+            if (!double.IsNaN(towOverloadFrom)) total += Math.Max(0.0, end - towOverloadFrom);
+            Add(r, AssessmentCatalog.G2, "", total, total <= 0.0 ? "нет" : $"{AssessmentResult.Num(total, 1)} с");
+        }
+        // G3: наибольший скачок заданной тяги между соседними командами (вызов буксира и «стоп» — 0 %)
+        double prev = 0.0, jump = 0.0, jumpAt = double.NaN, jumpTo = 0.0;
+        bool worked = false;
+        foreach (ExerciseEvent o in tugOrders)
+        {
+            double pw = o.Type == ExerciseEventType.TugCalled || double.IsNaN(o.Value) ? 0.0 : o.Value;
+            if (pw > 0.0) worked = true;
+            if (pw - prev > jump) { jump = pw - prev; jumpAt = o.Time; jumpTo = pw; }
+            prev = pw;
+        }
+        if (!worked) SkipMooring(r, AssessmentCatalog.G3, final, "буксир не работал (только «стоп»)");
+        else Add(r, AssessmentCatalog.G3, "", jump, $"до {AssessmentResult.Num(jumpTo, 0)} % в {ScenarioText.Clock(jumpAt)}");
+        if (tugContacts.Count == 0) SkipMooring(r, AssessmentCatalog.G4, final, "буксир не упирался в борт");
+        else
+        {
+            ExerciseEvent hard = tugContacts[0];
+            foreach (ExerciseEvent c in tugContacts) if (c.Value > hard.Value) hard = c;
+            Add(r, AssessmentCatalog.G4, "", hard.Value, $"{AssessmentResult.Num(hard.Value, 2)} уз в {ScenarioText.Clock(hard.Time)}; касаний {tugContacts.Count}");
+        }
     }
 
     // «Не оценивался» — только в итоге (во время упражнения строки нет, пока событие не случилось)

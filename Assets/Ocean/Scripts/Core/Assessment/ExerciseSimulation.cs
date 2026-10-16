@@ -480,6 +480,23 @@ public static class DemoAssessmentRuns
         }
     }
 
+    /// <summary>
+    /// 19.3в, 19-02 (BerthingSimulation, ветер 20 уз отжимной): правильно (буксир у миделя с ПБ — вызван на ходу < 1 уз, после остановки
+    /// толкать на ЛБ 10 / 25 % по зазору и скорости к причалу, концы — ближе 8 м, «понемногу»); без буксира (концы издалека,
+    /// выбирать против ветра); полная тяга (толкать сразу 100 %); поздно (буксир вызван через 2 мин после того, как ход стал меньше 1 уз).
+    /// </summary>
+    public static readonly string[] TugBerthVariants = { "tugberth_correct", "tugberth_none", "tugberth_full", "tugberth_late" };
+
+    public static void ConfigureTugBerth(BerthingPlan plan, string variant)
+    {
+        plan.UseTug = variant != "tugberth_none";
+        switch (variant)
+        {
+            case "tugberth_correct": plan.LinesMaxGapM = 8.0; break;   // концы — когда буксир подвёл судно
+            case "tugberth_full": plan.LinesMaxGapM = 8.0; plan.TugFixedPower = 1.0; break;
+            case "tugberth_late": plan.LinesMaxGapM = 8.0; plan.TugCallDelayS = 120.0; break;   // вызвал через 2 мин — судно снесло ветром
+        }
+    }
     public static string Title(string variant)
     {
         switch (variant)
@@ -503,6 +520,10 @@ public static class DemoAssessmentRuns
             case "berth_angle": return "швартовка: подход под углом 20°";
             case "berth_helm": return "швартовка: у штурвала, без перехода на крыло";
             case "berth_slow": return "швартовка: концы выбирать через 10 мин";
+            case "tugberth_correct": return "с буксиром: правильные действия";
+            case "tugberth_none": return "с буксиром: без буксира";
+            case "tugberth_full": return "с буксиром: толкать полной тягой";
+            case "tugberth_late": return "с буксиром: буксир вызван на 2 мин позже";
             default: return variant;
         }
     }

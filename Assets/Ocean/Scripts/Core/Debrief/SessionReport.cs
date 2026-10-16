@@ -79,6 +79,7 @@ public static class SessionReport
         Maps(h, map);
         Encounters(h, r);
         Mooring(h, s, sc);
+        Towing(h, s, sc);
         Criteria(h, r);
         Plots(h, s, r);
         Events(h, s);
@@ -181,6 +182,7 @@ public static class SessionReport
         foreach (AssessmentGroup g in AssessmentCatalog.ScoredGroups)
         {
             bool has = r.GroupScores.TryGetValue(g, out double gs);
+            if (!has && g == AssessmentGroup.Towing) continue;   // 19.3в: строка «Буксир» — только если буксир был (прежние отчёты не меняются)
             h.Append($"<tr><td>{H(AssessmentCatalog.GroupTitle(g))}</td><td class=\"num\">{G(set.GroupWeight(g))}</td><td class=\"num\">{(has ? ScenarioText.Num(gs, 1) : "не оценивалась")}</td></tr>\n");
         }
         h.Append($"</tbody></table>\n<p class=\"muted\">Зачёт: нет аварии, выполнены все обязательные критерии и балл не ниже {G(r.PassScore)}. " +
@@ -289,6 +291,39 @@ public static class SessionReport
         h.Append(".</p>\n");
     }
 
+    // 19.3в: буксир и ветер — только если ветер был или буксир вызывался (прочие отчёты не меняются)
+    private static void Towing(StringBuilder h, RecordedSession s, SessionScenario sc)
+    {
+        var winds = s.Events.FindAll(e => e.Type == ExerciseEventType.WindChanged);
+        bool tug = s.Events.Exists(e => e.Type == ExerciseEventType.TugCalled);
+        if (!tug && sc.wind_kn <= 0 && !winds.Exists(e => e.Value > 0)) return;
+        h.Append("<h2>Буксир и ветер</h2>\n");
+        string sector = sc.wind_random_sector_deg > 0 ? $" (направление случайное, сектор {ScenarioText.Num(sc.wind_random_sector_deg)}°)" : "";
+        h.Append($"<p>Ветер сценария: {H(ScenarioText.Wind(sc.wind_kn, sc.wind_from_deg))}{H(sector)}.");
+        if (winds.Count > 0) h.Append(" Изменения: " + string.Join("; ", winds.ConvertAll(e => $"{ScenarioText.Clock(e.Time)} — {H(ScenarioText.Wind(e.Value, e.Value2))}" + (string.IsNullOrEmpty(e.Subject) ? "" : $" ({H(e.Subject)})"))) + ".");
+        h.Append(" Ветер действует только в модели 3 СС.</p>\n");
+        if (!tug) { h.Append("<p>Буксир не вызывался.</p>\n"); return; }
+
+        var rows = s.Events.FindAll(e => e.Type == ExerciseEventType.TugCalled || e.Type == ExerciseEventType.TugDismissed || e.Type == ExerciseEventType.TugOrder ||
+                                         e.Type == ExerciseEventType.TowLineMadeFast || e.Type == ExerciseEventType.TowLineReleased || e.Type == ExerciseEventType.TowLineOverload ||
+                                         e.Type == ExerciseEventType.TowLineBroken || e.Type == ExerciseEventType.TugPushContact);
+        h.Append("<table>\n<thead><tr><th>Время</th><th>Буксир</th></tr></thead><tbody>\n");
+        foreach (ExerciseEvent e in rows)
+        {
+            bool bad = e.Type == ExerciseEventType.TowLineBroken || e.Type == ExerciseEventType.TowLineOverload;
+            h.Append($"<tr{(bad ? " class=\"fail\"" : "")}><td class=\"num\">{ScenarioText.Clock(e.Time)}</td><td>{H(e.Describe())}</td></tr>\n");
+        }
+        h.Append("</tbody></table>\n");
+        double maxPush = 0.0, maxLine = 0.0;
+        foreach (MooringSample m in s.Mooring)
+        {
+            if (!m.Towing.Present) continue;
+            if (!double.IsNaN(m.Towing.PushKn) && m.Towing.PushKn > maxPush) maxPush = m.Towing.PushKn;
+            if (m.Towing.Line == TowLineStatus.Fast && m.Towing.LineTensionKn > maxLine) maxLine = m.Towing.LineTensionKn;
+        }
+        h.Append($"<p>Наибольший упор буксира в борт — {ScenarioText.Num(maxPush)} кН; наибольшее натяжение буксирного троса — " +
+                 $"{(maxLine > 0 ? ScenarioText.Num(maxLine) + " кН" : "трос не подавался")} (по mooring.csv, 5 Гц).</p>\n");
+    }
     private static void Encounters(StringBuilder h, AssessmentResult r)
     {
         if (r == null || r.Encounters.Count == 0) return;

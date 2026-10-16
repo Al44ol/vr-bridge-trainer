@@ -343,7 +343,7 @@ public class TowingController : MonoBehaviour
         var go = new GameObject("Tug");
         view = go.AddComponent<TugView>();
         view.Init(this);
-        Publish(new ExerciseEvent(ExerciseEventType.TugCalled) { Index = (int)station, Subject = TugOrders.StationTarget(station) });
+        Publish(new ExerciseEvent(ExerciseEventType.TugCalled) { Index = (int)station, Subject = TugOrders.StationTarget(station), Value = system.Tug.Spec.BollardPull / 1000.0 });
         return true;
     }
 

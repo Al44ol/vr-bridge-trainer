@@ -205,6 +205,7 @@ public static class DebriefPlots
             }
         }
         AddMooring(plots, s);
+        AddTowing(plots, s);
         return plots;
     }
 
@@ -251,5 +252,49 @@ public static class DebriefPlots
             }
             plots.Add(p);
         }
+    }
+
+    /// <summary>
+    /// 19.3в: буксир (столбцы буксира mooring.csv) — заданная тяга P·T_гак (T_гак — из события вызова буксира, иначе 20 т),
+    /// упор в борт и натяжение троса, кН; отметки — команды буксиру (тяга, %).
+    /// </summary>
+    private static void AddTowing(List<DebriefPlot> plots, RecordedSession s)
+    {
+        int present = 0;
+        foreach (MooringSample m in s.Mooring) if (m.Towing.Present) present++;
+        if (present < 2) return;
+        double bp = TugSpec.DefaultBollardPullTonnes * 9.80665;
+        foreach (ExerciseEvent e in s.Events)
+            if (e.Type == ExerciseEventType.TugCalled && !double.IsNaN(e.Value) && e.Value > 0) { bp = e.Value; break; }
+        int step = Math.Max(1, s.Mooring.Count / MaxPoints);
+        var order = new List<Vector2>(); var push = new List<Vector2>(); var line = new List<Vector2>();
+        bool anyLine = false;
+        for (int i = 0; i < s.Mooring.Count; i += step)
+        {
+            MooringSample m = s.Mooring[i];
+            float x = (float)(m.Time / 60.0);
+            if (!m.Towing.Present)
+            {
+                foreach (List<Vector2> l in new[] { order, push, line }) if (l.Count > 0 && !float.IsNaN(l[l.Count - 1].y)) l.Add(new Vector2(x, float.NaN));
+                continue;
+            }
+            order.Add(new Vector2(x, (float)(m.Towing.Mode == TugMode.Stop ? 0.0 : m.Towing.PowerPct / 100.0 * bp)));
+            push.Add(new Vector2(x, (float)(double.IsNaN(m.Towing.PushKn) ? 0.0 : m.Towing.PushKn)));
+            bool fast = m.Towing.Line == TowLineStatus.Fast;
+            anyLine |= fast;
+            line.Add(new Vector2(x, fast ? (float)m.Towing.LineTensionKn : float.NaN));
+        }
+        var p = new DebriefPlot { Key = "tug", Title = "Буксир: заданная тяга, упор в борт, натяжение троса", ShortTitle = "буксир", XLabel = "Время, мин", YLabel = "Сила, кН",
+                                  Caption = $"Заданная тяга P·T_гак (T_гак = {ScenarioText.Num(bp)} кН), упор буксира в борт и натяжение буксирного троса; отметки — команды буксиру" };
+        p.Add("заданная тяга", SvgPlot.Dash.Dashed, order);
+        p.Add("упор в борт", SvgPlot.Dash.Solid, push);
+        if (anyLine) p.Add("натяжение троса", SvgPlot.Dash.Dotted, line);
+        foreach (ExerciseEvent e in s.Events)
+        {
+            float x = (float)(e.Time / 60.0);
+            if (e.Type == ExerciseEventType.TugOrder) p.AddMark(x, e.Index == (int)TugMode.Stop ? "стоп" : $"{ScenarioText.Num(e.Value)} %", PlotMarkKind.Manoeuvre);
+            else if (e.Type == ExerciseEventType.TowLineBroken) p.AddMark(x, "обрыв", PlotMarkKind.Accident);
+        }
+        plots.Add(p);
     }
 }

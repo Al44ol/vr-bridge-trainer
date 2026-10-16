@@ -81,11 +81,12 @@
 //                        Subject — название этапа, Value — наибольший зазор нос/корма до кромки, м; Value2 — ход, уз
 //   ExerciseEnded с EndReason = Moored — ошвартован (условие ScenarioEndConditions.Moored)
 // Буксир и ветер (19.3б; источник — TowingController, TowEventBus):
-//   TugCalled            буксир вызван: Index — место (TugStation: 0 у кормы, 1 у носа, 2 у миделя), Subject — «к корме» …
+//   TugCalled            буксир вызван: Index — место (TugStation: 0 у кормы, 1 у носа, 2 у миделя), Subject — «к корме» …;
+//                        Value — тяга на гаке, кН (19.3в)
 //   TugDismissed         буксир отпущен: Subject — причина («команда», «модель Номото», «перестановка судна» …)
 //   TugOrder             команда буксиру (меню B): Index — TugMode (0 стоп, 1 тянуть, 2 толкать), Subject — словами,
 //                        Value — тяга, % тяги на гаке; Value2 — направление силы на судно, ° от ДП (по часовой)
-//   TowLineMadeFast      буксирный трос подан: Value — длина, м
+//   TowLineMadeFast      буксирный трос подан: Value — длина, м; Value2 — MBL троса, кН (19.3в)
 //   TowLineReleased      трос отдан
 //   TowLineOverload      натяжение > 0,5·MBL: Value — T, кН; Value2 — T/MBL
 //   TowLineOverloadCleared натяжение < 0,45·MBL

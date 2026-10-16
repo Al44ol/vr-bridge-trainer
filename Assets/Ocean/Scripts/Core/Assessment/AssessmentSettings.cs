@@ -28,7 +28,8 @@ public enum AssessmentGroup
     Route,        // маршрут
     Accidents,    // аварии — провал, в балл не входят
     Visibility,   // ограниченная видимость (C4): туманные сигналы, безопасная скорость, правило 19
-    Mooring       // швартовка (19.2б-3): задание сценария швартовки
+    Mooring,      // швартовка (19.2б-3): задание сценария швартовки
+    Towing        // буксир (19.3в): трос и толкание, если буксир вызывался
 }
 
 /// <summary>Описание критерия (методика, задаётся в коде).</summary>
@@ -128,6 +129,11 @@ public class AssessmentSettings
     [UnityEngine.Tooltip("Вес группы «Швартовка» (19.2б-3)")]
     public double weightMooring = 1.0;
     public double WeightMooring => weightMooring > 0 ? weightMooring : 1.0;
+
+    // ── Буксир (19.3в). В снимках до 19.3в поля нет (0) — вес по умолчанию; группа там и не оценивается.
+    [UnityEngine.Tooltip("Вес группы «Буксир» (19.3в)")]
+    public double weightTowing = 0.5;
+    public double WeightTowing => weightTowing > 0 ? weightTowing : 0.5;
     public List<CriterionSetting> criteria = new List<CriterionSetting>();
 
     public AssessmentSettings() { }
@@ -167,7 +173,7 @@ public class AssessmentSettings
     public double GroupWeight(AssessmentGroup g) =>
         g == AssessmentGroup.Encounters ? weightEncounters : g == AssessmentGroup.Reaction ? weightReaction :
         g == AssessmentGroup.Route ? weightRoute : g == AssessmentGroup.Visibility ? WeightVisibility :
-        g == AssessmentGroup.Mooring ? WeightMooring : 0.0;
+        g == AssessmentGroup.Mooring ? WeightMooring : g == AssessmentGroup.Towing ? WeightTowing : 0.0;
 
     /// <summary>Добавить недостающие критерии каталога (после обновления методики).</summary>
     public int AddMissing()
@@ -189,10 +195,11 @@ public static class AssessmentCatalog
     public const string F1 = "F1", F2 = "F2", F3 = "F3", F4 = "F4", F5 = "F5", F6 = "F6";
     public const string N1 = "N1", N2 = "N2";
     public const string M1 = "M1", M2 = "M2", M3 = "M3", M4 = "M4", M5 = "M5", M6 = "M6", M7 = "M7", M8 = "M8", M9 = "M9";
+    public const string G1 = "G1", G2 = "G2", G3 = "G3", G4 = "G4";
 
     /// <summary>Группы, входящие в балл (порядок вывода).</summary>
     public static readonly AssessmentGroup[] ScoredGroups =
-        { AssessmentGroup.Encounters, AssessmentGroup.Reaction, AssessmentGroup.Route, AssessmentGroup.Visibility, AssessmentGroup.Mooring };
+        { AssessmentGroup.Encounters, AssessmentGroup.Reaction, AssessmentGroup.Route, AssessmentGroup.Visibility, AssessmentGroup.Mooring, AssessmentGroup.Towing };
 
     private static CriterionInfo C(string code, AssessmentGroup g, string title, string rule, string unit, bool higher,
                                    bool mandatory, double full, double pass, double zero, double weight, string basis) =>
@@ -282,6 +289,15 @@ public static class AssessmentCatalog
           false, 1, 1.5, 2, 3, "время «ошвартован» / контрольное время сценария (19-01 — 10 мин)"),
         C(M9, AssessmentGroup.Mooring, "Подход к кранцам — с крыла со стороны причала", "практика", "1 — да, 0 — нет", true,
           false, 1, 1, 0, 2, "место обучающегося при первом касании кранцев (mooring.csv → station): с крыла виден борт и кранцы"),
+        // ── Буксир (19.3в; оценивается, только если буксир вызывался; пороги предварительные) ──
+        C(G1, AssessmentGroup.Towing, "Без обрыва буксирного троса", "практика", "число", false,
+          true, 0, 0, 1, 8, "обрыв (T > MBL = 2,5·T_гак) опасен для команды на баке и буксира"),
+        C(G2, AssessmentGroup.Towing, "Буксирный трос не перегружен", "практика", "с", false,
+          false, 0, 10, 30, 4, "время с натяжением выше 0,5·MBL (TowLineOverload → …Cleared, отдача, обрыв), как M7 у концов"),
+        C(G3, AssessmentGroup.Towing, "Тяга буксира задаётся ступенями", "практика", "%", false,
+          false, 25, 50, 100, 4, "наибольший скачок заданной тяги между соседними командами буксиру (вызов и «стоп» — 0 %); 25 % против ветра 20 уз уже дают ≈ 1 уз лагом (19.24.4), полная тяга сразу — навал и рывок троса (до 1,7·P·T_гак)"),
+        C(G4, AssessmentGroup.Towing, "Касание буксира о борт — мягкое", "практика, PIANC", "уз", false,
+          false, 0.3, 0.6, 1.2, 3, "наибольшая скорость сближения носа буксира с бортом по нормали при касании (TugPushContact): подход буксира и снос судна на него"),
         // ── Аварии ──
         C(A1, AssessmentGroup.Accidents, "Посадка на мель", "провал", "число", false,
           true, 0, 0, 1, 0, "посадка — провал упражнения независимо от баллов"),
@@ -309,6 +325,7 @@ public static class AssessmentCatalog
             case AssessmentGroup.Route: return "Маршрут";
             case AssessmentGroup.Visibility: return "Ограниченная видимость";
             case AssessmentGroup.Mooring: return "Швартовка";
+            case AssessmentGroup.Towing: return "Буксир";
             default: return "Аварии";
         }
     }

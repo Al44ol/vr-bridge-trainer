@@ -188,7 +188,7 @@ public sealed class TowLine
 
 public enum TowEventType
 {
-    LineMadeFast,       // трос подан: Value — длина, м
+    LineMadeFast,       // трос подан: Value — длина, м; Value2 — MBL, Н (19.3в)
     LineReleased,       // трос отдан
     LineOverload,       // натяжение > 0,5·MBL: Value — T, Н; Value2 — T/MBL
     LineOverloadCleared,
@@ -276,6 +276,8 @@ public sealed class TowingSystem
     public const double AroundClearM = 20.0;
     /// <summary>19.3б: рабочее направление тяги поворачивается к заданному не быстрее …, °/с (буксир идёт по дуге вокруг клюза).</summary>
     public const double SwingRateDegS = 3.0;
+    /// <summary>19.3в: подход носом к борту для толкания — не быстрее, м/с (≈ 0,3 уз; мягкое касание, критерий G4).</summary>
+    public const double ApproachSpeedMs = 0.15;
 
     /// <summary>19.3б: место буксира у судна (клюз и точка толкания).</summary>
     public TugStation Station { get; private set; } = TugStation.Stern;
@@ -334,7 +336,7 @@ public sealed class TowingSystem
     public void MakeFast(double length, double time)
     {
         Line.MakeFast(length);
-        Events.Add(new TowEvent { Type = TowEventType.LineMadeFast, Time = time, Value = length });
+        Events.Add(new TowEvent { Type = TowEventType.LineMadeFast, Time = time, Value = length, Value2 = Line.Mbl });   // 19.3в: MBL — для G3
     }
 
     public void ReleaseLine(double time)
@@ -455,7 +457,9 @@ public sealed class TowingSystem
         if (!contactReported)
         {
             contactReported = true;
-            Events.Add(new TowEvent { Type = TowEventType.PushContact, Time = time, Value = rate });
+            // 19.3в: скорость сближения носа буксира с бортом по нормали (было — прирост обжатия, на первом шаге касания 0)
+            double closing = -((vb.East - vs.East) * nE + (vb.North - vs.North) * nN);
+            Events.Add(new TowEvent { Type = TowEventType.PushContact, Time = time, Value = Math.Max(0.0, closing) });
         }
     }
 
@@ -649,7 +653,9 @@ public sealed class TowingSystem
             // В касании нос держит трение кранца: курс — только кормовой поперечной силой (поворот вокруг носа),
             // Y = N/x_к — без регулятора положения (он требовал бы от той же силы противоположного)
             bool touching = PushForce > 0.0 || ex > -0.3;
-            X = touching ? p * bp : k.M11 * (-w * w * (ex - 0.05) - 2.0 * z * w * vx);
+            // 19.3в: подход к борту не быстрее ≈ ApproachSpeedMs — ошибка положения ограничена (установившаяся скорость ω·e/(2ζ))
+            double eLim = ApproachSpeedMs * 2.0 * z / w;
+            X = touching ? p * bp : k.M11 * (-w * w * Math.Max(-eLim, Math.Min(eLim, ex - 0.05)) - 2.0 * z * w * vx);
             if (touching && PushForce > 0.0)
             {
                 Y = N / tv.Spec.ThrusterX;
@@ -660,6 +666,7 @@ public sealed class TowingSystem
         tv.OrderY = Clamp(Y, bp);
         tv.OrderN = Clamp(N, bp * Math.Abs(tv.Spec.ThrusterX));
     }
+
 
     private static double Clamp(double v, double m) => v < -m ? -m : v > m ? m : v;
 

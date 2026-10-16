@@ -16,7 +16,12 @@
 //   3. концы — носовые продольный и прижимной, кормовые прижимной и продольный — подать, когда ход меньше 0,3 уз
 //      (через linesDelayS после остановки), и выбирать: «понемногу» (держать, если нос или корма идут
 //      к причалу быстрее 0,1 уз, снова выбирать, когда медленнее 0,05 уз) или без остановок;
-//   4. место — переход на крыло со стороны причала в начале (или остаться у штурвала).
+//   4. место — переход на крыло со стороны причала в начале (или остаться у штурвала);
+//   5. 19.3в: ветер сценария (направление — середина сектора; WindLoad, только 3 СС) и буксир (TowingSystem, как
+//      TowingController): вызов к месту TugStation после «Стоп» на ходу меньше TugCallBelowKn (у дальнего от причала борта, «стоп»);
+//      после остановки — толкать к причалу: 10 % (около равновесия с ветром) или 25 % (подвести) по зазору и скорости
+//      к причалу (RunTug); концы — ближе LinesMaxGapM, после подачи — держать 10 %; TugFixedPower — постоянная тяга
+//      (вариант «полная тяга»). Тянуть к причалу буксир не может: он оказался бы между судном и причалом.
 // Каждое действие публикуется как действие обучающегося: TelegraphChanged, HelmStarted/HelmEnded,
 // LineCommand, StationChanged — как в сцене (меню B).
 // ============================================================
@@ -42,6 +47,20 @@ public sealed class BerthingPlan
     public double HoldAboveKn = 0.06, ResumeBelowKn = 0.03;
     /// <summary>Перейти на крыло со стороны причала (через 5 с после начала).</summary>
     public bool GoToWing = true;
+
+    // ── 19.3в: буксир ──
+    public bool UseTug;
+    public TugStation TugStation = TugStation.Midship;
+    /// <summary>Вызвать буксир после «Стоп», когда ход меньше …, уз, и ещё через …, с (буксир подходит на малом ходу:
+    /// на 3 уз он у борта отстаёт — короткий корпус с колонками плохо держит курс лагом, 19.24.3).</summary>
+    public double TugCallBelowKn = 1.0, TugCallDelayS;
+    /// <summary>Тяга: смена не чаще, с; наибольшая ступень (TugOrders.PowerSteps: 0 — 10 %, 1 — 25 %, 2 — 50 %, 3 — 100 %).</summary>
+    public double TugStepS = 20.0;
+    public int TugMaxPowerIndex = 1;
+    /// <summary>Концы подавать, когда наименьший зазор до кромки не больше, м (∞ — сразу после остановки, как 19-01).</summary>
+    public double LinesMaxGapM = double.PositiveInfinity;
+    /// <summary>Постоянная доля тяги после остановки (0 — регулятор).</summary>
+    public double TugFixedPower;
 }
 
 public sealed class BerthingSimulation
@@ -74,6 +93,13 @@ public sealed class BerthingSimulation
     private LiveAssessment live;
     private BridgeStation station = BridgeStation.Helm;
     private RouteTracker route;
+    // 19.3в: ветер и буксир
+    private Wind wind;
+    private ShipWindArea shipWind;
+    /// <summary>Буксир прогона (null — не вызывался).</summary>
+    public TowingSystem Tug { get; private set; }
+    private int tugPowerIndex = -1;
+    private double tugDir, tugNextStep;
 
     private static readonly int[] Lines = { (int)MooringLineKind.HeadLine, (int)MooringLineKind.ForwardBreast, (int)MooringLineKind.AftBreast, (int)MooringLineKind.SternLine };
     private static readonly int[] BowLines = { (int)MooringLineKind.HeadLine, (int)MooringLineKind.ForwardBreast };
@@ -110,6 +136,12 @@ public sealed class BerthingSimulation
         live.Output += e => Publish(e);
         live.Begin(AssessmentContext.FromScenario(s, p), RateHz);
         var sampler = new TrackSampler(RateHz);
+        wind = s.windKnots > 0f ? Wind.Knots(s.windKnots, s.windFromDeg) : new Wind(0.0, 0.0);
+        shipWind = ShipWindArea.Estimate(p);
+        Tug = null;
+        tugPowerIndex = -1;
+        tugNextStep = 0.0;
+        stoppedAtTug = double.NaN;
 
         t = 0;
         Publish(new ExerciseEvent(ExerciseEventType.ExerciseStarted) { Subject = s.title });
@@ -124,6 +156,7 @@ public sealed class BerthingSimulation
         WorldPosition la = berth.ToWorld(0, nTarget), lb = berth.ToWorld(berth.Length, nTarget);
         double helmEndAt = double.NaN, stoppedAt = double.NaN, lastLineTry = -1e9, givenAt = double.NaN;
         bool haulStarted = false;
+        double slowAt = double.NaN;   // 19.3в: ход стал меньше TugCallBelowKn
         int phase = 0;   // 0 — подход, 1 — «Стоп», 2 — назад, 3 — остановился
         bool linesGiven = false;
         bool[] haulEnd = { false, false };   // выбираются: нос, корма
@@ -165,7 +198,7 @@ public sealed class BerthingSimulation
             m.RudderCommandDeg = rudder;
 
             // Концы: подать после остановки, затем выбирать
-            if (!linesGiven && !double.IsNaN(stoppedAt) && t >= stoppedAt + Plan.LinesDelayS && t - lastLineTry >= 1.0)
+            if (!linesGiven && !double.IsNaN(stoppedAt) && t >= stoppedAt + Plan.LinesDelayS && t - lastLineTry >= 1.0 && GapOk())
             {
                 lastLineTry = t;
                 bool all = true;
@@ -200,8 +233,19 @@ public sealed class BerthingSimulation
                 }
             }
 
-            // Шаг: силы причала (как MooringController, до шага модели), модель
+            // 19.3в: буксир — вызов и работа после остановки
+            if (Plan.UseTug && Tug == null && phase >= 1 && u < Plan.TugCallBelowKn)
+            {
+                if (double.IsNaN(slowAt)) slowAt = t;
+                if (t >= slowAt + Plan.TugCallDelayS - 1e-9) CallTug(p, side);
+            }
+            stoppedAtTug = stoppedAt;
+            if (Tug != null && Math.Round(t / Dt) % 50 == 0) RunTug();
+
+            // Шаг: силы причала (как MooringController, до шага модели), ветер и буксир (как TowingController), модель
             sys.Apply(m, Dt, t);
+            if (Tug != null) { Tug.Wind = wind; Tug.Apply(m, Dt, t); FlushTowEvents(); }
+            else if (!wind.Calm) WindLoad.Apply(m, shipWind, wind);
             m.Step(Dt);
             t += Dt;
             FlushMooringEvents();
@@ -312,6 +356,82 @@ public sealed class BerthingSimulation
         return ok;
     }
 
+    // ─────────── 19.3в: буксир ───────────
+
+    private void CallTug(ShipParameters p, int side)
+    {
+        Tug = new TowingSystem(p, TowingTrials.TugParameters());
+        Tug.SetStation(Plan.TugStation);
+        Tug.SetGeometry(TugOrders.DefaultGeometry(Plan.TugStation));
+        tugDir = side < 0 ? 270.0 : 90.0;   // сила на судно — к причалу
+        // У миделя — у дальнего от причала борта, «стоп»
+        TugCommand stop = TugOrders.Command(TugMode.Stop, tugDir, 0.0);
+        Tug.Wind = wind;
+        Tug.PlaceTug(m, stop, 30.0);
+        Tug.Order(stop, t);
+        Tug.Events.Clear();
+        Publish(new ExerciseEvent(ExerciseEventType.TugCalled) { Index = (int)Plan.TugStation, Subject = TugOrders.StationTarget(Plan.TugStation), Value = Tug.Tug.Spec.BollardPull / 1000.0 });
+        Note($"буксир вызван {TugOrders.StationTarget(Plan.TugStation)}");
+    }
+
+    // Раз в секунду после остановки: толкать к причалу. Тяга — две ступени (10 % ≈ равновесие с ветром 20 уз, 25 % —
+    // подвести, 19.24.4), смена не чаще TugStepS: дальше 15 м — 25 %, если к причалу медленнее 0,15 уз, 10 % — быстрее
+    // 0,35 уз; 5…15 м — 25 % медленнее 0,05 уз, 10 % быстрее 0,15 уз; ближе 5 м и после подачи концов — 10 % (держать
+    // против ветра, концы выбирают). TugFixedPower — постоянная тяга (вариант «полная тяга»).
+    private void RunTug()
+    {
+        if (double.IsNaN(stoppedAtTug)) return;
+        int idx;
+        if (Plan.TugFixedPower > 0) idx = TugOrders.NearestIndex(TugOrders.PowerSteps, Plan.TugFixedPower);
+        else
+        {
+            if (t < tugNextStep - 1e-9) return;
+            BerthReadout br = BerthReadout.Compute(berth, Scenario.shipParameters, m);
+            double v = 0.5 * (br.BowSpeedKn + br.SternSpeedKn), gap = Math.Min(br.BowGapM, br.SternGapM);
+            bool lines = sys.Lines.Exists(l => l.State == MooringLineState.Fast);
+            idx = tugPowerIndex < 0 ? 1 : tugPowerIndex;
+            if (lines) idx = -1;                 // концы поданы — «стоп»: дальше выбирают концы против ветра
+            else if (gap <= 5.0) idx = 0;
+            else if (gap > 15.0) idx = v < 0.15 ? 1 : v > 0.35 ? 0 : idx;
+            else idx = v < 0.05 ? 1 : v > 0.15 ? 0 : idx;
+            idx = Math.Min(idx, Math.Min(Plan.TugMaxPowerIndex, TugOrders.PowerSteps.Length - 1));
+            if (idx != tugPowerIndex) tugNextStep = t + Plan.TugStepS;
+        }
+        Issue(idx, TugMode.Push, tugDir);
+    }
+
+    private double stoppedAtTug = double.NaN;
+    private readonly List<TargetSample> tugTargets = new List<TargetSample>();
+
+    private void Issue(int idx, TugMode mode, double dir)
+    {
+        if (idx == tugPowerIndex && (Tug.Tug.Command.Mode != TugMode.Stop) == (idx >= 0)) return;
+        tugPowerIndex = idx;
+        TugCommand c = idx < 0 ? TugOrders.Command(TugMode.Stop, dir, 0.0) : TugOrders.Command(mode, dir, TugOrders.PowerSteps[idx]);
+        Tug.Order(c, t);
+        FlushTowEvents();
+    }
+    // Концы — когда судно подошло (с буксиром: ближе LinesMaxGapM)
+    private bool GapOk()
+    {
+        if (double.IsInfinity(Plan.LinesMaxGapM)) return true;
+        BerthReadout br = BerthReadout.Compute(berth, Scenario.shipParameters, m);
+        return br.Valid && Math.Min(br.BowGapM, br.SternGapM) <= Plan.LinesMaxGapM;
+    }
+
+    private double Chord()
+    {
+        WorldPosition f = Tug.TowPoint(m), b = Tug.Tug.Bow;
+        return Math.Sqrt((b.East - f.East) * (b.East - f.East) + (b.North - f.North) * (b.North - f.North));
+    }
+
+    private void FlushTowEvents()
+    {
+        if (Tug == null) return;
+        foreach (TowEvent te in Tug.Events) Publish(TowEventBus.ToExerciseEvent(te));
+        Tug.Events.Clear();
+    }
+
     private void FlushMooringEvents()
     {
         foreach (MooringEvent me in sys.Events)
@@ -361,7 +481,15 @@ public sealed class BerthingSimulation
         };
         MooringSample ms = MooringSampler.Build(t, berth, Scenario.mooring.berthIndex, Scenario.shipParameters, m, sys,
                                                 ThrusterOrders.ZeroIndex, station, Task);
-        if (rec != null) { rec.AddTrack(s); rec.AddMooring(ms); }
-        if (live.Running) live.AddSample(s, null, ms);
+        ms.Towing = TowingSample.Build(Tug, wind);   // 19.3в: как TowingController.Sample
+        // 19.3в: буксир — цель «TUG» в targets.csv (как ExerciseTargets в сцене; оценка расхождения его не учитывает)
+        tugTargets.Clear();
+        if (Tug != null)
+        {
+            var tg = new TugTarget(Tug.Tug);
+            tugTargets.Add(new TargetSample { Time = t, Id = tg.TargetId, East = tg.Position.East, North = tg.Position.North, HeadingDeg = tg.HeadingDeg, SpeedKnots = tg.SpeedKnots });
+        }
+        if (rec != null) { rec.AddTrack(s); foreach (TargetSample ts in tugTargets) rec.AddTarget(ts); rec.AddMooring(ms); }
+        if (live.Running) live.AddSample(s, tugTargets, ms);
     }
 }
