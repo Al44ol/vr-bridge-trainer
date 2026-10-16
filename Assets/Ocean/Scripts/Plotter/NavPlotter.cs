@@ -283,7 +283,8 @@ public class NavPlotter : MonoBehaviour
 
     private bool HideTargets => ScenarioActive && runner.Current.hideTargetsOnPlotter;
 
-    private bool ShowTargetNow(ITrackedTarget t) => PlotterMath.ShowTarget(ScenarioActive, HideTargets, revealAll, detected.Contains(t.TargetId));
+    // 19.3б: свой буксир виден всегда (рядом с судном, его видно глазами); CPA до него не считается
+    private bool ShowTargetNow(ITrackedTarget t) => t is TugTarget || PlotterMath.ShowTarget(ScenarioActive, HideTargets, revealAll, detected.Contains(t.TargetId));
 
     private void Refresh()
     {
@@ -514,8 +515,11 @@ public class NavPlotter : MonoBehaviour
         cpas.Clear();
         cpaTargets.Clear();
         WorldPosition own = navigation.PositionEastNorth;
+        int others = 0;
         foreach (ITrackedTarget t in ExerciseTargets.All)
         {
+            if (t is TugTarget) continue;
+            others++;
             if (!ShowTargetNow(t)) continue;
             cpas.Add(CpaCalculator.FromCourses(own, navigation.Heading, navigation.SpeedKnots, t.Position, t.HeadingDeg, t.SpeedKnots));
             cpaTargets.Add(t);
@@ -523,7 +527,7 @@ public class NavPlotter : MonoBehaviour
         int k = PlotterMath.NearestByCpa(cpas);
         if (k < 0)
         {
-            string none = ExerciseTargets.All.Count == 0 ? "других судов нет" : cpas.Count == 0 ? "цели не обнаружены" : "сближающихся целей нет";
+            string none = others == 0 ? "других судов нет" : cpas.Count == 0 ? "цели не обнаружены" : "сближающихся целей нет";
             b.Append($"<size=85%><color=#9AA6B2>{none}</color></size>");
             return b.ToString().TrimEnd();
         }

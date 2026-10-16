@@ -236,6 +236,18 @@ public class SessionReplayWindow : EditorWindow
             if (m.Lines != null) foreach (MooringLineSample l in m.Lines) if (l.Fast) fast++;
             Row("Концы / подрул.", $"подано {fast} · {ThrusterOrders.TitleOfPercent(m.ThrusterOrderPct)}" + (m.StagesDone >= 0 ? $" · заданий {m.StagesDone}" : ""));
         }
+        // 19.3б: буксир и ветер (столбцы mooring.csv)
+        if (ms.HasValue)
+        {
+            TowingSample tw = ms.Value.Towing;
+            if (tw.Present)
+                Row("Буксир", $"{TugOrders.StationTitle(tw.Station)}: {TugOrders.ModeTitle(tw.Mode)}" +
+                              (tw.Mode == TugMode.Stop ? "" : $" {TugCommand.DirectionTitle(tw.DirectionDeg)} {ScenarioText.Num(tw.PowerPct)} %") +
+                              (tw.Line == TowLineStatus.Fast ? $" · трос {ScenarioText.Num(tw.LineLengthM, 1)} м, {ScenarioText.Num(tw.LineTensionKn)} кН"
+                               : tw.Line == TowLineStatus.Broken ? " · трос оборван" : "") +
+                              (tw.PushKn > 0.05 ? $" · упор {ScenarioText.Num(tw.PushKn)} кН" : ""));
+            if (tw.WindKn > 0.05) Row("Ветер", ScenarioText.Wind(tw.WindKn, tw.WindFromDeg));
+        }
         EditorGUILayout.Space(4f);
     }
 

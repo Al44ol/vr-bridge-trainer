@@ -80,6 +80,18 @@
 //   MooringStage         выполнен этап задания: Index — MooringStage (1 лагом, 2 у кранцев, 3 концы поданы, 4 ошвартован),
 //                        Subject — название этапа, Value — наибольший зазор нос/корма до кромки, м; Value2 — ход, уз
 //   ExerciseEnded с EndReason = Moored — ошвартован (условие ScenarioEndConditions.Moored)
+// Буксир и ветер (19.3б; источник — TowingController, TowEventBus):
+//   TugCalled            буксир вызван: Index — место (TugStation: 0 у кормы, 1 у носа, 2 у миделя), Subject — «к корме» …
+//   TugDismissed         буксир отпущен: Subject — причина («команда», «модель Номото», «перестановка судна» …)
+//   TugOrder             команда буксиру (меню B): Index — TugMode (0 стоп, 1 тянуть, 2 толкать), Subject — словами,
+//                        Value — тяга, % тяги на гаке; Value2 — направление силы на судно, ° от ДП (по часовой)
+//   TowLineMadeFast      буксирный трос подан: Value — длина, м
+//   TowLineReleased      трос отдан
+//   TowLineOverload      натяжение > 0,5·MBL: Value — T, кН; Value2 — T/MBL
+//   TowLineOverloadCleared натяжение < 0,45·MBL
+//   TowLineBroken        обрыв: Value — наибольшее натяжение, кН
+//   TugPushContact       буксир упёрся в борт: Value — скорость сближения, уз
+//   WindChanged          ветер: Value — скорость, уз (0 — нет); Value2 — откуда, °; Subject — «сценарий» / «меню» / «на начало»
 // XTE > 0 — судно правее линии пути.
 // ============================================================
 using System;
@@ -141,7 +153,18 @@ public enum ExerciseEventType
     LineCommand,
     StationChanged,
     // Сценарий швартовки (19.2б-3)
-    MooringStage
+    MooringStage,
+    // Буксир и ветер (19.3б)
+    TugCalled,
+    TugDismissed,
+    TugOrder,
+    TowLineMadeFast,
+    TowLineReleased,
+    TowLineOverload,
+    TowLineOverloadCleared,
+    TowLineBroken,
+    TugPushContact,
+    WindChanged
 }
 
 public enum ScenarioEndReason
@@ -260,6 +283,18 @@ public struct ExerciseEvent
                 return $"Переход: {BridgeStations.Title((BridgeStation)Index)} (был: {BridgeStations.Title((BridgeStation)(int)Value)})";
             case ExerciseEventType.MooringStage:
                 return $"Швартовка: выполнено «{Subject}»" + (double.IsNaN(Value) ? "" : $" (зазор до {ScenarioText.Num(Value, 1)} м, ход {ScenarioText.Num(Value2, 2)} уз)");
+            case ExerciseEventType.TugCalled: return $"Буксир вызван {Subject}";
+            case ExerciseEventType.TugDismissed: return string.IsNullOrEmpty(Subject) ? "Буксир отпущен" : $"Буксир отпущен ({Subject})";
+            case ExerciseEventType.TugOrder: return $"Буксиру: «{Subject}»";
+            case ExerciseEventType.TowLineMadeFast: return $"Буксирный трос подан: {ScenarioText.Num(Value, 1)} м";
+            case ExerciseEventType.TowLineReleased: return "Буксирный трос отдан";
+            case ExerciseEventType.TowLineOverload: return $"ПЕРЕГРУЗКА буксирного троса: {ScenarioText.Num(Value)} кН ({ScenarioText.Num(Value2 * 100.0)} % MBL)";
+            case ExerciseEventType.TowLineOverloadCleared: return "Натяжение буксирного троса в норме";
+            case ExerciseEventType.TowLineBroken: return $"ОБРЫВ буксирного троса: {ScenarioText.Num(Value)} кН";
+            case ExerciseEventType.TugPushContact: return $"Буксир упёрся в борт: {ScenarioText.Num(Value, 2)} уз";
+            case ExerciseEventType.WindChanged:
+                return (Value > 0 ? $"Ветер {ScenarioText.Num(Value)} уз, откуда {ScenarioText.Bearing(Value2)}" : "Ветра нет") +
+                       (string.IsNullOrEmpty(Subject) ? "" : $" ({Subject})");
         }
         return $"{Type} {Subject}";
     }

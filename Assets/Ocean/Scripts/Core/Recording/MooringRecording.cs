@@ -73,6 +73,8 @@ public struct MooringSample
     public int StagesDone;
     public double MooredHoldS;
     public MooringLineSample[] Lines;
+    /// <summary>19.3б: буксир и ветер (столбцы в конце строки).</summary>
+    public TowingSample Towing;
 
     public bool HasBerth => Berth >= 0 && !double.IsNaN(BowGapM);
 
@@ -93,6 +95,7 @@ public static class MooringRecording
                                   "fender_contact;fender_defl_ratio;fender_force_kn;quay_contact;thruster_order_pct;thruster_actual_pct;" +
                                   "station;stages_done;moored_hold_s");
         foreach (string p in LinePrefixes) b.Append($";{p}_state;{p}_bollard;{p}_length_m;{p}_tension_kn");
+        foreach (string c in TowingSample.Columns) b.Append(';').Append(c);   // 19.3б
         return b.ToString();
     }
 
@@ -154,6 +157,7 @@ public static class MooringRecording
             CsvFormat.Sep(b); CsvFormat.Num(b, l.LengthM, 2);
             CsvFormat.Sep(b); CsvFormat.Num(b, l.TensionKn, 2);
         }
+        s.Towing.Append(b);   // 19.3б
         b.Append('\n');
     }
 
@@ -170,7 +174,8 @@ public static class MooringRecording
             FenderForceKn = CsvFormat.Round(s.FenderForceKn, 2), QuayContact = s.QuayContact,
             ThrusterOrderPct = CsvFormat.Round(s.ThrusterOrderPct, 0), ThrusterActualPct = CsvFormat.Round(s.ThrusterActualPct, 1),
             Station = s.Station, StagesDone = s.StagesDone >= 0 ? s.StagesDone : -1, MooredHoldS = CsvFormat.Round(s.MooredHoldS, 1),
-            Lines = new MooringLineSample[MooringSample.LineCount]
+            Lines = new MooringLineSample[MooringSample.LineCount],
+            Towing = s.Towing.Quantize()
         };
         for (int i = 0; i < MooringSample.LineCount; i++)
         {
@@ -199,7 +204,8 @@ public static class MooringRecording
             FenderForceKn = D("fender_force_kn"), QuayContact = I("quay_contact", 0) == 1,
             ThrusterOrderPct = D("thruster_order_pct"), ThrusterActualPct = D("thruster_actual_pct"),
             Station = I("station", 0), StagesDone = I("stages_done", -1), MooredHoldS = D("moored_hold_s"),
-            Lines = new MooringLineSample[MooringSample.LineCount]
+            Lines = new MooringLineSample[MooringSample.LineCount],
+            Towing = TowingSample.Parse(get)   // 19.3б; у записей до 19.3б — буксира нет, ветер 0
         };
         for (int i = 0; i < MooringSample.LineCount; i++)
         {
@@ -235,7 +241,8 @@ public static class MooringSampler
             MooredHoldS = task != null ? task.HoldTime : double.NaN,
             ThrusterOrderPct = ThrusterOrders.Command(thrusterIndex) * 100.0,
             ThrusterActualPct = system != null && system.Thruster != null ? system.Thruster.Actual * 100.0 : 0.0,
-            Lines = new MooringLineSample[MooringSample.LineCount]
+            Lines = new MooringLineSample[MooringSample.LineCount],
+            Towing = TowingSample.None   // 19.3б: буксир и ветер ставит источник (TowingSample.Build)
         };
         if (m != null)
             s.SpeedOverGroundKn = Math.Sqrt(m.VelocityEast * m.VelocityEast + m.VelocityNorth * m.VelocityNorth) / ShipParameters.KnotsToMs;

@@ -251,3 +251,59 @@ MonoBehaviour:
       pass: 1
       zero: 0
       weight: 10
+    - code: M2
+      enabled: 1
+      mandatory: 1
+      full: 0.15
+      pass: 0.3
+      zero: 0.5
+      weight: 8
+    - code: M3
+      enabled: 1
+      mandatory: 1
+      full: 0.5
+      pass: 1
+      zero: 1.5
+      weight: 6
+    - code: M4
+      enabled: 1
+      mandatory: 1
+      full: 0
+      pass: 0
+      zero: 1
+      weight: 8
+    - code: M5
+      enabled: 1
+      mandatory: 0
+      full: 3
+      pass: 10
+      zero: 20
+      weight: 4
+    - code: M6
+      enabled: 1
+      mandatory: 1
+      full: 0
+      pass: 0
+      zero: 1
+      weight: 8
+    - code: M7
+      enabled: 1
+      mandatory: 0
+      full: 0
+      pass: 10
+      zero: 30
+      weight: 4
+    - code: M8
+      enabled: 1
+      mandatory: 0
+      full: 1
+      pass: 1.5
+      zero: 2
+      weight: 3
+    - code: M9
+      enabled: 1
+      mandatory: 0
+      full: 1
+      pass: 1
+      zero: 0
+      weight: 2

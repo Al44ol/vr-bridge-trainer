@@ -33,6 +33,8 @@ public static class ExerciseTasks
         if (s.IsMooring) MooringFacts(s, b);
         else b.AppendLine($"Путевых точек: {Math.Max(0, s.route.Count - 1)}, маршрут {ScenarioText.Num(s.RouteLength / 1852.0, 1)} мили");
         if (s.traffic != null && s.traffic.Count > 0) b.AppendLine($"Другие суда в районе: {s.traffic.Count}");
+        if (s.windKnots > 0f) b.AppendLine($"Ветер: {ScenarioText.Wind(s.windKnots, s.windFromDeg)}");   // 19.3б
+        if (s.tugAvailable) b.AppendLine("Буксир: по вызову (меню B → «Буксир»)");
         b.AppendLine(s.timeLimitSeconds > 0 ? $"Лимит времени: {ScenarioText.Clock(s.timeLimitSeconds)}" : "Без лимита времени");
         b.Append($"Завершение: {ScenarioText.EndConditions(s)}");
         return b.ToString();

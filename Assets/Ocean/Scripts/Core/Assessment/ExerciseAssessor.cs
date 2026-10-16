@@ -245,7 +245,9 @@ public sealed class ExerciseAssessor
         if (hasPending) ProcessPending();
         pendingOwn = ownSample;
         pendingTargets.Clear();
-        if (targetSamples != null) pendingTargets.AddRange(targetSamples);
+        if (targetSamples != null)
+            foreach (TargetSample t in targetSamples)
+                if (!TugTarget.IsTug(t.Id)) pendingTargets.Add(t);   // 19.3б: свой буксир — не цель расхождения
         hasPending = true;
     }
 

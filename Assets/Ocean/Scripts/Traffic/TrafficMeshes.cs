@@ -36,13 +36,22 @@ public static class TrafficMeshes
         new Vector2(-0.50f, 0.86f), new Vector2(-0.40f, 1f), new Vector2(0.10f, 1f), new Vector2(0.28f, 0.88f),
         new Vector2(0.40f, 0.62f), new Vector2(0.47f, 0.3f), new Vector2(0.50f, 0.05f)
     };
+    // 19.3б: буксир — широкий корпус, тупой нос (носом упирается в борт судна)
+    private static readonly Vector2[] TugPlan =
+    {
+        new Vector2(-0.50f, 0.88f), new Vector2(-0.44f, 1f), new Vector2(0.18f, 1f), new Vector2(0.32f, 0.93f),
+        new Vector2(0.42f, 0.76f), new Vector2(0.48f, 0.56f), new Vector2(0.50f, 0.40f)
+    };
 
-    /// <summary>Модель судна по профилю и огням (мачты — до высоты огней).</summary>
-    public static Mesh Build(in HullProfile h, List<NavLight> lights)
+    /// <summary>
+    /// Модель судна по профилю и огням (мачты — до высоты огней). tug (19.3б) — буксир по профилю малого судна:
+    /// тупой нос, кранец по носу и бортам, буксирная лебёдка на баке.
+    /// </summary>
+    public static Mesh Build(in HullProfile h, List<NavLight> lights, bool tug = false)
     {
         var b = new Builder();
         float L = (float)h.Length, B = (float)h.Beam, d = (float)h.Draft, fb = (float)h.Freeboard;
-        Vector2[] plan = h.Type == TrafficVesselType.Tanker ? TankerPlan : h.Type == TrafficVesselType.Small ? SmallPlan : CargoPlan;
+        Vector2[] plan = tug ? TugPlan : h.Type == TrafficVesselType.Tanker ? TankerPlan : h.Type == TrafficVesselType.Small ? SmallPlan : CargoPlan;
 
         // ── Корпус: борта (подводная часть и надводный борт), палуба ──
         var outline = new List<Vector2>();   // замкнутый контур палубы (x — к ПБ, y — к носу)
@@ -116,6 +125,15 @@ public static class TrafficMeshes
                 // Малое судно: фальшборт открытой кормовой палубы
                 b.Box(Hull, new Vector3(0.5f * B - 0.15f, fb + 0.5f, -0.25f * L), new Vector3(0.3f, 1.0f, 0.45f * L));
                 b.Box(Hull, new Vector3(-0.5f * B + 0.15f, fb + 0.5f, -0.25f * L), new Vector3(0.3f, 1.0f, 0.45f * L));
+                if (tug)
+                {
+                    // Кранец: толстый брус по носу и привальные брусья по бортам; лебёдка на баке
+                    float zb = 0.5f * L;
+                    b.Box(Dark, new Vector3(0f, 0.5f * fb, zb - 0.1f), new Vector3(0.8f * B, fb + 1.2f, 1.2f));
+                    b.Box(Dark, new Vector3(0.5f * B + 0.1f, fb - 0.3f, -0.05f * L), new Vector3(0.4f, 0.6f, 0.8f * L));
+                    b.Box(Dark, new Vector3(-0.5f * B - 0.1f, fb - 0.3f, -0.05f * L), new Vector3(0.4f, 0.6f, 0.8f * L));
+                    b.Box(Accent, new Vector3(0f, fb + 0.6f, 0.5f * ((float)h.HouseFore + zb)), new Vector3(0.35f * B, 1.2f, 1.6f));
+                }
                 break;
             }
         }
@@ -140,7 +158,7 @@ public static class TrafficMeshes
             }
         }
 
-        return b.ToMesh("TrafficHull_" + h.Type);
+        return b.ToMesh(tug ? "TrafficHull_Tug" : "TrafficHull_" + h.Type);
     }
 
     private static void Funnel(Builder b, in HullProfile h, float roof, float L, float B)

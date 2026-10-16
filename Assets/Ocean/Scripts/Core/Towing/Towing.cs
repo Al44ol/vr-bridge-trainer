@@ -16,7 +16,7 @@
 //     ПД-регулятор положения гака на расстоянии длины троса; трос обтянут — упор назад P·T_гак;
 //   • «толкать» — буксир упирается носом (кранец) в борт судна напротив точки x_т и толкает с упором P·T_гак
 //     в направлении θ (только поперёк: 90 или 270);
-//   • «стоп» — упор 0.
+//   • «стоп» — без силы на судно (19.3б: буксир держит своё место, см. ниже; в 19.3а — упор 0).
 //   Поперечное положение и курс — ПД-регуляторы: Y = m₂₂·(−ω²·e_y − 2ζω·ė_y), N = m₃₃·(−ω_ψ²·e_ψ − 2ζω_ψ·(r_б − r_с)),
 //   ω = 0,3 рад/с, ω_ψ = 0,4 рад/с, ζ = 0,8 (допущения; подобраны на стенде TowingTrials).
 // Трос (TowLine) — упругий синтетический, как швартовный конец (MooringLine.ElasticTension: T = MBL·(ε/0,2)^1,5,
@@ -27,6 +27,14 @@
 // трение вдоль борта μ = 0,6. В касании курс буксира держит только кормовая поперечная сила (поворот вокруг носа).
 // Ветер (WindLoad, Isherwood) действует на судно и на буксир. Все силы — только в модели 3 СС.
 // Порядок вызова — как MooringSystem: Apply(ship, dt, t) до ship.Step(dt); буксир делает свой шаг внутри.
+//
+// 19.3б (сцена): место буксира у судна — TugStation (у кормы / у носа / у миделя: клюз троса и точка
+// толкания, TugOrders.TowPointX / PushPointX); «стоп» — буксир держит своё место (на линии θ в длине троса
+// или в StandoffM от борта) без силы на судно — геометрия последней рабочей команды (Geometry);
+// смена направления тяги — рабочее направление поворачивается к заданному со скоростью SwingRateDegS по дуге вокруг клюза,
+// не через судно (у кормы — не через «вперёд», у носа — не через «назад»), буксир не режет корму;
+// смена борта толкания — обход оконечности судна (сначала вдоль своего борта за оконечность, затем на
+// другой борт, в AroundClearM от корпуса), иначе ПД-регулятор вёл бы буксир сквозь корпус.
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -34,9 +42,17 @@ using System.Collections.Generic;
 /// <summary>Режим работы буксира (команда капитана).</summary>
 public enum TugMode
 {
-    Stop,   // упор 0
+    Stop,   // без силы на судно: держит своё место (19.3б; в 19.3а — упор 0)
     Pull,   // тянуть на тросе
     Push    // толкать носом в борт
+}
+
+/// <summary>Место буксира у судна (19.3б): клюз троса и точка толкания — TugOrders.TowPointX / PushPointX.</summary>
+public enum TugStation
+{
+    Stern,     // у кормы
+    Bow,       // у носа
+    Midship    // у миделя
 }
 
 /// <summary>Команда буксиру: режим, направление силы на судно (° от ДП, по часовой), доля тяги 0…1.</summary>
@@ -254,6 +270,19 @@ public sealed class TowingSystem
 
     /// <summary>Трос считается слабым, если короче длины без натяжения больше чем на …, м (регулятор подтягивает буксир).</summary>
     public const double SlackM = 1.0;
+    /// <summary>19.3б: «стоп» у борта — нос буксира в … м от борта, м.</summary>
+    public const double StandoffM = 2.0;
+    /// <summary>19.3б: обход оконечности при смене борта толкания — в … м от корпуса, м.</summary>
+    public const double AroundClearM = 15.0;
+    /// <summary>19.3б: рабочее направление тяги поворачивается к заданному не быстрее …, °/с (буксир идёт по дуге вокруг клюза).</summary>
+    public const double SwingRateDegS = 3.0;
+
+    /// <summary>19.3б: место буксира у судна (клюз и точка толкания).</summary>
+    public TugStation Station { get; private set; } = TugStation.Stern;
+    /// <summary>19.3б: геометрия работы (Pull — на тросе по линии θ, Push — у борта) — по последней рабочей команде; её держит «стоп».</summary>
+    public TugMode Geometry { get; private set; } = TugMode.Pull;
+    /// <summary>19.3б: буксир обходит оконечность судна (смена борта толкания).</summary>
+    public bool GoingAround { get; private set; }
 
     private double prevPen = double.NaN;
     private bool contactReported;
@@ -283,7 +312,23 @@ public sealed class TowingSystem
     public void Order(TugCommand c, double time)
     {
         Tug.Command = c;
+        if (c.Mode != TugMode.Stop) Geometry = c.Mode;
         Events.Add(new TowEvent { Type = TowEventType.CommandChanged, Time = time, Subject = c.Describe(), Value = c.Power, Value2 = c.DirectionDeg });
+    }
+
+    /// <summary>19.3б: место буксира у судна — клюз троса и точка толкания (TugOrders).</summary>
+    public void SetStation(TugStation s)
+    {
+        Station = s;
+        if (ShipParams == null) return;
+        TowPointX = TugOrders.TowPointX(s, ShipParams.length);
+        PushPointX = TugOrders.PushPointX(s, ShipParams.length);
+    }
+
+    /// <summary>19.3б: геометрия работы без команды (вызов буксира: у кормы и носа — на тросе, у миделя — у борта).</summary>
+    public void SetGeometry(TugMode g)
+    {
+        if (g != TugMode.Stop) Geometry = g;
     }
 
     public void MakeFast(double length, double time)
@@ -307,13 +352,15 @@ public sealed class TowingSystem
     {
         double psiS = ship != null ? ship.Psi : 0.0;
         double theta = psiS + c.DirectionDeg * Math.PI / 180.0;
+        if (c.Mode != TugMode.Stop) Geometry = c.Mode;
+        TugMode geo = c.Mode == TugMode.Stop ? Geometry : c.Mode;   // 19.3б: «стоп» — на месте последней работы
         WorldPosition bow;
         double psiT;
-        if (c.Mode == TugMode.Push && ship != null)
+        if (geo == TugMode.Push && ship != null)
         {
             int side = PushSide(c.DirectionDeg);
             double y = side * MooringHull.HalfBeamAt(PushPointX, ShipParams.length, ShipParams.beam);
-            bow = MooringHull.ToWorld(ship.East, ship.North, ship.Psi, PushPointX, y + side * 0.3);
+            bow = MooringHull.ToWorld(ship.East, ship.North, ship.Psi, PushPointX, y + side * (c.Mode == TugMode.Stop ? StandoffM : 0.3));
             psiT = psiS - side * Math.PI / 2.0;
         }
         else
@@ -329,6 +376,9 @@ public sealed class TowingSystem
         Tug.OrderX = Tug.OrderY = Tug.OrderN = Tug.ThrustX = Tug.ThrustY = Tug.ThrustN = 0.0;
         prevPen = double.NaN;
         contactReported = false;
+        GoingAround = false;
+        swingDeg = c.DirectionDeg;
+        lastGeometry = geo;
     }
 
     // ─────────── Шаг ───────────
@@ -367,7 +417,7 @@ public sealed class TowingSystem
         PushForce = 0.0;
         if (ship != null) Contact(ship, b, dt, time);
 
-        Skipper(ship);
+        Skipper(ship, dt);
         Tug.ApplyThrust(dt);
         tug.Step(dt);
     }
@@ -408,37 +458,80 @@ public sealed class TowingSystem
 
     // ─────────── Автоматика буксира ───────────
 
-    private void Skipper(ShipDynamicsModel ship)
+    // 19.3б: рабочее направление тяги (от ДП, °) — поворачивается к заданному со скоростью SwingRateDegS в сторону,
+    // где дуга вокруг клюза не проходит через судно (у кормы — не через «вперёд», у носа — не через «назад»).
+    // При постоянной команде равно ей (стенд 19.3а не меняется). После работы у борта — с текущего пеленга буксира.
+    private double swingDeg = double.NaN;
+    private TugMode lastGeometry = TugMode.Pull;
+
+    private double SwingDirection(ShipDynamicsModel ship, WorldPosition fairlead, WorldPosition bow, double commandDeg, double dt)
+    {
+        double psiS = ship != null ? ship.Psi : 0.0;
+        if (double.IsNaN(swingDeg) || lastGeometry != TugMode.Pull)
+        {
+            double be = bow.East - fairlead.East, bn = bow.North - fairlead.North;
+            swingDeg = lastGeometry != TugMode.Pull && be * be + bn * bn > 4.0 ? (Math.Atan2(be, bn) - psiS) * 180.0 / Math.PI : commandDeg;
+        }
+        lastGeometry = TugMode.Pull;
+        double d = Math.IEEERemainder(commandDeg - swingDeg, 360.0);
+        if (Math.Abs(d) < 1e-9) return swingDeg = commandDeg;
+        // Запретное направление (дуга через корпус): у кормы — «вперёд» (0°), у носа — «назад» (180°)
+        double forbidden = Station == TugStation.Stern ? 0.0 : Station == TugStation.Bow ? 180.0 : double.NaN;
+        if (!double.IsNaN(forbidden))
+        {
+            double toForbidden = Math.IEEERemainder(forbidden - swingDeg, 360.0);
+            if (Math.Sign(toForbidden) == Math.Sign(d) && Math.Abs(toForbidden) < Math.Abs(d)) d -= Math.Sign(d) * 360.0;
+        }
+        double step = SwingRateDegS * dt;
+        swingDeg = Math.Abs(d) <= step ? commandDeg : swingDeg + Math.Sign(d) * step;
+        return swingDeg;
+    }
+
+    private void Skipper(ShipDynamicsModel ship, double dt)
     {
         TugVessel tv = Tug;
         ShipDynamicsModel t = tv.Model;
         TugCommand cmd = tv.Command;
-        if (cmd.Mode == TugMode.Stop) { tv.OrderX = tv.OrderY = tv.OrderN = 0.0; return; }
+        bool stop = cmd.Mode == TugMode.Stop;
+        TugMode geo = stop ? Geometry : cmd.Mode;   // 19.3б: «стоп» держит место последней работы
         Manoeuvring3DofCoefficients k = t.Coefficients3Dof;
-        double bp = tv.Spec.BollardPull, p = Math.Max(0.0, Math.Min(1.0, cmd.Power));
+        double bp = tv.Spec.BollardPull, p = stop ? 0.0 : Math.Max(0.0, Math.Min(1.0, cmd.Power));
         double psiS = ship != null ? ship.Psi : 0.0, rS = ship != null ? ship.R : 0.0;
+        WorldPosition bow = tv.Bow;
 
         // Цель: точка носа буксира и его курс
         WorldPosition target;
         double psiT;
-        if (cmd.Mode == TugMode.Push && ship != null)
+        GoingAround = false;
+        if (geo == TugMode.Push && ship != null)
         {
+            lastGeometry = TugMode.Push;
             int side = PushSide(cmd.DirectionDeg);
-            double y = side * MooringHull.HalfBeamAt(PushPointX, ShipParams.length, ShipParams.beam);
+            double y = side * (MooringHull.HalfBeamAt(PushPointX, ShipParams.length, ShipParams.beam) + (stop ? StandoffM : 0.0));
             target = MooringHull.ToWorld(ship.East, ship.North, ship.Psi, PushPointX, y);
             psiT = psiS - side * Math.PI / 2.0;
+            // 19.3б: нос буксира у другого борта — обход оконечности (вдоль своего борта за оконечность, затем на нужный борт)
+            ShipAxes(ship, bow, out double xb, out double yb);
+            if (Math.Sign(yb) != side)
+            {
+                double half = 0.5 * ShipParams.length;
+                double xEnd = (xb >= 0.0 ? 1.0 : -1.0) * (half + AroundClearM);
+                double ySide = Math.Abs(xb) < half + 5.0 ? (yb >= 0.0 ? 1.0 : -1.0) : side;
+                target = MooringHull.ToWorld(ship.East, ship.North, ship.Psi, xEnd, ySide * (0.5 * ShipParams.beam + AroundClearM));
+                GoingAround = true;
+            }
         }
         else
         {
-            double theta = psiS + cmd.DirectionDeg * Math.PI / 180.0;
             WorldPosition f = TowPoint(ship);
+            double rel = SwingDirection(ship, f, bow, cmd.DirectionDeg, dt) * Math.PI / 180.0;
+            double theta = psiS + rel;
             double len = Line.Fast ? Line.RestLength : 30.0;
             target = new WorldPosition(f.East + Math.Sin(theta) * len, f.North + Math.Cos(theta) * len);
             psiT = theta + Math.PI;
         }
 
         // Ошибка положения носа и её скорость (относительно точки судна) — в осях буксира
-        WorldPosition bow = tv.Bow;
         WorldPosition vb = MooringHull.PointVelocity(t, bow);
         WorldPosition vt = ship != null ? MooringHull.PointVelocity(ship, target) : new WorldPosition(0, 0);
         double s = Math.Sin(t.Psi), c = Math.Cos(t.Psi);
@@ -452,7 +545,12 @@ public sealed class TowingSystem
         double X;
         double Y = k.M22 * (-w * w * ey - 2.0 * z * w * vy);
         double N = k.M33 * (-wp * wp * ePsi - 2.0 * z * wp * (t.R - rS));
-        if (cmd.Mode == TugMode.Pull)
+        if (stop || GoingAround)
+        {
+            // 19.3б: «стоп» и обход — только положение (на тросе упор назад не даётся, у борта — без упора)
+            X = k.M11 * (-w * w * ex - 2.0 * z * w * vx);
+        }
+        else if (cmd.Mode == TugMode.Pull)
         {
             bool taut = Line.Fast && Line.Length >= Line.RestLength - SlackM;   // слабее чем на 1 м — подтянуться регулятором
             X = taut ? -p * bp : k.M11 * (-w * w * ex - 2.0 * z * w * vx);
@@ -476,4 +574,13 @@ public sealed class TowingSystem
     }
 
     private static double Clamp(double v, double m) => v < -m ? -m : v > m ? m : v;
+
+    /// <summary>Точка в связанных осях судна: x — к носу от миделя, y — к ПБ, м.</summary>
+    public static void ShipAxes(ShipDynamicsModel ship, WorldPosition p, out double x, out double y)
+    {
+        double s = Math.Sin(ship.Psi), c = Math.Cos(ship.Psi);
+        double dE = p.East - ship.East, dN = p.North - ship.North;
+        x = dE * s + dN * c;
+        y = dE * c - dN * s;
+    }
 }

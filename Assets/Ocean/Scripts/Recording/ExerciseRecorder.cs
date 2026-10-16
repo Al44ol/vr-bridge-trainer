@@ -16,7 +16,8 @@
 //     времени упражнения; XTE и участок — ScenarioRunner.Route (RouteTracker);
 //   events.csv — каждое событие шины упражнения в момент доставки.
 //   mooring.csv — 19.2б-3б: состояние у причала в моменты строк track.csv (BuildMooringSample);
-//     в сценарии швартовки — всегда, иначе — с первого момента, когда причал считается.
+//     в сценарии швартовки — всегда, иначе — с первого момента, когда причал считается
+//     (19.3б: или вызван буксир); в конце строки — буксир и ветер (TowingController.Sample).
 //   assessment.csv и блок assessment в session.json — оценка по критериям (C2,
 //     ExerciseAssessmentMonitor) в момент конца упражнения;
 //   report.html — отчёт по упражнению (C3): после закрытия записи в фоновом
@@ -230,7 +231,10 @@ public class ExerciseRecorder : MonoBehaviour
         sample = MooringSampler.Build(t, berth, index, navigation.parameters, m, mc != null ? mc.System : null,
             mc != null ? mc.ThrusterIndex : ThrusterOrders.ZeroIndex, stations != null ? stations.Current : BridgeStation.Helm,
             task ? runner.MooringTask : null);
-        return task || berth != null;
+        // 19.3б: буксир и ветер — столбцы в конце строки; строки пишутся и тогда, когда вызван буксир
+        TowingController tc = TowingController.Instance;
+        if (tc != null) sample.Towing = tc.Sample();
+        return task || berth != null || tc != null && tc.TugPresent;
     }
 
     /// <summary>Срез своего судна в момент t — строка track.csv; тот же срез получает оценка (C2).</summary>

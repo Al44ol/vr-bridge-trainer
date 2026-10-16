@@ -145,6 +145,18 @@ public static class ScenarioText
         return q < 180.0 ? $"{Num(q)}° ПБ" : $"{Num(360.0 - q)}° ЛБ";
     }
 
+    /// <summary>Пеленг / направление «откуда» тремя цифрами: «090°» (19.3б).</summary>
+    public static string Bearing(double deg)
+    {
+        if (double.IsNaN(deg)) return "—";
+        int d = (int)Math.Round(((deg % 360.0) + 360.0) % 360.0) % 360;
+        return $"{d:000}°";
+    }
+
+    /// <summary>Ветер словами: «20 уз, откуда 090°» / «нет» (19.3б).</summary>
+    public static string Wind(double knots, double fromDeg) =>
+        double.IsNaN(knots) || knots < 0.05 ? "нет" : $"{Num(knots)} уз, откуда {Bearing(fromDeg)}";
+
     /// <summary>Время «мм:сс» (или «ч:мм:сс»).</summary>
     public static string Clock(double seconds)
     {

@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="480" viewBox="0 0 680 480" font-family="Times New Roman, serif" font-size="14">
+<rect width="100%" height="100%" fill="white"/>
+<line x1="80" y1="40" x2="80" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="80" y="438" text-anchor="middle">0</text>
+<line x1="144.44" y1="40" x2="144.44" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="144.44" y="438" text-anchor="middle">20</text>
+<line x1="208.89" y1="40" x2="208.89" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="208.89" y="438" text-anchor="middle">40</text>
+<line x1="273.33" y1="40" x2="273.33" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="273.33" y="438" text-anchor="middle">60</text>
+<line x1="337.78" y1="40" x2="337.78" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="337.78" y="438" text-anchor="middle">80</text>
+<line x1="402.22" y1="40" x2="402.22" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="402.22" y="438" text-anchor="middle">100</text>
+<line x1="466.67" y1="40" x2="466.67" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="466.67" y="438" text-anchor="middle">120</text>
+<line x1="531.11" y1="40" x2="531.11" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="531.11" y="438" text-anchor="middle">140</text>
+<line x1="595.56" y1="40" x2="595.56" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="595.56" y="438" text-anchor="middle">160</text>
+<line x1="660" y1="40" x2="660" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="660" y="438" text-anchor="middle">180</text>
+<line x1="80" y1="420" x2="660" y2="420" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="425" text-anchor="end">−0,6</text>
+<line x1="80" y1="372.5" x2="660" y2="372.5" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="377.5" text-anchor="end">−0,4</text>
+<line x1="80" y1="325" x2="660" y2="325" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="330" text-anchor="end">−0,2</text>
+<line x1="80" y1="277.5" x2="660" y2="277.5" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="282.5" text-anchor="end">0,0</text>
+<line x1="80" y1="230" x2="660" y2="230" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="235" text-anchor="end">0,2</text>
+<line x1="80" y1="182.5" x2="660" y2="182.5" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="187.5" text-anchor="end">0,4</text>
+<line x1="80" y1="135" x2="660" y2="135" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="140" text-anchor="end">0,6</text>
+<line x1="80" y1="87.5" x2="660" y2="87.5" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="92.5" text-anchor="end">0,8</text>
+<line x1="80" y1="40" x2="660" y2="40" stroke="#c8c8c8" stroke-width="0.5"/>
+<text x="74" y="45" text-anchor="end">1,0</text>
+<rect x="80" y="40" width="580" height="380" fill="none" stroke="black" stroke-width="1"/>
+<text x="370" y="466" text-anchor="middle">Курсовой угол ветра γ, °</text>
+<text x="18" y="230" text-anchor="middle" transform="rotate(-90 18 230)">Коэффициент</text>
+<text x="370" y="24" text-anchor="middle" font-size="15">Коэффициенты ветровой нагрузки (Isherwood, 1972)</text>
+<clipPath id="plot"><rect x="80" y="40" width="580" height="380"/></clipPath>
+<polyline clip-path="url(#plot)" fill="none" stroke="black" stroke-width="1.6" points="80,383.34 112.22,392.42 144.44,388.02 176.67,372.97 208.89,343.55 241.11,277.5 273.33,245.48 305.56,247.28 337.78,270.42 370,282.66 402.22,289.83 434.44,309.86 466.67,313.96 498.89,285.08 531.11,245.63 563.33,215.14 595.56,173.27 627.78,174.44 660,175.46 "/>
+<polyline clip-path="url(#plot)" fill="none" stroke="black" stroke-width="1.6" stroke-dasharray="8,4" points="80,277.5 112.22,240.77 144.44,190.73 176.67,142.88 208.89,101.4 241.11,59.72 273.33,57.96 305.56,71.59 337.78,68.33 370,80.77 402.22,81.2 434.44,83.53 466.67,85.45 498.89,98.53 531.11,125.32 563.33,143.23 595.56,195.75 627.78,241.21 660,277.5 "/>
+<polyline clip-path="url(#plot)" fill="none" stroke="black" stroke-width="1.6" stroke-dasharray="2,3" points="80,277.5 112.22,268.27 144.44,258.5 176.67,253.48 208.89,248.48 241.11,247.06 273.33,252.11 305.56,259.41 337.78,264.13 370,275.43 402.22,283.73 434.44,289.72 466.67,294.92 498.89,303.99 531.11,303.66 563.33,301.93 595.56,296.51 627.78,286 660,277.5 "/>
+<rect x="404" y="43" width="254" height="20" fill="white" fill-opacity="0.85"/>
+<line x1="410" y1="52" x2="450" y2="52" stroke="black" stroke-width="1.6"/>
+<text x="458" y="56">C_X</text>
+<rect x="404" y="63" width="254" height="20" fill="white" fill-opacity="0.85"/>
+<line x1="410" y1="72" x2="450" y2="72" stroke="black" stroke-width="1.6" stroke-dasharray="8,4"/>
+<text x="458" y="76">C_Y</text>
+<rect x="404" y="83" width="254" height="20" fill="white" fill-opacity="0.85"/>
+<line x1="410" y1="92" x2="450" y2="92" stroke="black" stroke-width="1.6" stroke-dasharray="2,3"/>
+<text x="458" y="96">C_N</text>
+</svg>

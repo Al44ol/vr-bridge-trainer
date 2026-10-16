@@ -228,14 +228,15 @@ public class TrafficController : MonoBehaviour
         var go = new GameObject(objectName);
         go.transform.SetParent(transform, false);
         var view = go.AddComponent<TrafficShipView>();
-        view.Init(v, Materials(v.Type));
+        view.Init(v, MaterialsFor(v.Type));
         return view;
     }
 
     private ShipParameters DefaultParameters(TrafficVesselType t) =>
         t == TrafficVesselType.Tanker ? tankerParameters : t == TrafficVesselType.Small ? smallParameters : cargoParameters;
 
-    private Material[] Materials(TrafficVesselType t)
+    /// <summary>Материалы модели судна по типу (подмеши TrafficMeshes); 19.3б — их берёт и буксир (TugView).</summary>
+    public Material[] MaterialsFor(TrafficVesselType t)
     {
         Material hull = t == TrafficVesselType.Tanker ? tankerHull : t == TrafficVesselType.Small ? smallHull : cargoHull;
         return new[] { hull, bootMaterial, deckMaterial, houseMaterial, darkMaterial, accentMaterial };

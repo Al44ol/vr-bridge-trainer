@@ -216,7 +216,8 @@ public static class SessionReport
     private static void Mooring(StringBuilder h, RecordedSession s, SessionScenario sc)
     {
         MooringTaskDefinition task = sc.mooring != null ? sc.mooring.ToDefinition() : null;
-        if (task == null && s.Mooring.Count == 0) return;
+        // 19.3б: mooring.csv пишется и при буксире в открытой воде — раздел только если судно было у причала
+        if (task == null && !s.Mooring.Exists(m => m.HasBerth)) return;
         h.Append("<h2>Швартовка</h2>\n");
 
         if (task != null)

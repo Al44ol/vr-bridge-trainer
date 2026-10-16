@@ -20,7 +20,8 @@
 //     у путевой точки — признак «участок — узкость» (правило 9 МППСС),
 //     у цели — допустимая дистанция расхождения CPA_доп;
 //   • 19.2б-3: модель движения на время сценария (по умолчанию — как выбрано в тренажёре)
-//     и задание швартовки (MooringTaskDefinition: причал, условия этапов, финиш «ошвартован»).
+//     и задание швартовки (MooringTaskDefinition: причал, условия этапов, финиш «ошвартован»);
+//   • 19.3б: ветер (скорость и «откуда»; только в модели 3 СС) и разрешение вызвать буксир в упражнении.
 // Досрочное завершение инструктором доступно всегда и в условиях не задаётся.
 // ============================================================
 using System;
@@ -168,6 +169,14 @@ public class ScenarioDefinition : ScriptableObject
     [Header("Швартовка (19.2б-3)")]
     public MooringTaskDefinition mooring = new MooringTaskDefinition();
 
+    [Header("Ветер и буксир (19.3б)")]
+    [Tooltip("Ветер, уз; 0 — нет. Действует только в модели 3 СС (Isherwood); волны не меняет")]
+    public float windKnots;
+    [Tooltip("Ветер — откуда, ° (0 = N, по часовой)")]
+    public float windFromDeg;
+    [Tooltip("Буксир можно вызвать из меню B («Буксир») во время упражнения; в свободном плавании — всегда")]
+    public bool tugAvailable;
+
     /// <summary>Сценарий швартовки (задания вместо маршрута).</summary>
     public bool IsMooring => mooring != null && mooring.enabled;
 
@@ -224,6 +233,12 @@ public class ScenarioDefinition : ScriptableObject
         if (detectionRangeNm < 0f) problems.Add("Дистанция обнаружения целей отрицательная.");
         ValidateTraffic(problems);
         ValidateMooring(problems);
+        // 19.3б: ветер и буксир — только в модели 3 СС
+        if (windKnots < 0f) problems.Add("Ветер отрицательный.");
+        if (windKnots > 0f && motionModel != ScenarioMotionModel.Manoeuvring3Dof)
+            problems.Add("Ветер действует только в модели 3 СС — выберите её в «Модель движения» (иначе ветра не будет).");
+        if (tugAvailable && motionModel != ScenarioMotionModel.Manoeuvring3Dof)
+            problems.Add("Буксир работает только в модели 3 СС — выберите её в «Модель движения».");
         return problems;
     }
 

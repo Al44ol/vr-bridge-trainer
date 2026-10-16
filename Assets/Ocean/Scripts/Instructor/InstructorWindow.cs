@@ -262,6 +262,17 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
     private void FillMooringLines()
     {
         mapLive.MooringLines.Clear();
+        // 19.3б: буксирный трос — от клюза к гаку буксира, цвет по натяжению
+        TowingSystem ts = TowingController.Instance != null ? TowingController.Instance.Towing : null;
+        if (ts != null && ts.Line.Fast && navigation.Model != null)
+        {
+            double share = ts.Line.Mbl > 0 ? ts.Line.Tension / ts.Line.Mbl : 0.0;
+            mapLive.MooringLines.Add(new InstructorMapGraphic.Line
+            {
+                From = ts.TowPoint(navigation.Model), To = ts.Tug.Bow,
+                Color = share >= MooringLine.OverloadFraction ? LineOverload : share >= 0.3 ? LineLoaded : LineSlack
+            });
+        }
         MooringController mc = MooringController.Instance;
         BerthArea berth = mc != null ? mc.ActiveBerth : null;
         if (berth == null || navigation.Model == null) return;
@@ -407,6 +418,15 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
             string vis = weather.VisibilityOverrideM > 0 ? $"{ScenarioText.Num(weather.VisibilityOverrideM / 1852.0, 2)} мили (задана)" : $"{ScenarioText.Num(weather.VisibilityM / 1852.0, 1)} мили (по погоде)";
             b.AppendLine($"{ScenarioText.WeatherTitle(weather.CurrentPresetId)}, {ScenarioText.TimeOfDayTitle(weather.CurrentTimeOfDay).ToLowerInvariant()}, видимость {vis}");
         }
+        // 19.3б: ветер (действует только в 3 СС) и буксир
+        TowingController towing = TowingController.Instance;
+        if (towing != null)
+        {
+            Wind w = towing.Wind;
+            if (!w.Calm)
+                b.AppendLine($"Ветер {ScenarioText.Wind(w.SpeedMs / ShipParameters.KnotsToMs, w.FromDeg)}" + (navigation.Uses3Dof ? "" : " <color=#9AA6B2>(не действует: модель Номото)</color>"));
+            if (towing.TugPresent) b.AppendLine(towing.InstructorLine());
+        }
         // 19.2б-3: сценарий швартовки — выполненные задания и строка причала
         MooringTaskTracker mt = runner != null && runner.CurrentPhase != ScenarioRunner.Phase.Idle ? runner.MooringTask : null;
         if (mt != null)
@@ -442,6 +462,13 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         {
             CpaResult c = CpaCalculator.FromCourses(p, navigation.Heading, navigation.SpeedKnots, t.Position, t.HeadingDeg, t.SpeedKnots);
             double q = CpaCalculator.RelativeBearing(c.BearingDeg, navigation.Heading);
+            if (t is TugTarget)
+            {
+                // 19.3б: свой буксир — без CPA (состояние — строкой в «Состоянии судна»)
+                string tc = ColorUtility.ToHtmlStringRGB(DebriefMapGraphic.TargetColor(i++));
+                b.AppendLine($"<color=#{tc}>{t.TargetId}</color><pos=11%>{ScenarioText.Num(c.Range / 1852.0, 2)}<pos=24%>{c.BearingDeg:000}<pos=33%>{ScenarioText.RelativeBearing(q)}<pos=45%>свой буксир");
+                continue;
+            }
             bool closing = c.Tcpa > 0;
             string situation = "—";
             bool danger = false;

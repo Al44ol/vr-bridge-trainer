@@ -295,6 +295,10 @@ public class SessionScenario
     public string motion_model = "";
     /// <summary>19.2б-3: задание швартовки (enabled = false — не швартовка; у записей до 19.2б-3 поля нет).</summary>
     public SessionMooringTask mooring = new SessionMooringTask();
+    /// <summary>19.3б: ветер сценария, уз (0 — нет), и «откуда», °; изменения в упражнении — события WindChanged.</summary>
+    public double wind_kn, wind_from_deg;
+    /// <summary>19.3б: буксир можно вызвать в упражнении (меню B «Буксир»).</summary>
+    public bool tug_available;
 
     public static SessionScenario From(ScenarioDefinition s)
     {
@@ -309,7 +313,8 @@ public class SessionScenario
             safe_speed_kn = SessionMeta.R(s.safeSpeedKnots), hide_targets = s.hideTargetsOnPlotter,
             area = SessionArea.From(s.waterArea),
             motion_model = s.motionModel.ToString(),
-            mooring = SessionMooringTask.From(s)
+            mooring = SessionMooringTask.From(s),
+            wind_kn = SessionMeta.R(s.windKnots), wind_from_deg = SessionMeta.R(s.windFromDeg), tug_available = s.tugAvailable
         };
         if (s.initial != null)
             r.initial = new SessionInitial
@@ -464,11 +469,16 @@ public class SessionRecording
     public List<string> telegraph_positions = new List<string>();
     /// <summary>19.2б-3б: состояния концов по номеру (столбцы *_state в mooring.csv, MooringLineStatus).</summary>
     public List<string> mooring_line_states = new List<string>();
+    /// <summary>19.3б: столбцы буксира в mooring.csv — места (tug_station), режимы (tug_mode), состояния троса (towline_state).</summary>
+    public List<string> tug_stations = new List<string>(), tug_modes = new List<string>(), towline_states = new List<string>();
 
     public SessionRecording()
     {
         foreach (TelegraphOrder o in Enum.GetValues(typeof(TelegraphOrder))) telegraph_positions.Add(ScenarioText.Telegraph(o));
         mooring_line_states = MooringRecording.StatusTitles();
+        tug_stations = TowingSample.StationTitles();
+        tug_modes = TowingSample.ModeTitles();
+        towline_states = TowingSample.LineTitles();
     }
 }
 
