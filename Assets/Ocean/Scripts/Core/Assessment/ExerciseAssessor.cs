@@ -255,7 +255,7 @@ public sealed class ExerciseAssessor
         pendingTargets.Clear();
         if (targetSamples != null)
             foreach (TargetSample t in targetSamples)
-                if (!TugTarget.IsTug(t.Id)) pendingTargets.Add(t);   // 19.3б: свой буксир — не цель расхождения
+                if (!WorkVessels.Is(t.Id)) pendingTargets.Add(t);   // 19.3б: свой буксир, 19.4б-2: судно-клиент — не цели расхождения
         hasPending = true;
     }
 

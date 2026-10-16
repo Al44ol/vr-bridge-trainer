@@ -18,6 +18,7 @@
 //   mooring.csv — 19.2б-3б: состояние у причала в моменты строк track.csv (BuildMooringSample);
 //     в сценарии швартовки — всегда, иначе — с первого момента, когда причал считается
 //     (19.3б: или вызван буксир); в конце строки — буксир и ветер (TowingController.Sample).
+//     19.4б-2: в упражнении на буксире (19-03) — по судну-клиенту + свой буксир (TugWorkController.Sample).
 //   assessment.csv и блок assessment в session.json — оценка по критериям (C2,
 //     ExerciseAssessmentMonitor) в момент конца упражнения;
 //   report.html — отчёт по упражнению (C3): после закрытия записи в фоновом
@@ -215,6 +216,13 @@ public class ExerciseRecorder : MonoBehaviour
         if (m == null) return false;
         MooringController mc = MooringController.Instance;
         ScenarioDefinition sc = runner != null ? runner.Current : null;
+        // 19.4б-2: упражнение на своём буксире — строка по клиенту у причала + столбцы своего буксира (каждую строку track.csv)
+        TugWorkController tw = TugWorkController.Instance;
+        if (sc != null && sc.IsTugWork && tw != null && tw.Work != null && tw.Scenario == sc)
+        {
+            sample = tw.Sample(t, stations != null ? stations.Current : BridgeStation.Helm);
+            return true;
+        }
         bool task = sc != null && sc.IsMooring;
         BerthArea berth;
         int index;

@@ -15,6 +15,8 @@
 //   • для старой сессии — офлайн-оценка SessionAssessment (BuildForFolder).
 // Запрос 17: ряды графиков — DebriefPlots (общие с вкладкой «Графики» в шлеме),
 // добавлена отметка паузы.
+// 19.4б-2: упражнение на своём буксире — раздел «Работа буксира» (команды лоцмана, задания по времени, касания
+// кранцем и корпусом; без оценки — критерии в 19.4в); «Швартовка» в нём — «Судно-клиент у причала».
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -78,6 +80,7 @@ public static class SessionReport
         Violations(h, r);
         Maps(h, map);
         Encounters(h, r);
+        TugWork(h, s, sc);
         Mooring(h, s, sc);
         Towing(h, s, sc);
         Criteria(h, r);
@@ -220,7 +223,8 @@ public static class SessionReport
         MooringTaskDefinition task = sc.mooring != null ? sc.mooring.ToDefinition() : null;
         // 19.3б: mooring.csv пишется и при буксире в открытой воде — раздел только если судно было у причала
         if (task == null && !s.Mooring.Exists(m => m.HasBerth)) return;
-        h.Append("<h2>Швартовка</h2>\n");
+        bool work = sc.tug_work != null && sc.tug_work.enabled;   // 19.4б-2: строки mooring.csv — по клиенту
+        h.Append(work ? "<h2>Судно-клиент у причала</h2>\n" : "<h2>Швартовка</h2>\n");
 
         if (task != null)
         {
@@ -284,11 +288,72 @@ public static class SessionReport
         }
 
         // Место обучающегося
+        if (work) return;
         var moves = s.Events.FindAll(e => e.Type == ExerciseEventType.StationChanged);
         h.Append("<p>Место обучающегося: ");
         if (moves.Count == 0) h.Append("всё упражнение у штурвала");
         else h.Append(string.Join("; ", moves.ConvertAll(e => $"{ScenarioText.Clock(e.Time)} — {H(BridgeStations.Title((BridgeStation)Math.Max(0, e.Index)))}")));
         h.Append(".</p>\n");
+    }
+
+    // 19.4б-2: упражнение на своём буксире — команды лоцмана, задания, касания (без оценки; критерии — 19.4в)
+    private static void TugWork(StringBuilder h, RecordedSession s, SessionScenario sc)
+    {
+        TugWorkDefinition task = sc.tug_work != null ? sc.tug_work.ToDefinition() : null;
+        if (task == null) return;
+        h.Append("<h2>Работа буксира</h2>\n");
+        h.Append($"<p>Судно-клиент: {H(sc.tug_work.client_parameters)} ({ScenarioText.Num(sc.tug_work.client_length_m)} × {ScenarioText.Num(sc.tug_work.client_beam_m)} м), " +
+                 $"лагом в {ScenarioText.Num(task.clientGapM)} м от причала «{H(sc.tug_work.berth_name)}»; буксир на старте — в {ScenarioText.Num(task.tugDistanceM)} м от борта. " +
+                 $"Контрольное время {ScenarioText.Clock(task.targetTimeS)}.</p>\n");
+
+        // Команды лоцмана
+        var orders = s.Events.FindAll(e => e.Type == ExerciseEventType.PilotOrder);
+        h.Append("<table>\n<thead><tr><th>Время</th><th>Команда лоцмана</th></tr></thead><tbody>\n");
+        if (orders.Count == 0) h.Append("<tr><td class=\"num\">—</td><td>команд не было</td></tr>\n");
+        foreach (ExerciseEvent e in orders)
+            h.Append($"<tr><td class=\"num\">{ScenarioText.Clock(e.Time)}</td><td>«{H(e.Subject)}»</td></tr>\n");
+        h.Append("</tbody></table>\n");
+
+        // Задания
+        var doneAt = new Dictionary<int, double>();
+        foreach (ExerciseEvent e in s.Events)
+            if (e.Type == ExerciseEventType.TugWorkStage && !doneAt.ContainsKey(e.Index)) doneAt[e.Index] = e.Time;
+        h.Append("<table>\n<thead><tr><th>Задание</th><th>Условие</th><th>Выполнено</th></tr></thead><tbody>\n");
+        for (int i = 1; i <= TugWorkSystem.StageCount; i++)
+        {
+            var st = (TugWorkStage)i;
+            h.Append($"<tr><td>{i}. {H(TugWorkText.Stage(st))}</td><td>{H(TugWorkText.Condition(task, st))}</td>" +
+                     $"<td class=\"num\">{(doneAt.TryGetValue(i, out double t) ? ScenarioText.Clock(t) : "нет")}</td></tr>\n");
+        }
+        h.Append("</tbody></table>\n");
+
+        // Касания кранцем и корпусом
+        var contacts = s.Events.FindAll(e => e.Type == ExerciseEventType.TugWorkContact || e.Type == ExerciseEventType.TugWorkHullContact);
+        if (contacts.Count == 0) h.Append("<p>Касаний борта судна не было.</p>\n");
+        else
+        {
+            h.Append("<table>\n<thead><tr><th>Время</th><th>Касание</th><th>Скорость, уз</th><th>От перпендикуляра, °</th><th>От миделя, м</th></tr></thead><tbody>\n");
+            foreach (ExerciseEvent e in contacts)
+            {
+                bool fender = e.Type == ExerciseEventType.TugWorkContact;
+                h.Append($"<tr{(fender ? "" : " class=\"fail\"")}><td class=\"num\">{ScenarioText.Clock(e.Time)}</td>" +
+                         $"<td>{(fender ? "кранцем, " + H(e.Subject) : "корпусом")}</td><td class=\"num\">{ScenarioText.Num(e.Value, 2)}</td>" +
+                         $"<td class=\"num\">{(fender ? ScenarioText.Num(e.Value2, 1) : "—")}</td><td class=\"num\">{(fender ? e.Index.ToString(Inv) : "—")}</td></tr>\n");
+            }
+            h.Append("</tbody></table>\n");
+        }
+
+        // Упор в борт (mooring.csv, столбцы своего буксира)
+        double maxPush = 0.0, pushTime = 0.0;
+        for (int k = 0; k < s.Mooring.Count; k++)
+        {
+            MooringSample m = s.Mooring[k];
+            if (!m.Towing.Present || double.IsNaN(m.Towing.PushKn)) continue;
+            if (m.Towing.PushKn > maxPush) maxPush = m.Towing.PushKn;
+            if (m.Towing.PushKn > 0 && k + 1 < s.Mooring.Count) pushTime += s.Mooring[k + 1].Time - m.Time;
+        }
+        h.Append($"<p>Упор кранцем в борт: наибольший {ScenarioText.Num(maxPush)} кН, всего {ScenarioText.Clock(pushTime)} (по mooring.csv, 5 Гц). " +
+                 "Оценка работы буксира — критерии G5–G11 (запрос 19.4в).</p>\n");
     }
 
     // 19.3в: буксир и ветер — только если ветер был или буксир вызывался (прочие отчёты не меняются)
@@ -302,6 +367,7 @@ public static class SessionReport
         h.Append($"<p>Ветер сценария: {H(ScenarioText.Wind(sc.wind_kn, sc.wind_from_deg))}{H(sector)}.");
         if (winds.Count > 0) h.Append(" Изменения: " + string.Join("; ", winds.ConvertAll(e => $"{ScenarioText.Clock(e.Time)} — {H(ScenarioText.Wind(e.Value, e.Value2))}" + (string.IsNullOrEmpty(e.Subject) ? "" : $" ({H(e.Subject)})"))) + ".");
         h.Append(" Ветер действует только в модели 3 СС.</p>\n");
+        if (!tug && sc.tug_work != null && sc.tug_work.enabled) { h.Append("<p>Своё судно — буксир (раздел «Работа буксира»).</p>\n"); return; }
         if (!tug) { h.Append("<p>Буксир не вызывался.</p>\n"); return; }
 
         var rows = s.Events.FindAll(e => e.Type == ExerciseEventType.TugCalled || e.Type == ExerciseEventType.TugDismissed || e.Type == ExerciseEventType.TugOrder ||

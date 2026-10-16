@@ -394,6 +394,8 @@ public class WaterAreaView : MonoBehaviour
         return mat;
     }
 
+    private double[] mergedDefl = new double[0];
+
     private void UpdateBerths()
     {
         if (berthViews.Count == 0) return;
@@ -401,7 +403,11 @@ public class WaterAreaView : MonoBehaviour
         float mean = MeanLevel;
         MooringController mc = MooringController.Instance;
         int active = mc != null ? mc.ActiveBerthIndex : -1;
-        double[] defl = active >= 0 && mc.System != null ? mc.System.FenderDeflection : null;
+        double[] ownDefl = active >= 0 && mc.System != null ? mc.System.FenderDeflection : null;
+        // 19.4б-2: судно-клиент упражнения на буксире — его обжатие (наибольшее из своего судна и клиента)
+        TugWorkController tw = TugWorkController.Instance;
+        int clientBerth = tw != null ? tw.ClientBerthIndex : -1;
+        double[] clientDefl = clientBerth >= 0 ? tw.Work.Client.Mooring.FenderDeflection : null;
         for (int i = 0; i < berthViews.Count; i++)
         {
             BerthView v = berthViews[i];
@@ -412,7 +418,20 @@ public class WaterAreaView : MonoBehaviour
             v.Root.SetPositionAndRotation(p, Quaternion.LookRotation(new Vector3((float)-n.East, 0f, (float)-n.North), Vector3.up));
 
             // Обжатие кранцев: наружная сторона сдвигается к кромке, кранец сплющивается
-            bool any = i == active && defl != null && defl.Length == v.Fenders.Length;
+            double[] own = i == active && ownDefl != null && ownDefl.Length == v.Fenders.Length ? ownDefl : null;
+            double[] cl = i == clientBerth && clientDefl != null && clientDefl.Length == v.Fenders.Length ? clientDefl : null;
+            double[] defl = own;
+            if (cl != null)
+            {
+                if (own == null) defl = cl;
+                else
+                {
+                    if (mergedDefl.Length != cl.Length) mergedDefl = new double[cl.Length];
+                    for (int k = 0; k < cl.Length; k++) mergedDefl[k] = System.Math.Max(own[k], cl[k]);
+                    defl = mergedDefl;
+                }
+            }
+            bool any = defl != null;
             if (!any && !v.Deflected) continue;
             for (int k = 0; k < v.Fenders.Length; k++)
             {

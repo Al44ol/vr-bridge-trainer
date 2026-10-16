@@ -49,6 +49,7 @@ public sealed class LiveMapTracks
             s.SpeedKnots = t.SpeedKnots;
             if (t is TrafficVessel v && v.Model.Parameters != null) { s.LengthM = v.Model.Parameters.length; s.BeamM = v.Model.Parameters.beam; }
             else if (t is TugTarget g) { s.LengthM = g.LengthM; s.BeamM = g.BeamM; }   // 19.3б
+            else if (t is ClientShip c) { s.LengthM = c.LengthM; s.BeamM = c.BeamM; }  // 19.4б-2
             AddTrail(s);
             seen.Add(t.TargetId);
         }

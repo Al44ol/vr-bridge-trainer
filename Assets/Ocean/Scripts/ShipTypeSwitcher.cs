@@ -252,6 +252,13 @@ public class ShipTypeSwitcher : MonoBehaviour
             Debug.LogWarning("[Судно] Тип судна меняется только вне упражнения.");
             return;
         }
+        // 19.4б-2: на брифинге упражнения на буксире (19-03) тип судна не меняется
+        if (t != ShipType.Tug && runner != null && runner.CurrentPhase == ScenarioRunner.Phase.Briefing &&
+            runner.Current != null && ScenarioVariants.SourceOf(runner.Current).RequiresOwnTug)
+        {
+            Debug.LogWarning($"[Судно] «{runner.Current.title}» — только на своём буксире: тип судна не меняется (выберите другой сценарий или свободное плавание).");
+            return;
+        }
         if ((t == ShipType.FastBoat && !BoatReady) || (t == ShipType.Tug && !TugReady))
         {
             Debug.LogWarning("[Судно] Катер не настроен (буксир строится от его стойки) — запустите Tools/VR Bridge/Setup Fast Boat и сохраните сцену.");
@@ -269,9 +276,10 @@ public class ShipTypeSwitcher : MonoBehaviour
         Type = t;
         ApplyView();
 
-        if (t == ShipType.Tug && runner != null && runner.CurrentPhase == ScenarioRunner.Phase.Briefing)
+        if (t == ShipType.Tug && runner != null && runner.CurrentPhase == ScenarioRunner.Phase.Briefing &&
+            !(runner.Current != null && ScenarioVariants.SourceOf(runner.Current).RequiresOwnTug))
         {
-            runner.FreeSail();   // 19.4а: сценариев на своём буксире пока нет — брифинг закрывается, свободное плавание
+            runner.FreeSail();   // 19.4а: сценарий не для буксира — брифинг закрывается, свободное плавание (19.4б-2: кроме 19-03)
             if (navigation != null) navigation.parameters = ActiveParameters;
         }
         else if (runner != null && runner.CurrentPhase == ScenarioRunner.Phase.Briefing && runner.Current != null)

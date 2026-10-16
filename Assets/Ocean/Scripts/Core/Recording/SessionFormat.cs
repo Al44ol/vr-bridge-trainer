@@ -301,6 +301,10 @@ public class SessionScenario
     public double wind_random_sector_deg;
     /// <summary>19.3б: буксир можно вызвать в упражнении (меню B «Буксир»).</summary>
     public bool tug_available;
+    /// <summary>19.4б-2: тип своего судна сценария (ScenarioShipType: Default, Tug).</summary>
+    public string own_ship_type = "";
+    /// <summary>19.4б-2: упражнение на своём буксире (enabled = false — нет; у записей до 19.4б-2 поля нет).</summary>
+    public SessionTugWork tug_work = new SessionTugWork();
 
     public static SessionScenario From(ScenarioDefinition s)
     {
@@ -317,7 +321,9 @@ public class SessionScenario
             motion_model = s.motionModel.ToString(),
             mooring = SessionMooringTask.From(s),
             wind_kn = SessionMeta.R(s.windKnots), wind_from_deg = SessionMeta.R(s.windFromDeg), wind_random_sector_deg = SessionMeta.R(s.windRandomSectorDeg),
-            tug_available = s.tugAvailable
+            tug_available = s.tugAvailable,
+            own_ship_type = s.ownShipType.ToString(),
+            tug_work = SessionTugWork.From(s)
         };
         if (s.initial != null)
             r.initial = new SessionInitial
@@ -378,6 +384,53 @@ public class SessionMooringTask
         alongsideGapM = (float)alongside_gap_m, alongsideAngleDeg = (float)alongside_angle_deg,
         stopGapM = (float)stop_gap_m, stopSpeedKnots = (float)stop_speed_kn,
         mooredSpeedKnots = (float)moored_speed_kn, mooredHoldS = (float)moored_hold_s, targetTimeS = (float)target_time_s
+    };
+}
+
+/// <summary>19.4б-2: упражнение на своём буксире в session.json (scenario.tug_work): причал, места на старте, пороги, клиент.</summary>
+[Serializable]
+public class SessionTugWork
+{
+    public bool enabled;
+    public int berth_index;
+    public string berth_name = "";
+    public double client_gap_m, client_along_m, tug_distance_m, contact_zone_m, at_fenders_gap_m, lines_gap_m,
+                  secured_speed_kn, secured_hold_s, clear_distance_m, target_time_s;
+    /// <summary>Судно-клиент (цель «CLIENT» в targets.csv): параметры, длина, ширина, м.</summary>
+    public string client_id = ClientShip.Id, client_parameters = "";
+    public double client_length_m, client_beam_m;
+
+    public static SessionTugWork From(ScenarioDefinition s)
+    {
+        var r = new SessionTugWork();
+        if (s == null || !s.IsTugWork) return r;
+        TugWorkDefinition t = s.tugWork;
+        BerthArea b = t.BerthIn(s.waterArea);
+        r.enabled = true;
+        r.berth_index = t.berthIndex;
+        r.berth_name = b != null ? b.name ?? "" : "";
+        r.client_gap_m = SessionMeta.R(t.clientGapM); r.client_along_m = SessionMeta.R(t.clientAlongM);
+        r.tug_distance_m = SessionMeta.R(t.tugDistanceM); r.contact_zone_m = SessionMeta.R(t.contactZoneM);
+        r.at_fenders_gap_m = SessionMeta.R(t.atFendersGapM); r.lines_gap_m = SessionMeta.R(t.linesGapM);
+        r.secured_speed_kn = SessionMeta.R(t.securedSpeedKnots); r.secured_hold_s = SessionMeta.R(t.securedHoldS);
+        r.clear_distance_m = SessionMeta.R(t.clearDistanceM); r.target_time_s = SessionMeta.R(t.targetTimeS);
+        if (s.tugWorkClient != null)
+        {
+            r.client_parameters = s.tugWorkClient.name;
+            r.client_length_m = SessionMeta.R(s.tugWorkClient.length);
+            r.client_beam_m = SessionMeta.R(s.tugWorkClient.beam);
+        }
+        return r;
+    }
+
+    /// <summary>Задание для оценки и прогонов (null — не упражнение на буксире).</summary>
+    public TugWorkDefinition ToDefinition() => !enabled ? null : new TugWorkDefinition
+    {
+        enabled = true, berthIndex = berth_index,
+        clientGapM = (float)client_gap_m, clientAlongM = (float)client_along_m, tugDistanceM = (float)tug_distance_m,
+        contactZoneM = (float)contact_zone_m, atFendersGapM = (float)at_fenders_gap_m, linesGapM = (float)lines_gap_m,
+        securedSpeedKnots = (float)secured_speed_kn, securedHoldS = (float)secured_hold_s,
+        clearDistanceM = (float)clear_distance_m, targetTimeS = (float)target_time_s
     };
 }
 
@@ -513,6 +566,9 @@ public class SessionSummary
     /// <summary>19.2б-3: сценарий швартовки — выполнено заданий (из 4), время «ошвартован», с (−1 — нет).</summary>
     public int mooring_stages_done;
     public double moored_s = -1;
+    /// <summary>19.4б-2: упражнение на буксире — выполнено заданий (из 4), время «отошёл» (финиш), с (−1 — нет).</summary>
+    public int tug_work_stages_done;
+    public double tug_work_done_s = -1;
 
     public static SessionSummary From(ExerciseSummary s) => new SessionSummary
     {
@@ -526,6 +582,7 @@ public class SessionSummary
         corridor_exits = s.CorridorExits, shoal_warnings = s.ShoalWarnings, groundings = s.Groundings,
         collisions = s.Collisions,
         helm_actions = s.HelmActions, telegraph_orders = s.TelegraphOrders, horn_signals = s.HornSignals, weather_changes = s.WeatherChanges,
-        mooring_stages_done = s.MooringStagesDone, moored_s = double.IsNaN(s.MooredAt) ? -1 : Math.Round(s.MooredAt, 2)
+        mooring_stages_done = s.MooringStagesDone, moored_s = double.IsNaN(s.MooredAt) ? -1 : Math.Round(s.MooredAt, 2),
+        tug_work_stages_done = s.TugWorkStagesDone, tug_work_done_s = double.IsNaN(s.TugWorkDoneAt) ? -1 : Math.Round(s.TugWorkDoneAt, 2)
     };
 }

@@ -427,6 +427,9 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
                 b.AppendLine($"Ветер {ScenarioText.Wind(w.SpeedMs / ShipParameters.KnotsToMs, w.FromDeg)}" + (navigation.Uses3Dof ? "" : " <color=#9AA6B2>(не действует: модель Номото)</color>"));
             if (towing.TugPresent) b.AppendLine(towing.InstructorLine());
         }
+        // 19.4б-2: упражнение на своём буксире — команда лоцмана, задания, зазор клиента, упор, касания
+        TugWorkController work = TugWorkController.Instance;
+        if (work != null && work.Work != null) b.AppendLine(work.InstructorLine());
         // 19.2б-3: сценарий швартовки — выполненные задания и строка причала
         MooringTaskTracker mt = runner != null && runner.CurrentPhase != ScenarioRunner.Phase.Idle ? runner.MooringTask : null;
         if (mt != null)
@@ -462,11 +465,11 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         {
             CpaResult c = CpaCalculator.FromCourses(p, navigation.Heading, navigation.SpeedKnots, t.Position, t.HeadingDeg, t.SpeedKnots);
             double q = CpaCalculator.RelativeBearing(c.BearingDeg, navigation.Heading);
-            if (t is TugTarget)
+            if (WorkVessels.Is(t.TargetId))
             {
-                // 19.3б: свой буксир — без CPA (состояние — строкой в «Состоянии судна»)
+                // 19.3б: свой буксир, 19.4б-2: судно-клиент — без CPA (состояние — строкой в «Состоянии судна»)
                 string tc = ColorUtility.ToHtmlStringRGB(DebriefMapGraphic.TargetColor(i++));
-                b.AppendLine($"<color=#{tc}>{t.TargetId}</color><pos=11%>{ScenarioText.Num(c.Range / 1852.0, 2)}<pos=24%>{c.BearingDeg:000}<pos=33%>{ScenarioText.RelativeBearing(q)}<pos=45%>свой буксир");
+                b.AppendLine($"<color=#{tc}>{t.TargetId}</color><pos=11%>{ScenarioText.Num(c.Range / 1852.0, 2)}<pos=24%>{c.BearingDeg:000}<pos=33%>{ScenarioText.RelativeBearing(q)}<pos=45%>{(t is TugTarget ? "свой буксир" : "судно-клиент")}");
                 continue;
             }
             bool closing = c.Tcpa > 0;

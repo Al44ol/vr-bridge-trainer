@@ -38,6 +38,11 @@ public sealed class ExerciseSummary
     public int MooringStagesDone;
     public double MooredAt = double.NaN;
 
+    /// <summary>19.4б-2: упражнение на буксире — выполнено заданий (из 4) и время «отошёл» (финиш), с (NaN — нет).</summary>
+    public bool TugWork;
+    public int TugWorkStagesDone;
+    public double TugWorkDoneAt = double.NaN;
+
     public static ExerciseSummary From(ScenarioDefinition scenario, IReadOnlyList<ExerciseEvent> log, RouteTracker route)
     {
         var s = new ExerciseSummary
@@ -45,7 +50,8 @@ public sealed class ExerciseSummary
             ScenarioId = scenario != null ? scenario.id : "",
             Title = scenario != null ? scenario.title : "",
             WaypointsTotal = route != null && route.Valid ? route.WaypointCount - 1 : 0,
-            MooringTask = scenario != null && scenario.IsMooring
+            MooringTask = scenario != null && scenario.IsMooring,
+            TugWork = scenario != null && scenario.IsTugWork
         };
         if (route != null)
         {
@@ -74,6 +80,10 @@ public sealed class ExerciseSummary
                         s.MooringStagesDone++;
                         if (e.Index == (int)MooringStage.Moored) s.MooredAt = e.Time;
                         break;
+                    case ExerciseEventType.TugWorkStage:
+                        s.TugWorkStagesDone++;
+                        if (e.Index == (int)TugWorkStage.Clear) s.TugWorkDoneAt = e.Time;
+                        break;
                     case ExerciseEventType.ExerciseEnded:
                         s.Reason = e.EndReason; s.ByInstructor = e.ByInstructor; s.Duration = e.Time; break;
                 }
@@ -83,7 +93,8 @@ public sealed class ExerciseSummary
     }
 
     /// <summary>Ход выполнения: путевые точки или (сценарий швартовки) задания.</summary>
-    public string Progress => MooringTask ? $"заданий {MooringStagesDone} из {MooringTaskTracker.StageCount}" : $"точек {WaypointsPassed} из {WaypointsTotal}";
+    public string Progress => MooringTask ? $"заданий {MooringStagesDone} из {MooringTaskTracker.StageCount}"
+        : TugWork ? $"заданий {TugWorkStagesDone} из {TugWorkSystem.StageCount}" : $"точек {WaypointsPassed} из {WaypointsTotal}";
 
     /// <summary>Причина провала словами (пусто — не провал).</summary>
     public string FailureText()
@@ -100,7 +111,7 @@ public sealed class ExerciseSummary
         if (markFailure && Failed)
             b.AppendLine($"<color=#FF5A4A><b>УПРАЖНЕНИЕ ПРОВАЛЕНО:</b> {FailureText()}</color>");
         b.AppendLine($"<b>{ScenarioText.EndReason(Reason)}</b>{(ByInstructor ? " (инструктор)" : "")} · {ScenarioText.Clock(Duration)} · {Progress}");
-        string route = MooringTask ? "" : $"max XTE {ScenarioText.Num(MaxAbsXte)} м, вне коридора {ScenarioText.Num(TimeOutsideCorridor)} с · ";
+        string route = MooringTask || TugWork ? "" : $"max XTE {ScenarioText.Num(MaxAbsXte)} м, вне коридора {ScenarioText.Num(TimeOutsideCorridor)} с · ";
         b.Append($"<size=85%><color=#9AA6B2>{route}посадок {Groundings}, столкновений {Collisions} · перекладок {HelmActions}, команд телеграфу {TelegraphOrders}, гудков {HornSignals}</color></size>");
         return b.ToString();
     }
@@ -115,6 +126,7 @@ public sealed class ExerciseSummary
         b.AppendLine();
         b.AppendLine($"Время упражнения: {ScenarioText.Clock(Duration)}");
         if (MooringTask) b.AppendLine($"Выполнено заданий швартовки: {MooringStagesDone} из {MooringTaskTracker.StageCount}");
+        else if (TugWork) b.AppendLine($"Выполнено заданий буксира: {TugWorkStagesDone} из {TugWorkSystem.StageCount}");
         else b.AppendLine($"Пройдено путевых точек: {WaypointsPassed} из {WaypointsTotal}");
         b.AppendLine($"Наибольшее боковое отклонение: {ScenarioText.Num(MaxAbsXte)} м");
         b.AppendLine($"Выходов из коридора: {CorridorExits}, вне коридора {ScenarioText.Num(TimeOutsideCorridor)} с");

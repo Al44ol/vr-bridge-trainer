@@ -8,7 +8,8 @@
 // T < 0,3·MBL — зелёный, < 0,5 — жёлтый, ≥ 0,5 (перегрузка) — красный; в «экзамене» — цвет троса.
 // Клюз — по положению модели (MooringSystem.Fairlead) на высоте FairleadHeightM над средним уровнем,
 // кнехт — по причалу; качку судна линии не повторяют (швартовка — в штиль, ThesisNotes 19.19).
-// Добавляется сам на объект MooringController (Setup не нужен).
+// Добавляется сам на объект MooringController (Setup не нужен). 19.4б-2: второй экземпляр — концы судна-клиента
+// (ClientShipView задаёт sourceSystem / sourceModel).
 // ============================================================
 using UnityEngine;
 
@@ -67,12 +68,21 @@ public class MooringLinesView : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 19.4б-2: другой источник концов — швартовка судна-клиента (ClientShipView): система и модель клиента.
+    /// Пусто — концы своего судна (MooringController на этом объекте).
+    /// </summary>
+    public MooringSystem sourceSystem;
+    public ShipDynamicsModel sourceModel;
+
     void LateUpdate()
     {
-        MooringSystem sys = mc != null ? mc.System : null;
-        BerthArea berth = mc != null ? mc.ActiveBerth : null;
+        bool other = sourceSystem != null;
+        MooringSystem sys = other ? sourceSystem : mc != null ? mc.System : null;
+        BerthArea berth = other ? sourceSystem.Berth : mc != null ? mc.ActiveBerth : null;
+        ShipDynamicsModel m = other ? sourceModel : mc != null && mc.navigation != null ? mc.navigation.Model : null;
         WorldOrigin origin = WorldOrigin.Instance;
-        if (sys == null || berth == null || origin == null || mc.navigation == null || mc.navigation.Model == null)
+        if (sys == null || berth == null || origin == null || m == null)
         {
             foreach (LineRenderer l in lines) if (l != null) l.enabled = false;
             return;
@@ -80,7 +90,6 @@ public class MooringLinesView : MonoBehaviour
         Ensure(sys.Lines.Count);
         float mean = OceanWaves.Instance != null ? OceanWaves.Instance.MeanLevel : 0f;
         bool hints = TrainerModes.HintsAllowedNow;
-        ShipDynamicsModel m = mc.navigation.Model;
 
         for (int i = 0; i < lines.Length; i++)
         {

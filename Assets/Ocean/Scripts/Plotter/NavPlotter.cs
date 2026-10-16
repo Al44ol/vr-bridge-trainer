@@ -284,7 +284,7 @@ public class NavPlotter : MonoBehaviour
     private bool HideTargets => ScenarioActive && runner.Current.hideTargetsOnPlotter;
 
     // 19.3б: свой буксир виден всегда (рядом с судном, его видно глазами); CPA до него не считается
-    private bool ShowTargetNow(ITrackedTarget t) => t is TugTarget || PlotterMath.ShowTarget(ScenarioActive, HideTargets, revealAll, detected.Contains(t.TargetId));
+    private bool ShowTargetNow(ITrackedTarget t) => WorkVessels.Is(t.TargetId) || PlotterMath.ShowTarget(ScenarioActive, HideTargets, revealAll, detected.Contains(t.TargetId));
 
     private void Refresh()
     {
@@ -391,7 +391,8 @@ public class NavPlotter : MonoBehaviour
                         : runner.CurrentPhase == ScenarioRunner.Phase.Finished ? TaskPhase.Finished : TaskPhase.Free;
         string text = ExerciseTasks.Page(sc, phase, runner != null ? runner.ExerciseTime : 0.0,
                                          phase == TaskPhase.Running && runner != null ? runner.Route : null,
-                                         runner != null ? runner.MooringTask : null);   // 19.2б-3: задания швартовки с отметками
+                                         runner != null ? runner.MooringTask : null,    // 19.2б-3: задания швартовки с отметками
+                                         TugWorkController.Instance != null ? TugWorkController.Instance.Work : null);   // 19.4б-2: задания буксира, команда лоцмана
         if (taskText.text != text)
         {
             taskText.text = text;
@@ -518,7 +519,7 @@ public class NavPlotter : MonoBehaviour
         int others = 0;
         foreach (ITrackedTarget t in ExerciseTargets.All)
         {
-            if (t is TugTarget) continue;
+            if (WorkVessels.Is(t.TargetId)) continue;   // 19.4б-2: и судно-клиент
             others++;
             if (!ShowTargetNow(t)) continue;
             cpas.Add(CpaCalculator.FromCourses(own, navigation.Heading, navigation.SpeedKnots, t.Position, t.HeadingDeg, t.SpeedKnots));

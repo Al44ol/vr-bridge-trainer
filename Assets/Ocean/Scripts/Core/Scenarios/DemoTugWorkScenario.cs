@@ -76,6 +76,7 @@ public static class DemoTugWorkScenario
         s.mooring = new MooringTaskDefinition { enabled = false, berthIndex = berthIndex };
         s.tugWork = task;
         s.tugWorkClient = client;
+        s.ownShipType = ScenarioShipType.Tug;   // 19.4б-2: тип судна «буксир» ставится при загрузке
         s.windKnots = DemoTugBerthScenario.WindKnots;
         s.windFromDeg = (float)DemoTugBerthScenario.OffBerthWindFromDeg(b);
         s.windRandomSectorDeg = DemoTugBerthScenario.WindSectorDeg;

@@ -81,6 +81,13 @@ public enum ScenarioMotionModel
     [InspectorName("3 СС (малые скорости, швартовка)")] Manoeuvring3Dof
 }
 
+/// <summary>19.4б-2: тип своего судна, нужный сценарию (ShipType — в коде сцены, Core на него не ссылается).</summary>
+public enum ScenarioShipType
+{
+    [InspectorName("Как обычно (модель 45 м; на катере — вариант)")] Default,
+    [InspectorName("Свой буксир")] Tug
+}
+
 /// <summary>Начальные условия своего судна.</summary>
 [Serializable]
 public class OwnShipInitialState
@@ -185,6 +192,8 @@ public class ScenarioDefinition : ScriptableObject
     public TugWorkDefinition tugWork = new TugWorkDefinition();
     [Tooltip("Параметры судна-клиента; пусто — ShipParameters_Model45m")]
     public ShipParameters tugWorkClient;
+    [Tooltip("19.4б-2: тип своего судна — при загрузке переключается сам (буксир — упражнение на буксире)")]
+    public ScenarioShipType ownShipType = ScenarioShipType.Default;
 
     /// <summary>19.3б-2: направление ветра при загрузке: заданное или случайное в секторе (random — источник случайных чисел).</summary>
     public double DrawWindFromDeg(System.Random random)
@@ -200,6 +209,9 @@ public class ScenarioDefinition : ScriptableObject
 
     /// <summary>19.4б: упражнение на своём буксире (судно-клиент, команды лоцмана, задания).</summary>
     public bool IsTugWork => tugWork != null && tugWork.enabled;
+
+    /// <summary>19.4б-2: сценарий выполняется на своём буксире (тип судна переключается при загрузке).</summary>
+    public bool RequiresOwnTug => ownShipType == ScenarioShipType.Tug;
 
     public bool Ends(ScenarioEndConditions c) => (endConditions & c) != 0;
 
@@ -288,6 +300,7 @@ public class ScenarioDefinition : ScriptableObject
         if (!IsTugWork)
         {
             if (Ends(ScenarioEndConditions.TugWorkDone)) problems.Add("Условие «задание буксира выполнено» включено, но упражнение на буксире выключено.");
+            if (RequiresOwnTug && IsMooring) problems.Add("Свой буксир: задание швартовки — для модели 45 м.");
             return;
         }
         if (waterArea != null && tugWork.BerthIn(waterArea) == null)
@@ -295,6 +308,7 @@ public class ScenarioDefinition : ScriptableObject
         if (motionModel != ScenarioMotionModel.Manoeuvring3Dof)
             problems.Add("Буксир: колонки, причал и контакт с судном действуют только в модели 3 СС — выберите её в «Модель движения».");
         if (IsMooring) problems.Add("Буксир: задание швартовки своего судна и упражнение на буксире вместе не используются.");
+        if (!RequiresOwnTug) problems.Add("Буксир: упражнение на буксире — выберите «Тип своего судна: свой буксир» (19.4б-2).");
         if (!Ends(ScenarioEndConditions.TugWorkDone)) problems.Add("Буксир: не включено условие завершения «задание буксира выполнено».");
         if (Ends(ScenarioEndConditions.Arrival)) problems.Add("Буксир: условие «прибытие в последнюю точку» завершит упражнение раньше задания.");
         if (tugWork.clientGapM <= 0f || tugWork.tugDistanceM <= 0f || tugWork.contactZoneM <= 0f || tugWork.atFendersGapM <= 0f ||

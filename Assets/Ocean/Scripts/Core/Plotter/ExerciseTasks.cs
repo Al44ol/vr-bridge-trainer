@@ -13,6 +13,8 @@
 // 19.2б-3: в сценарии швартовки вместо маршрута — причал, борт и четыре задания с условиями
 // (MooringTasks); во время упражнения — отметка «выполнено (мм:сс)» у каждого задания
 // (условия заданий — часть задания, а не подсказка; отметки показываются во всех режимах).
+// 19.4б-2: упражнение на своём буксире — клиент, причал, четыре задания буксира с условиями и отметками,
+// последняя команда лоцмана (TugWorkSystem).
 // ============================================================
 using System;
 using System.Text;
@@ -31,6 +33,7 @@ public static class ExerciseTasks
         if (i != null)
             b.AppendLine($"Начало: курс {i.headingDeg:000}°, {ScenarioText.Num(i.speedKnots, 1)} уз, телеграф «{ScenarioText.Telegraph(i.telegraph)}», руль {ScenarioText.Num(i.rudderDeg)}°");
         if (s.IsMooring) MooringFacts(s, b);
+        else if (s.IsTugWork) TugWorkFacts(s, b);
         else b.AppendLine($"Путевых точек: {Math.Max(0, s.route.Count - 1)}, маршрут {ScenarioText.Num(s.RouteLength / 1852.0, 1)} мили");
         if (s.traffic != null && s.traffic.Count > 0) b.AppendLine($"Другие суда в районе: {s.traffic.Count}");
         if (s.windKnots > 0f)   // 19.3б; 19.3б-2 — случайное направление: в брифинге без числа (его видно в обстановке)
@@ -46,7 +49,8 @@ public static class ExerciseTasks
     /// Ход упражнения: фаза, время, маршрут (route — RouteTracker упражнения, может быть null);
     /// в сценарии швартовки — задания с отметками (mooring — этапы упражнения, может быть null).
     /// </summary>
-    public static string Status(ScenarioDefinition s, TaskPhase phase, double exerciseTimeS, RouteTracker route, MooringTaskTracker mooring = null)
+    public static string Status(ScenarioDefinition s, TaskPhase phase, double exerciseTimeS, RouteTracker route, MooringTaskTracker mooring = null,
+                                TugWorkSystem work = null)
     {
         var b = new StringBuilder();
         switch (phase)
@@ -57,12 +61,14 @@ public static class ExerciseTasks
             case TaskPhase.Finished:
                 b.Append($"Упражнение завершено, {ScenarioText.Clock(exerciseTimeS)}");
                 MooringProgress(mooring, b);
+                if (s.IsTugWork) TugWorkProgress(work, b);
                 break;
             case TaskPhase.Running:
                 b.Append($"Время {ScenarioText.Clock(exerciseTimeS)}");
                 if (s.timeLimitSeconds > 0)
                     b.Append($" из {ScenarioText.Clock(s.timeLimitSeconds)}, осталось {ScenarioText.Clock(Math.Max(0.0, s.timeLimitSeconds - exerciseTimeS))}");
                 if (s.IsMooring) MooringProgress(mooring, b);
+                else if (s.IsTugWork) TugWorkProgress(work, b);
                 else if (route != null && route.Valid)
                 {
                     int total = route.WaypointCount - 1;
@@ -83,12 +89,13 @@ public static class ExerciseTasks
     }
 
     /// <summary>Страница «Задание»: заголовок, ход, условия, брифинг (TextMeshPro, разметка <b>, <size>).</summary>
-    public static string Page(ScenarioDefinition s, TaskPhase phase, double exerciseTimeS, RouteTracker route, MooringTaskTracker mooring = null)
+    public static string Page(ScenarioDefinition s, TaskPhase phase, double exerciseTimeS, RouteTracker route, MooringTaskTracker mooring = null,
+                              TugWorkSystem work = null)
     {
         if (s == null) return "<b>Задание</b>\n" + Status(null, TaskPhase.Free, 0, null);
         var b = new StringBuilder();
         b.AppendLine($"<b>{s.id} «{s.title}»</b>");
-        b.AppendLine(Status(s, phase, exerciseTimeS, route, mooring));
+        b.AppendLine(Status(s, phase, exerciseTimeS, route, mooring, work));
         b.AppendLine();
         b.AppendLine(BriefingFacts(s));
         if (!string.IsNullOrWhiteSpace(s.briefing))
@@ -114,6 +121,37 @@ public static class ExerciseTasks
         b.AppendLine("<b>Задания</b>");
         for (int i = 1; i <= MooringTaskTracker.StageCount; i++)
             b.AppendLine($"{i}. {MooringTasks.Title((MooringStage)i)}: <size=90%>{MooringTasks.Condition(t, (MooringStage)i)}</size>");
+    }
+
+    // ─────────── Упражнение на своём буксире (19.4б-2) ───────────
+
+    /// <summary>Судно-клиент, причал и задания с условиями (брифинг и «Задание»).</summary>
+    private static void TugWorkFacts(ScenarioDefinition s, StringBuilder b)
+    {
+        TugWorkDefinition t = s.tugWork;
+        BerthArea berth = t.BerthIn(s.waterArea);
+        string client = s.tugWorkClient != null ? $"судно {ScenarioText.Num(s.tugWorkClient.length)} м" : "судно";
+        b.AppendLine(berth != null
+            ? $"Своё судно — буксир; {client} лагом в {ScenarioText.Num(t.clientGapM)} м от причала «{berth.name}», буксир — в {ScenarioText.Num(t.tugDistanceM)} м от его борта"
+            : $"Причал № {t.berthIndex + 1} — нет в акватории");
+        b.AppendLine("<b>Задания (по командам лоцмана)</b>");
+        for (int i = 1; i <= TugWorkSystem.StageCount; i++)
+            b.AppendLine($"{i}. {TugWorkText.Stage((TugWorkStage)i)}: <size=90%>{TugWorkText.Condition(t, (TugWorkStage)i)}</size>");
+    }
+
+    /// <summary>Последняя команда лоцмана и отметки заданий буксира.</summary>
+    private static void TugWorkProgress(TugWorkSystem w, StringBuilder b)
+    {
+        if (w == null) return;
+        if (w.Order != PilotOrderKind.None)
+            b.Append($"\nЛоцман: «{TugWorkText.Order(w.Order, w.WorkSide)}» ({ScenarioText.Clock(w.OrderTime)})");
+        b.Append($"\nЗаданий выполнено: {w.DoneCount} из {TugWorkSystem.StageCount}");
+        for (int i = 1; i <= TugWorkSystem.StageCount; i++)
+        {
+            var st = (TugWorkStage)i;
+            b.Append($"\n  {i}. {TugWorkText.Stage(st)} — ");
+            b.Append(w.Done(st) ? $"<color=#6FD08C>выполнено {ScenarioText.Clock(w.DoneAt(st))}</color>" : "нет");
+        }
     }
 
     /// <summary>Отметки заданий: «1. Подойти лагом — выполнено 03:12».</summary>

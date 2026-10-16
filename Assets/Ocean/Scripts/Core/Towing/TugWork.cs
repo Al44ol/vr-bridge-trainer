@@ -101,7 +101,7 @@ public static class TugWorkText
         {
             case TugWorkStage.Approach: return $"касание кранцем в ± {ScenarioText.Num(d.contactZoneM)} м от миделя, медленно и носом поперёк борта";
             case TugWorkStage.Push: return $"судно у кранцев: зазор ≤ {ScenarioText.Num(d.atFendersGapM)} м";
-            case TugWorkStage.Hold: return $"упор не снимать до команды «отходите» (ход судна ≤ {ScenarioText.Num(d.securedSpeedKnots)} уз {ScenarioText.Num(d.securedHoldS)} с)";
+            case TugWorkStage.Hold: return $"упор не снимать до команды «отходите» (ход судна ≤ {ScenarioText.Num(d.securedSpeedKnots, 1)} уз {ScenarioText.Num(d.securedHoldS)} с)";
             case TugWorkStage.Clear: return $"нос буксира в {ScenarioText.Num(d.clearDistanceM)} м от борта, без касания корпусом";
             default: return "";
         }
@@ -236,6 +236,23 @@ public sealed class ClientShip : ITrackedTarget
     public WorldPosition Position => new WorldPosition(Model.East, Model.North);
     public double HeadingDeg { get { double h = Model.Psi * 180.0 / Math.PI % 360.0; return h < 0 ? h + 360.0 : h; } }
     public double SpeedKnots => SpeedOverGroundKn;
+    public double LengthM => Parameters.length;
+    public double BeamM => Parameters.beam;
+
+    public static bool IsClient(string id) => id == Id;
+
+    /// <summary>Срез цели «CLIENT» для targets.csv и оценки (оценка её отбрасывает — WorkVessels).</summary>
+    public TargetSample Sample(double t) =>
+        new TargetSample { Time = t, Id = Id, East = Model.East, North = Model.North, HeadingDeg = HeadingDeg, SpeedKnots = SpeedKnots };
+}
+
+/// <summary>
+/// 19.4б-2: суда «своей работы» — вызванный буксир «TUG» (19.3б) и судно-клиент «CLIENT» (19.4б): не цели расхождения
+/// (оценка C2, «Текущий балл», CPA в окне инструктора), на планшете видны всегда.
+/// </summary>
+public static class WorkVessels
+{
+    public static bool Is(string id) => TugTarget.IsTug(id) || ClientShip.IsClient(id);
 }
 
 /// <summary>Свой буксир + клиент + причал клиента в одном шаге (вызывать до шага модели своего буксира).</summary>
@@ -294,15 +311,57 @@ public sealed class TugWorkSystem
         Events.Clear();
     }
 
-    /// <summary>Начальные условия: клиент лагом к причалу; свой буксир — напротив миделя дальнего борта, носом к нему, без хода.</summary>
-    public void Place(ShipDynamicsModel own)
+    /// <summary>
+    /// Начальные условия: клиент лагом к причалу; свой буксир — напротив миделя дальнего борта, носом к нему, без хода.
+    /// moveOwn = false (19.4б-2, сцена) — свой буксир не переставлять: его ставит ScenarioRunner из начальных условий
+    /// сценария (DemoTugWorkScenario.Fill посчитал их той же TugStart).
+    /// </summary>
+    public void Place(ShipDynamicsModel own, bool moveOwn = true)
     {
         Reset();
         BerthArea b = Client.Berth;
         Client.Place(0.5 * b.Length + Task.clientAlongM, Task.clientGapM);
         WorkSide = -Client.SideToBerth;
+        if (!moveOwn || own == null) return;
         TugStart(Client.Model, Client.Parameters, OwnSpec, WorkSide, Task.tugDistanceM, out double e, out double n, out double psi);
         own.Teleport(e, n, psi, 0.0, 0.0);
+    }
+
+    // ─────────── 19.4б-2: срез для mooring.csv ───────────
+
+    /// <summary>
+    /// Строка mooring.csv в 19-03: столбцы причала — по клиенту (зазоры, кранцы, кромка, концы, подруливающее клиента),
+    /// stages_done — заданий буксира выполнено, moored_hold_s — «концы закреплены» подряд, с (ClientShip.SecuredHold);
+    /// столбцы буксира — свой буксир (OwnTugSample). Один срез у тренажёра (ExerciseRecorder) и прогона (TugWorkSimulation).
+    /// </summary>
+    public MooringSample Sample(double t, int berthIndex, AzimuthDrive drive, Wind wind, BridgeStation station = BridgeStation.Helm)
+    {
+        MooringSample s = MooringSampler.Build(t, Client.Berth, berthIndex, Client.Parameters, Client.Model, Client.Mooring,
+                                               ThrusterOrders.ZeroIndex, station, null);
+        s.StagesDone = DoneCount;
+        s.MooredHoldS = Client.SecuredHold;
+        s.ThrusterOrderPct = Client.Mooring.Thruster != null ? Client.Mooring.Thruster.Command * 100.0 : 0.0;
+        s.Towing = OwnTugSample(drive, wind);
+        return s;
+    }
+
+    /// <summary>
+    /// Столбцы буксира (табл. 19.17) для своего буксира: место — у миделя; режим — «толкать», пока кранец упирается в борт,
+    /// иначе «стоп»; направление силы на клиента от его ДП (к причалу: 270° при работе у ПБ, 90° — у ЛБ); доля тяги —
+    /// суммарный упор колонок от тяги на гаке, %; упор в борт — сила кранца, кН; трос — не подан; ветер.
+    /// </summary>
+    public TowingSample OwnTugSample(AzimuthDrive drive, Wind wind)
+    {
+        TowingSample s = TowingSample.Build(null, wind);
+        s.Present = true;
+        s.Station = TugStation.Midship;
+        bool push = Contact.FenderForce > 0.0;
+        s.Mode = push ? TugMode.Push : TugMode.Stop;
+        s.DirectionDeg = push ? (WorkSide >= 0 ? 270.0 : 90.0) : double.NaN;
+        s.PowerPct = drive != null ? 50.0 * (drive.UnitLoad(1) + drive.UnitLoad(2)) : double.NaN;
+        s.Line = TowLineStatus.NotFast;
+        s.PushKn = Contact.FenderForce / 1000.0;
+        return s;
     }
 
     /// <summary>Место своего буксира: нос в distance м от борта side клиента напротив миделя, носом к борту.</summary>

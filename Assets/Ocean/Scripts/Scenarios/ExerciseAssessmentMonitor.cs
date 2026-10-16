@@ -177,7 +177,7 @@ public class ExerciseAssessmentMonitor : MonoBehaviour
         WorldPosition p = navigation.PositionEastNorth;
         foreach (ITrackedTarget t in ExerciseTargets.All)
         {
-            if (t is TugTarget) continue;   // 19.3б: свой буксир — не цель расхождения
+            if (WorkVessels.Is(t.TargetId)) continue;   // 19.3б: свой буксир, 19.4б-2: судно-клиент — не цели расхождения
             CpaResult c = CpaCalculator.FromCourses(p, navigation.Heading, navigation.SpeedKnots, t.Position, t.HeadingDeg, t.SpeedKnots);
             liveTargets.Add(new LiveTarget
             {

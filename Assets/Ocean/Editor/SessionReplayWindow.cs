@@ -226,10 +226,12 @@ public class SessionReplayWindow : EditorWindow
         Row("Состояние", st);
         // 19.2б-3б: строка mooring.csv в момент t (если причал понадобился)
         MooringSample? ms = session.MooringAt(t);
+        bool work = session.Meta.scenario != null && session.Meta.scenario.tug_work != null && session.Meta.scenario.tug_work.enabled;   // 19.4б-2: строки — по клиенту
         if (ms.HasValue && ms.Value.HasBerth)
         {
             MooringSample m = ms.Value;
-            Row("Причал: нос / корма", $"{ScenarioText.Num(m.BowGapM, 1)} / {ScenarioText.Num(m.SternGapM, 1)} м, угол {ScenarioText.Num(m.AngleDeg)}°");
+            if (work) Row("Судно-клиент", $"заданий буксира {m.StagesDone} из {TugWorkSystem.StageCount}, «концы закреплены» {ScenarioText.Num(m.MooredHoldS)} с");
+            Row(work ? "Клиент: нос / корма" : "Причал: нос / корма", $"{ScenarioText.Num(m.BowGapM, 1)} / {ScenarioText.Num(m.SternGapM, 1)} м, угол {ScenarioText.Num(m.AngleDeg)}°");
             Row("К причалу", $"нос {ScenarioText.Num(m.BowSpeedKn, 2)} · корма {ScenarioText.Num(m.SternSpeedKn, 2)} уз");
             Row("Кранцы", m.FenderContact ? $"обжаты до {ScenarioText.Num(m.FenderDeflectionRatio * 100.0)} %, {ScenarioText.Num(m.FenderForceKn, 1)} кН" : m.QuayContact ? "УДАР О ПРИЧАЛ" : "нет касания");
             int fast = 0;
@@ -240,7 +242,9 @@ public class SessionReplayWindow : EditorWindow
         if (ms.HasValue)
         {
             TowingSample tw = ms.Value.Towing;
-            if (tw.Present)
+            if (tw.Present && work)
+                Row("Свой буксир", $"колонки {ScenarioText.Num(tw.PowerPct)} % тяги" + (tw.PushKn > 0.05 ? $" · упор в борт {ScenarioText.Num(tw.PushKn)} кН" : " · не упирается"));
+            else if (tw.Present)
                 Row("Буксир", $"{TugOrders.StationTitle(tw.Station)}: {TugOrders.ModeTitle(tw.Mode)}" +
                               (tw.Mode == TugMode.Stop ? "" : $" {TugCommand.DirectionTitle(tw.DirectionDeg)} {ScenarioText.Num(tw.PowerPct)} %") +
                               (tw.Line == TowLineStatus.Fast ? $" · трос {ScenarioText.Num(tw.LineLengthM, 1)} м, {ScenarioText.Num(tw.LineTensionKn)} кН"
@@ -568,6 +572,21 @@ public class SessionReplayWindow : EditorWindow
             Handles.color = TargetColor;
             if (done.Count > 1) Handles.DrawAAPolyLine(2.5f, done.ToArray());
             Vector3 c = P(e, n);
+            // 19.4б-2: судно-клиент упражнения на буксире — на крупном масштабе контур корпуса в масштабе
+            SessionTugWork tw = session.Meta.scenario != null ? session.Meta.scenario.tug_work : null;
+            if (ClientShip.IsClient(kv.Key) && tw != null && tw.enabled && tw.client_length_m > 0 && tw.client_length_m / mpp >= 40.0)
+            {
+                List<WorldPosition> hull = DebriefMap.HullOutline(new WorldPosition(e, n), h, tw.client_length_m, tw.client_beam_m);
+                var pts = new Vector3[hull.Count + 1];
+                for (int i = 0; i < hull.Count; i++) pts[i] = P(hull[i]);
+                pts[hull.Count] = pts[0];
+                Handles.color = new Color(TargetColor.r, TargetColor.g, TargetColor.b, 0.35f);
+                Handles.DrawAAConvexPolygon(hull.ConvertAll(w => P(w)).ToArray());
+                Handles.color = TargetColor;
+                Handles.DrawAAPolyLine(2f, pts);
+                GUI.Label(new Rect(c.x + 8f, c.y - 8f, 120f, 16f), "клиент", Centered(mapLabel, TargetColor));
+                continue;
+            }
             float psi = (float)(h * Math.PI / 180.0);
             var fw = new Vector3(Mathf.Sin(psi), -Mathf.Cos(psi), 0f);
             var rt = new Vector3(Mathf.Cos(psi), Mathf.Sin(psi), 0f);

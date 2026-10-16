@@ -10,7 +10,9 @@
 //   2. «толкайте» — упор по скорости клиента к причалу (v_з = min(0,8; 0,1 + 0,02·зазор) уз); курс поперёк борта;
 //   3. «держите» — HoldPower до «отходите» (ReleaseEarlyS > 0 — снять упор раньше, вариант 19.4в);
 //   4. «отходите» — назад ClearPower до ClearDistance, затем джойстик в ноль.
-// Записи и оценки здесь нет (19.4в): события упражнения — в Events, итог — EndReason, этапы — System.
+// События упражнения — в Events, итог — EndReason, этапы — System. 19.4б-2: запись сессии (RecordFolder: track.csv,
+// targets.csv с клиентом «CLIENT», events.csv, mooring.csv — TugWorkSystem.Sample, session.json) и оценка «в шлеме»
+// (LiveAssessment, LiveResult) — как в тренажёре; критерии работы буксира — 19.4в.
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -109,6 +111,9 @@ public sealed class TugWorkSimulation
     public double Dt = 0.02;
     /// <summary>Тяга на гаке своего буксира, т.</summary>
     public double BollardPullTonnes = TugSpec.DefaultBollardPullTonnes;
+    /// <summary>19.4б-2: папка записи сессии (пусто — без записи); частота строк track/targets/mooring, Гц.</summary>
+    public string RecordFolder = "";
+    public double RateHz = 5.0;
 
     public TugWorkSystem System { get; private set; }
     public ShipDynamicsModel Own { get; private set; }
@@ -118,6 +123,13 @@ public sealed class TugWorkSimulation
     public double EndTime { get; private set; }
     /// <summary>Наибольшее расстояние клиента от причала (зазор) за прогон, м — снос ветром.</summary>
     public double MaxClientGapM { get; private set; }
+    /// <summary>19.4б-2: итог оценки «в шлеме» (LiveAssessment по тем же строкам и событиям, что запись).</summary>
+    public AssessmentResult LiveResult;
+
+    private SessionRecorder rec;
+    private LiveAssessment live;
+    private double t;
+    private readonly List<TargetSample> targets = new List<TargetSample>(1);
 
     /// <summary>Выполнить прогон; maxTime — свой предел (0 — лимит сценария).</summary>
     public void Run(double maxTime = 0.0)
@@ -140,7 +152,23 @@ public sealed class TugWorkSimulation
         MaxClientGapM = 0.0;
         double limit = maxTime > 0 ? maxTime : (s.timeLimitSeconds > 0 ? s.timeLimitSeconds : 1800.0);
 
-        double t = 0.0;
+        // 19.4б-2: запись и оценка — как ExerciseRecorder / ExerciseAssessmentMonitor в тренажёре
+        rec = string.IsNullOrEmpty(RecordFolder) ? null
+            : new SessionRecorder(RecordFolder, SessionMeta.Create(s, tug, "sim", new DateTime(2026, 10, 17, 12, 0, 0)), background: false);
+        if (rec != null)
+        {
+            rec.Meta.recording.track_rate_hz = RateHz;
+            rec.Meta.recording.fixed_dt_s = Dt;
+            rec.Meta.ship.motion_model = MotionModel.Manoeuvring3Dof.ToString();
+        }
+        live = new LiveAssessment();
+        live.Output += e => Publish(e, keepTime: false);
+        live.Begin(AssessmentContext.FromScenario(s, tug), RateHz);
+        var sampler = new TrackSampler(RateHz);
+
+        t = 0.0;
+        Publish(new ExerciseEvent(ExerciseEventType.ExerciseStarted) { Subject = s.title }, keepTime: false);
+        if (sampler.Due(t)) Sample();
         EndReason = ScenarioEndReason.None;
         while (EndReason == ScenarioEndReason.None)
         {
@@ -149,13 +177,66 @@ public sealed class TugWorkSimulation
             System.Apply(Own, Dt, t);
             Own.Step(Dt);
             t += Dt;
-            Events.AddRange(System.Events);
+            foreach (ExerciseEvent e in System.Events) Publish(e, keepTime: true);
             System.Events.Clear();
             double gap = System.Client.GapM;
             if (!double.IsNaN(gap)) MaxClientGapM = Math.Max(MaxClientGapM, gap);
             if (System.Finished && s.Ends(ScenarioEndConditions.TugWorkDone)) EndReason = ScenarioEndReason.TugWorkDone;
             else if (t >= limit - 1e-9) EndReason = s.Ends(ScenarioEndConditions.TimeLimit) && t >= s.timeLimitSeconds - 1e-9 ? ScenarioEndReason.TimeLimit : ScenarioEndReason.Aborted;
+            if (EndReason == ScenarioEndReason.None && sampler.Due(t)) Sample();
         }
         EndTime = t;
+        Publish(new ExerciseEvent(ExerciseEventType.ExerciseEnded) { EndReason = EndReason, Subject = s.title }, keepTime: false);
+        if (live.NeedsFinalSample(t) || (rec != null && (double.IsNaN(rec.LastTrackTime) || rec.LastTrackTime < t - 1e-6))) Sample();
+        LiveResult = live.End();
+
+        if (rec != null)
+        {
+            rec.Meta.completed = true;
+            rec.Meta.end_reason = EndReason.ToString();
+            rec.Meta.end_reason_ru = ScenarioText.EndReason(EndReason);
+            rec.Meta.duration_s = Math.Round(t, 3);
+            rec.Meta.summary = SessionSummary.From(ExerciseSummary.From(s, new List<ExerciseEvent>(Events), null));
+            rec.Meta.assessment = SessionAssessmentSummary.From(LiveResult);
+            rec.WriteAssessment(LiveResult.ToCsv());
+            rec.Close();
+        }
+    }
+
+    // Событие: время — от TugWorkSystem (keepTime) или текущее; положение — своего буксира
+    private void Publish(ExerciseEvent e, bool keepTime)
+    {
+        if (!keepTime) e.Time = t;
+        e.InExercise = true;
+        e.Position = new WorldPosition(Own.East, Own.North);
+        double h = (Own.Psi * 180.0 / Math.PI) % 360.0;
+        e.HeadingDeg = (float)(h < 0 ? h + 360.0 : h);
+        e.SpeedKnots = (float)(Own.U / ShipParameters.KnotsToMs);
+        Events.Add(e);
+        rec?.AddEvent(e);
+        live?.OnEvent(e);
+    }
+
+    // Срез — как ExerciseRecorder (track.csv; клиент — «CLIENT» в targets.csv; mooring.csv — TugWorkSystem.Sample)
+    private void Sample()
+    {
+        ShipDynamicsModel m = Own;
+        double heading = (m.Psi * 180.0 / Math.PI) % 360.0;
+        if (heading < 0) heading += 360.0;
+        double ve = m.VelocityEast, vn = m.VelocityNorth;
+        double cog = ve * ve + vn * vn < 1e-4 ? heading : (Math.Atan2(ve, vn) * 180.0 / Math.PI + 360.0) % 360.0;
+        var s = new TrackSample
+        {
+            Time = t, East = m.East, North = m.North, HeadingDeg = heading, CogDeg = cog,
+            SpeedKnots = m.U / ShipParameters.KnotsToMs, RotDegMin = m.R * 180.0 / Math.PI * 60.0,
+            RudderOrderedDeg = m.Ordered, RudderActualDeg = m.Delta, TelegraphSf = m.SpeedFactor,
+            Telegraph = (int)ScenarioText.OrderFromSpeedFactor(m.SpeedFactor),
+            XteM = double.NaN, Leg = -1, XteLimitM = double.NaN, Grounded = m.Grounded
+        };
+        targets.Clear();
+        targets.Add(System.Client.Sample(t));
+        MooringSample ms = System.Sample(t, Scenario.tugWork.berthIndex, Drive, System.Wind);
+        if (rec != null) { rec.AddTrack(s); foreach (TargetSample ts in targets) rec.AddTarget(ts); rec.AddMooring(ms); }
+        if (live.Running) live.AddSample(s, targets, ms);
     }
 }

@@ -29,6 +29,8 @@
 //   в FixedUpdate этапы задания (MooringTaskTracker по BerthReadout и состоянию MooringController) →
 //   события MooringStage; «ошвартован» завершает упражнение (ScenarioEndReason.Moored). На катере
 //   сценарий швартовки грузится на модели 45 м (тип судна переключается сам).
+// 19.4б-2: сценарий на своём буксире (ScenarioDefinition.ownShipType = Tug, 19-03) ставит тип «буксир» сам
+//   (остальные сценарии на буксире — модель 45 м); финиш «задание буксира выполнено» — по TugWorkController.
 //
 // Runner не содержит интерфейса: VR-панель и команды меню — ScenarioPanel,
 // вывод событий в консоль — ExerciseConsoleLog (отдельный подписчик шины).
@@ -127,8 +129,23 @@ public class ScenarioRunner : MonoBehaviour
             CurrentPhase = Phase.Idle;
             ship.SetType(ShipType.Model45m);
         }
-        // 19.4а: свой буксир — только свободное плавание (упражнение на буксире — 19.4б): тип судна — модель 45 м
-        if (ship != null && ship.Type == ShipType.Tug)
+        // 19.4б-2: сценарий на своём буксире (19-03) — тип судна «буксир» ставится сам
+        bool needTug = ScenarioVariants.SourceOf(scenario).RequiresOwnTug;
+        if (needTug && ship != null && ship.Type != ShipType.Tug)
+        {
+            if (!ship.TugReady)
+            {
+                Debug.LogWarning($"[Сценарий] «{scenario.title}» выполняется на своём буксире, а буксир не построить (нет стойки катера) — " +
+                                 "запустите Tools/VR Bridge/Setup Fast Boat и сохраните сцену. Сценарий не загружен.");
+                return;
+            }
+            Debug.Log($"[Сценарий] «{scenario.title}» — упражнение на своём буксире: тип судна переключён.");
+            Current = null;
+            CurrentPhase = Phase.Idle;
+            ship.SetType(ShipType.Tug);
+        }
+        // 19.4а: на своём буксире остальные сценарии — на модели 45 м
+        if (!needTug && ship != null && ship.Type == ShipType.Tug)
         {
             Debug.Log($"[Сценарий] «{scenario.title}» — сценарий для модели 45 м: тип судна переключён с буксира.");
             Current = null;
@@ -230,6 +247,13 @@ public class ScenarioRunner : MonoBehaviour
         if (CurrentPhase != Phase.Running) return;
         TrackMooring(dt);
         if (CurrentPhase != Phase.Running) return;
+        // 19.4б-2: упражнение на буксире — все четыре задания (TugWorkController, шаг — до шага модели)
+        TugWorkController tw = TugWorkController.Instance;
+        if (Current.IsTugWork && tw != null && tw.Scenario == Current && tw.Work != null && tw.Work.Finished && Current.Ends(ScenarioEndConditions.TugWorkDone))
+        {
+            End(ScenarioEndReason.TugWorkDone, false);
+            return;
+        }
 
         if (Current.Ends(ScenarioEndConditions.TimeLimit) && Current.timeLimitSeconds > 0f && ExerciseTime >= Current.timeLimitSeconds)
             End(ScenarioEndReason.TimeLimit, false);

@@ -179,6 +179,13 @@ public static class DebriefMap
 
     /// <summary>Подходил ли к кромке ближе, м — вид «У причала» и контуры корпуса.</summary>
     public const double BerthViewWithinM = 300.0;
+    /// <summary>19.4б-2: упражнение на своём буксире (null — нет).</summary>
+    private static SessionTugWork WorkOf(RecordedSession s)
+    {
+        SessionTugWork w = s.Meta?.scenario?.tug_work;
+        return w != null && w.enabled ? w : null;
+    }
+
     /// <summary>Наименьший размер окна «У причала», м; контуры корпуса — через, с.</summary>
     public const double BerthWindowMinM = 150.0, HullOutlineStepS = 15.0;
 
@@ -187,11 +194,16 @@ public static class DebriefMap
     {
         if (area == null || area.berths == null || area.berths.Count == 0) return;
         double L = s.Meta?.ship != null ? s.Meta.ship.length_m : 0, B = s.Meta?.ship != null ? s.Meta.ship.beam_m : 0;
+        SessionTugWork work = WorkOf(s);
         foreach (ExerciseEvent e in s.Events)
         {
             bool fender = e.Type == ExerciseEventType.BerthingImpact, quay = e.Type == ExerciseEventType.QuayImpact;
             if (!fender && !quay) continue;
-            WorldPosition p = ContactPoint(area, e.Position, e.HeadingDeg, L, B, s.Meta.ship.HullParallelL);
+            WorldPosition p;
+            // 19.4б-2: в упражнении на буксире у причала — судно-клиент (место и курс — по targets.csv)
+            if (work != null && s.TargetAt(ClientShip.Id, e.Time, out TargetSample c))
+                p = ContactPoint(area, new WorldPosition(c.East, c.North), c.HeadingDeg, work.client_length_m, work.client_beam_m);
+            else p = ContactPoint(area, e.Position, e.HeadingDeg, L, B, s.Meta.ship.HullParallelL);
             string speed = ScenarioText.Num(e.Value, 2);
             // Повторные касания в том же месте (ближе 5 м) — одна отметка, скорости через «·»: «навал 0,29 · 0,05 уз»
             MapMarker same = d.Markers.Find(x => x.Layer == MapLayer.Berthing && x.Ok == fender && (x.Position - p).Magnitude < BerthingMergeM);
@@ -262,6 +274,12 @@ public static class DebriefMap
             BerthArea tb = area.Berth(task.berth_index);
             if (tb != null && tb.Length >= 1.0) { index = task.berth_index; return tb; }
         }
+        SessionTugWork work = WorkOf(s);   // 19.4б-2: причал упражнения на буксире
+        if (work != null)
+        {
+            BerthArea wb = area.Berth(work.berth_index);
+            if (wb != null && wb.Length >= 1.0) { index = work.berth_index; return wb; }
+        }
         var berths = new List<BerthArea>();
         for (int i = 0; i < area.berths.Count; i++) berths.Add(area.Berth(i));
         BerthArea best = null;
@@ -302,6 +320,16 @@ public static class DebriefMap
                 d.Polygons.Add(new MapPolygon { Layer = MapLayer.HullOutline, Points = hull, Label = ScenarioText.Clock(t) });
                 if (b.DistanceTo(st.Position) <= NearM) foreach (WorldPosition p in hull) r.Include(p);
             }
+            // 19.4б-2: судно-клиент — контуры в те же моменты (без подписей), всегда в окне
+            SessionTugWork work = WorkOf(s);
+            if (work != null && work.client_length_m > 0 && work.client_beam_m > 0)
+                foreach (double t in times)
+                {
+                    if (!s.TargetAt(ClientShip.Id, t, out TargetSample c)) continue;
+                    List<WorldPosition> hull = HullOutline(new WorldPosition(c.East, c.North), c.HeadingDeg, work.client_length_m, work.client_beam_m);
+                    d.Polygons.Add(new MapPolygon { Layer = MapLayer.HullOutline, Points = hull, Label = "" });
+                    foreach (WorldPosition p in hull) r.Include(p);
+                }
         }
         d.Views.Add(new DebriefMapView
         {

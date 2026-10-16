@@ -93,6 +93,21 @@ public sealed class RecordedSession
         return ans >= 0 ? Mooring[ans] : (MooringSample?)null;
     }
 
+    /// <summary>19.4б-2: строка targets.csv цели id с Time ≤ t, ближайшая к t (false — нет).</summary>
+    public bool TargetAt(string id, double t, out TargetSample sample)
+    {
+        sample = default;
+        bool found = false;
+        foreach (TargetSample s in Targets)
+        {
+            if (s.Id != id) continue;
+            if (s.Time > t + 1e-9) break;
+            sample = s;
+            found = true;
+        }
+        return found;
+    }
+
     private static double Lerp(double a, double b, double k) => a + (b - a) * k;
 
     /// <summary>Интерполяция угла 0…360° по кратчайшей дуге.</summary>
