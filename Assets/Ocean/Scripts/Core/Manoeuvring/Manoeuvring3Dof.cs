@@ -211,6 +211,7 @@ public sealed class Manoeuvring3DofCoefficients
         p.length, p.beam, p.draft, p.blockCoefficient, p.nomotoKPrime, p.nomotoTPrime,
         p.yawGyrationRadiusL, p.centreOfGravityX, p.crossFlowDragCoeff, p.rudderLeverL,
         p.rudderSlipstreamFactor, p.propellerSideForceFactor,
+        p.diagonalAddedMass ? 1f : 0f, p.fitYawToNomoto ? 1f : 0f,   // 19.3а
         // цель согласования циркуляции — модель Номото/Норрбина этого же ассета
         p.matchTurningCircle ? 1f : 0f, p.serviceSpeedKnots, p.accelerationTimeConstant, p.decelerationTimeConstant,
         (float)p.yawModel, p.norrbinAlphaPrime, p.turnSpeedLossCoeff, p.minCalcSpeed, p.maxRudderAngle, p.rudderRate,
@@ -250,8 +251,10 @@ public sealed class Manoeuvring3DofCoefficients
         // Матрица масс (размерная): M_A = ½ρL³·[[−Y'_v̇, −Y'_ṙ·L], [−N'_v̇·L, −N'_ṙ·L²]] (MSS clarke83.m)
         c.M11 = c.Mass + c.AddedMassSurge;
         c.M22 = c.Mass - q3 * d.Yvdot;
-        c.M23 = c.Mass * c.XG - q3 * L * d.Yrdot;
-        c.M32 = c.Mass * c.XG - q3 * L * d.Nvdot;
+        // 19.3а: у короткого широкого корпуса (буксир) перекрёстные члены Clarke вне области применимости — без них
+        bool diag = p.diagonalAddedMass;
+        c.M23 = c.Mass * c.XG - (diag ? 0.0 : q3 * L * d.Yrdot);
+        c.M32 = c.Mass * c.XG - (diag ? 0.0 : q3 * L * d.Nvdot);
         c.M33 = c.Iz - q3 * L * L * d.Nrdot;
         double det = c.M22 * c.M33 - c.M23 * c.M32;
         c.inv11 = c.M33 / det; c.inv12 = -c.M23 / det;
@@ -270,7 +273,17 @@ public sealed class Manoeuvring3DofCoefficients
         // Согласование с K', T'
         c.TargetKPrime = p.nomotoKPrime;
         c.TargetTPrime = p.nomotoTPrime;
-        c.Fit();
+        if (p.fitYawToNomoto) c.Fit();
+        else
+        {
+            // 19.3а: буксир с колонками — руля нет, демпфирование рыскания по Clarke без поправки
+            c.YawDampingFactor = 1.0;
+            c.YdeltaPrime = 0.0;
+            c.FitExact = false;
+            c.FitNote = "подбор по K', T' выключен: k_N = 1, руля нет";
+            c.StableOnCourse = c.StabilityIndex(1.0) > 0.0;
+            c.LinearKPrime = c.LinearTPrime = double.NaN;
+        }
 
         // Размерные линейные коэффициенты (на единицу |u|)
         double q2 = 0.5 * rho * L * L;

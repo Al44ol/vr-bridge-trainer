@@ -25,6 +25,7 @@
 | Тестовое судно: быстроходный катер (запрос 15) | 🖥 `Manoeuvring Trials` и `Seakeeping Trials` с ассетом `ShipParameters_FastBoat` | `ThesisData/Trials/ShipParameters_FastBoat_<дата>/`, `ThesisData/Seakeeping/ShipParameters_FastBoat_<дата>/` | те же CSV и SVG, что у судна сцены — для табл. 15.1 (циркуляция, зигзаг, разгон катера); прогон B2-01 на катере — в выводе теста `B2Run_OnBoat_ArrivesAndIsAssessed` | разд. 15, табл. 15.1 |
 | Модель 3 СС для малых скоростей (запрос 19.1) | 🖥 `Manoeuvring Trials`: «Модель движения», флажки «Малые скорости» и «Сравнение моделей» | `ThesisData/Trials/<ассет>[_3dof]_<дата>/` | `lowspeed_*.csv` (дрейф, разворот на месте, «толчок» с обдувом и без, задний ход; столбец `v_ms` — поперечная скорость), `lowspeed_drift_spin.svg`, `lowspeed_kick.svg`, `lowspeed_astern.svg` (траектория и контур корпуса); `comparison_3dof.csv/.md` + `comparison_turning.svg` (Номото/Норрбин — 3 СС Хёрнер — 3 СС согласованная [— эталон Mariner]); `model_3dof.md` — коэффициенты (Clarke, k_N, Y'_δ, C_d, k_∞, циркуляции; у Mariner — производные ПМУ рядом) | разд. 19, табл. 19.1–19.4 |
 | Швартовка: причал, кранцы, концы, подруливающее (запрос 19.2) | 🖥 `Mooring Trials` (меню, без окна) | `ThesisData/Mooring/<дата>/<Model45m|Mariner>/` | `impacts.csv` (навалы лагом 0,05…0,5 уз и носом 5°/10°: W, ½·m₂₂·v², PIANC, δ/δ_н, ΣR, e), `impact_0.2kn.csv`, `fender_loop.svg` (петля «обжатие — реакция»), `berthing_energy.svg`, `hold.csv` + `mooring_hold.svg` (натяжения при нарастающей силе), `thruster.csv/.svg`; `summary.md` в папке даты — обе модели | разд. 19.15, табл. 19.5–19.7 |
+| Буксир, трос, ветер (запрос 19.3а) | 🖥 `Towing Trials` (меню, без окна) | `ThesisData/Towing/<дата>/` | `bollard.csv` (тяга на гаке), `lateral.csv` + `lateral_series.csv` (буксир тянет / толкает судно), `tug_lateral.svg`, `tug_heading.svg`, `wind_coefficients.csv/.svg` (Isherwood), `wind_drift.csv/.svg` (дрейф 10…25 уз), `wind_hold.csv/.svg` (буксир против ветра 0…50 %), `summary.md` | разд. 19.24, табл. 19.15–19.16 |
 | Записи упражнений | 🎮 каждое упражнение | `ThesisData/Sessions/<дата>_<сценарий>_<ID>/` (в .gitignore) | `track.csv` (5 Гц), `targets.csv`, `events.csv`, `session.json`, `assessment.csv`, `report.html`; у швартовки — `mooring.csv` (19.2б-3б) | разд. 7, табл. 7.1–7.4; п. 10.10, 11.6; 19.22 |
 
 ---
@@ -122,6 +123,12 @@ Unity Test Runner → EditMode (сейчас **250**): `TestResults.xml` — п�
   - **`report.html` → раздел «Швартовка»**: задания со временем, навалы и удары о кромку (скорость, энергия, обжатие), концы (подан, отдан, наибольшее натяжение, перегрузки, обрыв), место обучающегося; два графика SVG у причала;
   - **тест** `BerthAssessmentTests.Runs_VariantsGiveExpectedVerdicts` — вывод: итог каждого варианта (балл, M2, M3, M5, M8, M9);
   - **лог** `[Setup 19.2б-3] Новые критерии группы «Швартовка» добавлены в наборы…` при первом входе в Play Mode.
+
+### 2.6к. Буксир, трос, ветер — Core и стенд (запрос 19.3а)
+- 👓 В шлеме пока ничего не видно (сцена — часть 19.3б). Только на ПК:
+  - **стенд** `Tools/VR Bridge/Towing Trials` (без Play Mode, ≈ 10 с) → `ThesisData/Towing/<дата>/`: тяга на гаке, свободный ход буксира, буксир тянет и толкает судно, коэффициенты Isherwood, дрейф под ветром, удержание буксиром против ветра; CSV, SVG, `summary.md` (табл. 19.15–19.16);
+  - **параметры буксира** — `ShipPresets.FillTug` и `TugSpec` (Core, ассета пока нет); **ветер** — `WindLoad` (таблицы Isherwood, MSS `isherwood72.m`);
+  - **тесты** `TowingTests` — вывод: тяга на гаке, дрейф и равновесие, толкание у миделя, тяга от кормы.
 
 ### 2.7. Источники значений параметров
 `Assets/Ocean/Settings/ShipParameters_Sources.md` — откуда взято каждое значение ShipParameters (Mariner, KCS, Model45m, допущения).

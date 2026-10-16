@@ -127,6 +127,11 @@ public class ShipParameters : ScriptableObject
     [Range(0f, 2f)] public float rudderSlipstreamFactor = 0.5f;
     [Tooltip("Поперечная сила винта на заднем ходу, доля упора (правый винт — корму влево; допущение)")]
     [Range(0f, 0.3f)] public float propellerSideForceFactor = 0.05f;
+    [Tooltip("19.3а: диагональная матрица присоединённых масс (Y'_ṙ = N'_v̇ = 0). Для коротких широких корпусов (буксир, B/L ≈ 0,36) " +
+             "регрессия Clarke вне области применимости и даёт неположительную матрицу масс")]
+    public bool diagonalAddedMass = false;
+    [Tooltip("19.3а: подбирать демпфирование рыскания k_N и Y'_δ по K', T' (false — k_N = 1 по Clarke, руля нет: Y'_δ = 0; буксир с колонками)")]
+    public bool fitYawToNomoto = true;
 
     public const float KnotsToMs = 0.514444f;
     public float ServiceSpeedMs => serviceSpeedKnots * KnotsToMs;
