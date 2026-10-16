@@ -80,6 +80,8 @@ public class TowingController : MonoBehaviour
 
     private bool Operating => navigation != null && navigation.Model != null && navigation.Uses3Dof && !OnFastBoat;
     private static bool OnFastBoat => ShipTypeSwitcher.Instance != null && ShipTypeSwitcher.Instance.Type == ShipType.FastBoat;
+    /// <summary>19.4а: своё судно — буксир: вызывать буксир некому (ветер на своё судно действует).</summary>
+    private static bool OnOwnTug => ShipTypeSwitcher.OnTug;
     private static ScenarioRunner Runner => ScenarioRunner.Instance;
     private static bool InExercise => Runner != null && (Runner.CurrentPhase == ScenarioRunner.Phase.Running || Runner.CurrentPhase == ScenarioRunner.Phase.Briefing);
 
@@ -146,6 +148,7 @@ public class TowingController : MonoBehaviour
             UpdateInspector();
             return;
         }
+        if (system != null && OnOwnTug) Dismiss("своё судно — буксир");
         // Перестановка судна (начальные условия, «Судно к причалу», снятие с мели) — буксир остался бы на месте
         if (system != null && !double.IsNaN(lastE))
         {
@@ -284,6 +287,7 @@ public class TowingController : MonoBehaviour
     {
         if (system != null) return TugOrders.State(system, TrainerModes.HintsAllowedNow);
         if (OnFastBoat) return "буксир — не на катере";
+        if (OnOwnTug) return "вы на буксире — вызывать некого";
         if (InExercise && !TugAllowedByScenario) return "в этом упражнении буксира нет";
         if (InExercise && !Operating) return "буксир — только в модели 3 СС";
         return "буксир не вызван";
@@ -294,7 +298,7 @@ public class TowingController : MonoBehaviour
     /// <summary>Вызвать можно: буксира нет; в упражнении — если сценарий разрешает (и модель 3 СС), в свободном плавании — всегда.</summary>
     private bool CanCall()
     {
-        if (system != null || navigation == null || navigation.Model == null || navigation.Paused || OnFastBoat) return false;
+        if (system != null || navigation == null || navigation.Model == null || navigation.Paused || OnFastBoat || OnOwnTug) return false;
         if (InExercise) return TugAllowedByScenario && navigation.Uses3Dof;
         return true;
     }

@@ -45,11 +45,11 @@ public class ShipControlOrders : MonoBehaviour
     void OnEnable()
     {
         commands.Add(BridgeMenu.RegisterStepper(HelmGroup, RudderTitle, () => StepRudder(-1), () => StepRudder(+1),
-            () => navigation != null && navigation.Model != null && navigation.wheel != null).InMenu(MenuId));
+            () => navigation != null && navigation.Model != null && navigation.wheel != null && !ShipTypeSwitcher.OnTug, hideWhenUnavailable: true).InMenu(MenuId));
         commands.Add(BridgeMenu.RegisterStepper(HelmGroup, TelegraphTitle, () => StepTelegraph(-1), () => StepTelegraph(+1),
-            () => Telegraph != null).InMenu(MenuId));
+            () => Telegraph != null && !ShipTypeSwitcher.OnTug, hideWhenUnavailable: true).InMenu(MenuId));
         commands.Add(BridgeMenu.RegisterStepper(HelmGroup, ThrusterTitle, () => StepThruster(-1), () => StepThruster(+1),
-            () => mooring != null).InMenu(MenuId));
+            () => mooring != null && !ShipTypeSwitcher.OnTug, hideWhenUnavailable: true).InMenu(MenuId));   // 19.4а: на буксире — «Джойстик» (OwnTugDrive)
         BridgeMenu.SetGroupExpanded(HelmGroup, true);
         BridgeMenu.SetGroupOrder(HelmGroup, 10);
     }

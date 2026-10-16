@@ -138,8 +138,8 @@ public static class BoatMeshes
         }
     }
 
-    // ─────────── Сборщик: плоское затенение, нормаль — наружу по подсказке ───────────
-    private sealed class Builder
+    // ─────────── Сборщик: плоское затенение, нормаль — наружу по подсказке (19.4а: и для TugMeshes) ───────────
+    internal sealed class Builder
     {
         private readonly List<Vector3> v = new List<Vector3>();
         private readonly List<Vector3> n = new List<Vector3>();

@@ -124,6 +124,19 @@ public static class AzimuthAllocation
         return k;
     }
 
+    /// <summary>
+    /// Разложить (X, Y, N) на колонки и приложить к модели (до model.Step): сила — в точке колонок x_к, момент —
+    /// разность продольных упоров. Общий код буксира 19.3а (TugVessel) и своего буксира 19.4а (AzimuthDrive).
+    /// </summary>
+    public static double ApplyTo(ShipDynamicsModel m, TugSpec s, double X, double Y, double N,
+                                 out double fx1, out double fy1, out double fx2, out double fy2)
+    {
+        double k = Solve(X, Y, N, s.ThrusterX, s.ThrusterY, 0.5 * s.BollardPull, out fx1, out fy1, out fx2, out fy2);
+        m.AddForce(fx1 + fx2, fy1 + fy2, s.ThrusterX);
+        m.AddMoment(-s.ThrusterY * fx1 + s.ThrusterY * fx2);
+        return k;
+    }
+
     /// <summary>Обобщённые силы от упоров колонок (проверка разложения).</summary>
     public static void Resultant(double fx1, double fy1, double fx2, double fy2, double xa, double ya, out double X, out double Y, out double N)
     {
@@ -240,9 +253,7 @@ public sealed class TugVessel
         ThrustX += (OrderX - ThrustX) * a;
         ThrustY += (OrderY - ThrustY) * a;
         ThrustN += (OrderN - ThrustN) * a;
-        AzimuthAllocation.Solve(ThrustX, ThrustY, ThrustN, Spec.ThrusterX, Spec.ThrusterY, 0.5 * Spec.BollardPull, out Fx1, out Fy1, out Fx2, out Fy2);
-        Model.AddForce(Fx1 + Fx2, Fy1 + Fy2, Spec.ThrusterX);
-        Model.AddMoment(-Spec.ThrusterY * Fx1 + Spec.ThrusterY * Fx2);
+        AzimuthAllocation.ApplyTo(Model, Spec, ThrustX, ThrustY, ThrustN, out Fx1, out Fy1, out Fx2, out Fy2);
     }
 }
 

@@ -25,8 +25,8 @@ VR-тренажёр судоводительского мостика. Прот�
 Иерархия кратко (полностью, с полями и историей — Architecture.md, «Иерархия BridgeScene»):
 - `EventSystem` (XRUIInputModule) · `WeatherSystem` — WeatherController (единственный писатель RenderSettings), SkyWeather · `Lighting` — Sun, Moon, EnvironmentProbe · `Rain` — RainEffect
 - `WorldOrigin` — WorldOrigin (плавающее начало) · `OceanRadial` — OceanRadialMesh, OceanWaves, ShipWaterInteraction · `Ocean` — старый, отключён
-- `ShipRoot` — ShipNavigation, GroundingMonitor, BridgeActionMonitor, MooringController, TowingController (ставится сам)
-  - `Ship` — ShipMotion (качка), AmbientSounds, ShipTypeSwitcher (катер); модели мостика (рабочая — `МОСТИКИ`; `Ship_Bridge_3D_Model` опущен под воду), `Hull`/`BowTip` (контур корпуса), `FastBoat` (катер, выключен)
+- `ShipRoot` — ShipNavigation, GroundingMonitor, BridgeActionMonitor, MooringController, TowingController и OwnTugDrive (ставятся сами)
+  - `Ship` — ShipMotion (качка), AmbientSounds, ShipTypeSwitcher (модель 45 м / катер / буксир); модели мостика (рабочая — `МОСТИКИ`; `Ship_Bridge_3D_Model` опущен под воду), `Hull`/`BowTip` (контур корпуса), `FastBoat` (катер, выключен), `OwnTug` и `TugJoystick` (буксир — строятся в Play Mode)
   - органы: `Wheel` (SteeringWheel, хват `WheelGrip`), `TelegraphHead` (модель + `Telegraph` EngineTelegraph — двигать только TelegraphHead, детей в Telegraph не класть), `ThrusterHead` (ThrusterLever), `HornButton` (ShipHorn), `BridgeLightSwitch`
   - меню: `BridgeMenu` (кнопка **A**), `SettingsMenu` (**Y**, «Параметры»), `ControlMenu` (**B**, «Управление» + ShipControlOrders); `Stations` (BridgeStationSwitch — крылья)
   - `NavDisplay` (переполнен — не трогать до запроса 16), `ScenarioPanel`, `ScenarioPanelAnchor`, `WeatherPanel`, `BridgeLighting`, `InstructorInputs`, `RainShelter`
@@ -39,7 +39,7 @@ VR-тренажёр судоводительского мостика. Прот�
 ## Координаты и время
 - Плавающее начало: судно и XR Origin около (0,0,0); истинная позиция — `WorldOrigin.ShipPosition` (`WorldPosition { double East, North }`, м); объекты мира — через `WorldToScene()`.
 - **+X = восток, +Z = север**; нос модели — **−Z**. Курс ψ: 0 = N, по часовой; δ > 0 — ПБ. С 19.3б-2 точка модели = мидель видимого корпуса (`ShipNavigation.RootFor`).
-- Порядок выполнения: WorldOrigin −100 → NavLightField −95 → ShipNavigation −90 → MooringController −89, TowingController −89 (силы — в `ShipNavigation.BeforeStep`, до `model.Step`) → ScenarioRunner −88 → BridgeActionMonitor −87 → TrafficController −86 → GroundingMonitor −85 → ExerciseRecorder −84 → ExerciseAssessmentMonitor −83 → OceanWaves −80 → ShipMotion −70, TrafficShipView −70 → WaterAreaView −60 → AidLightsView −55; остальное — 0.
+- Порядок выполнения: WorldOrigin −100 → NavLightField −95 → ShipNavigation −90 → MooringController −89, TowingController −89, OwnTugDrive −89 (силы — в `ShipNavigation.BeforeStep`, до `model.Step`) → ScenarioRunner −88 → BridgeActionMonitor −87 → TrafficController −86 → GroundingMonitor −85 → ExerciseRecorder −84 → ExerciseAssessmentMonitor −83 → OceanWaves −80 → ShipMotion −70, TrafficShipView −70 → WaterAreaView −60 → AidLightsView −55; остальное — 0.
 - Шина событий — `ExerciseEvents` (статическая); новые типы событий и столбцы — **только в конец** enum/таблицы.
 
 ## Карта модулей (подробно — Architecture.md, раздел с тем же названием; ThesisNotes — разд. N)
@@ -62,6 +62,7 @@ VR-тренажёр судоводительского мостика. Прот�
 - **19.1 Модель 3 СС** — `Core/Manoeuvring/Manoeuvring3Dof.cs`, `ShipDynamicsModel.AddForce/AddMoment`. ThesisNotes 19.1–19.10.
 - **19.2 Причал, швартовка** — `Core/Mooring` (`BerthArea`, `MooringHull`, кранцы, концы, подруливающее), `MooringController`, сценарий 19-01, критерии M1–M9, mooring.csv. ThesisNotes 19.11–19.23.
 - **19.3 Буксир, ветер** — `Core/Towing` (`WindLoad`, `TugVessel`, `TowingSystem`), `TowingController`, `TugView`, сценарий 19-02, критерии G1–G4. ThesisNotes 19.24–19.27.
+- **19.4 Свой буксир** — тип судна «буксир» (`ShipTypeSwitcher`, вид `TugMeshes` кодом), джойстик → две колонки (Core `Towing/TugJoystick.cs`, `OwnTugDrive`, рукоятка `TugJoystickHandle` на месте телеграфа, меню B «Джойстик»); дальше — упражнение 19-03 (19.4б), критерии (19.4в). ThesisNotes 19.28.
 - **Сборка PC** — `Docs/Build.md`; Architecture.md, «Сборка».
 - Пункты `Tools/VR Bridge/…` — полный список в Architecture.md («Навигация (A2)» и разделы запросов). Новые сценарии и ассеты создаются сами при входе в Play Mode (`ScenarioLibrarySync`), без ручного Setup.
 

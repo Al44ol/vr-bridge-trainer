@@ -93,6 +93,8 @@
 //   TowLineBroken        обрыв: Value — наибольшее натяжение, кН
 //   TugPushContact       буксир упёрся в борт: Value — скорость сближения, уз
 //   WindChanged          ветер: Value — скорость, уз (0 — нет); Value2 — откуда, °; Subject — «сценарий» / «меню» / «на начало»
+//   JoystickChanged      19.4а, свой буксир: установившееся положение джойстика — Value — ход, % (> 0 — вперёд),
+//                        Value2 — лагом, % (> 0 — на ПБ), Index — разворот, % (> 0 — нос вправо); Subject — «рукой» / «меню» / «сброс»
 // XTE > 0 — судно правее линии пути.
 // ============================================================
 using System;
@@ -165,7 +167,8 @@ public enum ExerciseEventType
     TowLineOverloadCleared,
     TowLineBroken,
     TugPushContact,
-    WindChanged
+    WindChanged,
+    JoystickChanged
 }
 
 public enum ScenarioEndReason
@@ -295,6 +298,9 @@ public struct ExerciseEvent
             case ExerciseEventType.TugPushContact: return $"Буксир упёрся в борт: {ScenarioText.Num(Value, 2)} уз";
             case ExerciseEventType.WindChanged:
                 return (Value > 0 ? $"Ветер {ScenarioText.Num(Value)} уз, откуда {ScenarioText.Bearing(Value2)}" : "Ветра нет") +
+                       (string.IsNullOrEmpty(Subject) ? "" : $" ({Subject})");
+            case ExerciseEventType.JoystickChanged:
+                return $"Джойстик: {TugJoystick.Describe(new JoystickState(Value / 100.0, Value2 / 100.0, Index / 100.0))}" +
                        (string.IsNullOrEmpty(Subject) ? "" : $" ({Subject})");
         }
         return $"{Type} {Subject}";

@@ -41,7 +41,7 @@ public class BridgeStationSwitch : MonoBehaviour
             BridgeStation st = s;
             string title = st == BridgeStation.Helm ? "К штурвалу" : st == BridgeStation.WingPort ? "Крыло ЛБ (левый борт)" : "Крыло ПБ (правый борт)";
             commands.Add(BridgeMenu.Register(ShipControlOrders.StationsGroup, () => Current == st ? $"{title} <size=70%>(здесь)</size>" : title,
-                () => MoveTo(st), () => Anchor(st) != null && xrOrigin != null).InMenu(ShipControlOrders.MenuId));
+                () => MoveTo(st), () => Anchor(st) != null && xrOrigin != null && !ShipTypeSwitcher.OnTug, hideWhenUnavailable: true).InMenu(ShipControlOrders.MenuId));   // 19.4а: у буксира крыльев нет
         }
         BridgeMenu.SetGroupOrder(ShipControlOrders.StationsGroup, 40);
     }

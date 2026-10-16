@@ -127,6 +127,14 @@ public class ScenarioRunner : MonoBehaviour
             CurrentPhase = Phase.Idle;
             ship.SetType(ShipType.Model45m);
         }
+        // 19.4а: свой буксир — только свободное плавание (упражнение на буксире — 19.4б): тип судна — модель 45 м
+        if (ship != null && ship.Type == ShipType.Tug)
+        {
+            Debug.Log($"[Сценарий] «{scenario.title}» — сценарий для модели 45 м: тип судна переключён с буксира.");
+            Current = null;
+            CurrentPhase = Phase.Idle;
+            ship.SetType(ShipType.Model45m);
+        }
         // Запрос 15: на катере — вариант сценария «-FB» (исходный ассет не меняется)
         scenario = ship != null ? ship.VariantFor(scenario) : ScenarioVariants.SourceOf(scenario);
 

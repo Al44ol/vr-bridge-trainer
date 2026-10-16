@@ -63,6 +63,9 @@
 // (MooringController: причал, кранцы, концы, подруливающее — MooringSystem.Apply); SetMotionModel —
 // смена модели движения кодом (отладка «Судно к причалу», сценарий швартовки), только вне упражнения.
 //
+// Запрос 19.4а: тип судна «буксир» — SetAzimuthDrive(true): штурвал и телеграф в модель не идут, модель — 3 СС,
+// упор колонок по джойстику прикладывает OwnTugDrive в BeforeStep.
+//
 // Тест циркуляции (контекстное меню компонента, меню A «Отладка»; F5 — при keyboardShortcuts): скорость удерживается
 // равной V_эксп, руль 35° ПБ; в лог — координаты каждые 30° изменения курса,
 // выдвиг (90°), тактический диаметр (180°), диаметр установившейся
@@ -168,6 +171,22 @@ public class ShipNavigation : MonoBehaviour
     public event Action<ShipDynamicsModel, double> BeforeStep;
     /// <summary>Смена модели движения (меню, SetMotionModel): true — теперь 3 СС.</summary>
     public event Action<bool> MotionModelChanged;
+    /// <summary>
+    /// 19.4а: свой буксир — движитель из двух азимутальных колонок (OwnTugDrive, через BeforeStep): штурвал и телеграф
+    /// в модель не идут (руль 0, SF = 0 — закон телеграфа даёт сопротивление корпуса), модель — всегда 3 СС.
+    /// </summary>
+    public bool AzimuthDriveActive { get; private set; }
+
+    /// <summary>19.4а: включить/выключить движитель буксира (ShipTypeSwitcher при смене типа судна).</summary>
+    public void SetAzimuthDrive(bool on)
+    {
+        if (AzimuthDriveActive == on) return;
+        bool was3Dof = model != null && model.Uses3Dof;
+        AzimuthDriveActive = on;
+        ApplyMotionModel();
+        bool now3Dof = model != null && model.Uses3Dof;
+        if (model != null && was3Dof != now3Dof) MotionModelChanged?.Invoke(now3Dof);
+    }
 
     // ─────────── 19.3б-2: точка модели = мидель видимого корпуса ───────────
     // Корпус сцены (Hull + BowTip) построен не вокруг ShipRoot: его мидель — центр качки ShipMotion.pivotLocal
@@ -213,7 +232,7 @@ public class ShipNavigation : MonoBehaviour
 
         // Запрос 19.1: модель движения и отладочные силы (вне упражнения)
         motionCommand = BridgeMenu.RegisterStepper("Судно", () => $"Модель движения: {MotionTitle}",
-            () => StepMotion(), () => StepMotion(), () => initialized && OutsideExercise);
+            () => StepMotion(), () => StepMotion(), () => initialized && OutsideExercise && !AzimuthDriveActive);
         pushCommand = BridgeMenu.RegisterStepper("Отладка", () => $"Сила в борт ({DebugForceTonnes:0.#} т): {Side(debugPush, "ПБ", "ЛБ")}",
             () => debugPush = Cycle(debugPush, -1), () => debugPush = Cycle(debugPush, +1),
             () => initialized && OutsideExercise && model.Uses3Dof, instructorOnly: true);
@@ -284,6 +303,7 @@ public class ShipNavigation : MonoBehaviour
     private void ApplyMotionModel()
     {
         if (model == null) return;
+        if (AzimuthDriveActive) { model.MotionOverride = MotionModel.Manoeuvring3Dof; return; }   // 19.4а: буксир — только 3 СС
         model.MotionOverride = motionModel == MotionChoice.AsAsset ? (MotionModel?)null
             : motionModel == MotionChoice.Course1Dof ? MotionModel.Course1Dof : MotionModel.Manoeuvring3Dof;
     }
@@ -420,8 +440,8 @@ public class ShipNavigation : MonoBehaviour
     private void Step(double dt)
     {
         model.Parameters = parameters;   // ассет можно сменить в инспекторе на ходу
-        model.RudderCommandDeg = testActive ? testRudderDeg : (wheel != null ? wheelSignValue * wheel.RudderAngle : 0.0);
-        model.SpeedFactor = telegraph != null ? telegraph.SpeedFactor : 0.0;
+        model.RudderCommandDeg = testActive ? testRudderDeg : (wheel != null && !AzimuthDriveActive ? wheelSignValue * wheel.RudderAngle : 0.0);
+        model.SpeedFactor = telegraph != null && !AzimuthDriveActive ? telegraph.SpeedFactor : 0.0;   // 19.4а: буксир — колонки
         model.HoldServiceSpeed = testActive;   // испытание на циркуляцию — при неизменной скорости
         model.EngineFailed = EngineFailed;
         model.SteeringFailed = SteeringFailed;

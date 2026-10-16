@@ -153,6 +153,13 @@ Unity Test Runner → EditMode (сейчас **250**): `TestResults.xml` — п�
   - **тесты** `TowingSceneTests.BowPullToPush_GoesAroundBow_NoHullContact`, `HullContact_ShipBowIntoTugSide_NoPassThrough` — вывод: время обхода, сила контакта корпусов, заход форштевня; `BerthAssessmentTests` — прогоны 19-01 (табл. 19.18);
   - **стенды** `Mooring Trials`, `Towing Trials` — значения для Model45m с контуром 0,40 (ThesisNotes 19.26.4).
 
+### 2.6о. Свой буксир: джойстик и две колонки (запрос 19.4а)
+- 👓 В шлеме видно: корпус и открытая рубка буксира вокруг стойки, рукоятка джойстика на месте телеграфа, меню B «Джойстик (буксир)». Закадровое:
+  - **событие `JoystickChanged`** в `events.csv` (ход, лагом, разворот в %; источник «рукой» / «меню») — для разбора упражнения 19-03 (19.4б);
+  - **`session.json → ship`** — параметры `ShipParameters_Tug` (тип судна — по имени ассета);
+  - **модель буксира** (`TugMeshes`) строится в Play Mode, ассетом не сохраняется;
+  - **тесты** `OwnTugTests` (6) — вывод для табл. 19.21–19.22: пределы осей джойстика, установившийся ход, лагом, разворот на месте.
+
 ### 2.7. Источники значений параметров
 `Assets/Ocean/Settings/ShipParameters_Sources.md` — откуда взято каждое значение ShipParameters (Mariner, KCS, Model45m, допущения).
 
