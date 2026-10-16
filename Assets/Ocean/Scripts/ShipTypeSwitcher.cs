@@ -98,6 +98,9 @@ public class ShipTypeSwitcher : MonoBehaviour
     [Header("Буксир (19.4а)")]
     [Tooltip("Пусто — Resources/ShipParameters_Tug (создаётся сам при входе в Play Mode), иначе ShipPresets.FillTug")]
     public ShipParameters tugParameters;
+    [Tooltip("19.4а-2: сдвиг рукоятки джойстика (и тумблера «УДЕРЖ. КУРС») от TelegraphHead в системе Ship, м. " +
+             "В Play Mode подвинуть Ship/TugJoystick → Tools/VR Bridge/Tug — запомнить положение джойстика → после выхода Ctrl+S")]
+    public Vector3 tugJoystickOffset;
 
     public ShipType Type { get; private set; } = ShipType.Model45m;
     public event Action TypeChanged;

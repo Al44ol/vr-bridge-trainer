@@ -122,22 +122,62 @@ public sealed class AzimuthDrive
 
     public AzimuthDrive(TugSpec spec) { Spec = spec; }
 
+    // ─────────── 19.4а-2: удержание курса (тумблер «УДЕРЖ. КУРС» на пульте) ───────────
+    // Корпус буксира на ходу неустойчив по курсу (ThesisNotes 19.29.6): при нуле оси разворота он сам уходит
+    // в циркуляцию. С удержанием курса ось разворота задаёт угловую скорость r_з = j′_r·RateMaxDegS; в нуле —
+    // сначала гасится поворот (|r| < CaptureRateDegS), затем держится запомненный курс: r_з = K_ψ·(ψ_з − ψ).
+    // Момент: N = M₃₃·K_r·(r_з − r), |N| ≤ |x_к|·T_гак; на ходу (β = min(1, |u|/1 м/с)) — поперечным упором колонок
+    // в корме Y_N = β·N/x_к (плечо x_к в 4,4 раза больше, чем у разности упоров), на месте — разностью упоров
+    // (разворот без сноса). Если упора не хватает, ход вперёд/назад уменьшается первым (приоритет курса).
+    // Без удержания — как 19.4а (ось разворота — момент разностью упоров, насыщение — пропорционально).
+
+    /// <summary>Удержание курса включено (по умолчанию — да).</summary>
+    public bool HeadingHold = true;
+    public const double RateMaxDegS = 10.0, CaptureRateDegS = 0.5;
+    /// <summary>Коэффициенты: по угловой скорости, 1/с; по курсу, (°/с)/°. Подобраны прогоном (ThesisNotes 19.30).</summary>
+    public double KRate = 4.0, KHeading = 0.3;
+    /// <summary>Держимый курс, ° (NaN — не держится: идёт разворот или гасится поворот).</summary>
+    public double HoldHeadingDeg { get; private set; } = double.NaN;
+
     public void Reset()
     {
         Joystick = JoystickState.Zero;
         OrderX = OrderY = OrderN = ThrustX = ThrustY = ThrustN = 0.0;
         Fx1 = Fy1 = Fx2 = Fy2 = 0.0;
+        HoldHeadingDeg = double.NaN;
     }
 
     /// <summary>Шаг: силы колонок в модель (до model.Step).</summary>
     public void Apply(ShipDynamicsModel m, double dt)
     {
         TugJoystick.Demand(Joystick, Spec, out OrderX, out OrderY, out OrderN);
+        if (HeadingHold) HeadingDemand(m);
+        else HoldHeadingDeg = double.NaN;
         double a = 1.0 - Math.Exp(-dt / Math.Max(1e-3, Spec.SpoolTime));
         ThrustX += (OrderX - ThrustX) * a;
         ThrustY += (OrderY - ThrustY) * a;
         ThrustN += (OrderN - ThrustN) * a;
-        AzimuthAllocation.ApplyTo(m, Spec, ThrustX, ThrustY, ThrustN, out Fx1, out Fy1, out Fx2, out Fy2);
+        if (HeadingHold) AzimuthAllocation.ApplyToHeadingFirst(m, Spec, ThrustX, ThrustY, ThrustN, out Fx1, out Fy1, out Fx2, out Fy2);
+        else AzimuthAllocation.ApplyTo(m, Spec, ThrustX, ThrustY, ThrustN, out Fx1, out Fy1, out Fx2, out Fy2);
+    }
+
+    private void HeadingDemand(ShipDynamicsModel m)
+    {
+        double rDeg = m.R * 180.0 / Math.PI, psiDeg = m.Psi * 180.0 / Math.PI;
+        double jr = TugJoystick.Shape(Joystick.Yaw), rD;
+        if (jr != 0.0) { rD = jr * RateMaxDegS; HoldHeadingDeg = double.NaN; }
+        else
+        {
+            if (double.IsNaN(HoldHeadingDeg) && Math.Abs(rDeg) < CaptureRateDegS) HoldHeadingDeg = psiDeg;
+            rD = double.IsNaN(HoldHeadingDeg) ? 0.0
+                : Math.Max(-RateMaxDegS, Math.Min(RateMaxDegS, KHeading * Math.IEEERemainder(HoldHeadingDeg - psiDeg, 360.0)));
+        }
+        double nMax = Math.Abs(Spec.ThrusterX) * Spec.BollardPull;
+        double n = m.Coefficients3Dof.M33 * KRate * (rD - rDeg) * Math.PI / 180.0;
+        n = Math.Max(-nMax, Math.Min(nMax, n));
+        double beta = Math.Min(1.0, Math.Max(0.0, m.U) / 1.0);   // на заднем ходу — только разность упоров
+        OrderN = n;
+        OrderY += beta * n / Spec.ThrusterX;
     }
 
     /// <summary>Направление упора колонки (1 — ПБ, 2 — ЛБ) от ДП, ° (0 — вперёд, 90 — на ПБ).</summary>

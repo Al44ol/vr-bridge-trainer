@@ -10,6 +10,9 @@
 // колонок, «Ход / Лагом / Разворот: < … >» ступенями 25 %, «Джойстик в ноль» — для крыла и без рук.
 // Событие JoystickChanged — установившееся положение (держится settleSeconds, сдвиг ≥ minChange по какой-либо
 // оси), как TelegraphChanged у телеграфа (BridgeActionMonitor).
+// 19.4а-2: удержание курса (AzimuthDrive.HeadingHold, по умолчанию вкл) — тумблер «УДЕРЖ. КУРС» справа от рукоятки
+// (TugHeadingSwitch) и меню B «Удержание курса»; событие HeadingHoldChanged. Сдвиг рукоятки от TelegraphHead —
+// ShipTypeSwitcher.tugJoystickOffset (Tools/VR Bridge/Tug — запомнить положение джойстика).
 // ============================================================
 using System.Collections.Generic;
 using UnityEngine;
@@ -41,6 +44,27 @@ public class OwnTugDrive : MonoBehaviour
     private JoystickState menuState, published;
     private float lastChangeTime = -1f;
     private string lastSource = "рукой";
+    private TugHeadingSwitch headingSwitch;
+
+    /// <summary>19.4а-2: удержание курса (тумблер «УДЕРЖ. КУРС», меню B) — по умолчанию включено.</summary>
+    public bool HeadingHold => drive == null || drive.HeadingHold;
+
+    /// <summary>Включить/выключить удержание курса; событие HeadingHoldChanged.</summary>
+    public void SetHeadingHold(bool on, string source)
+    {
+        if (drive == null || drive.HeadingHold == on) return;
+        drive.HeadingHold = on;
+        var e = new ExerciseEvent(ExerciseEventType.HeadingHoldChanged) { Value = on ? 1 : 0, Subject = source };
+        if (navigation != null && navigation.Model != null)
+        {
+            e.Position = navigation.PositionEastNorth;
+            e.HeadingDeg = navigation.Heading;
+            e.SpeedKnots = navigation.SpeedKnots;
+        }
+        Debug.Log("[Буксир] " + e.Describe(), this);
+        ExerciseEvents.Publish(e);
+        BridgeMenu.RebuildOpen();
+    }
     private readonly List<BridgeMenuCommand> commands = new List<BridgeMenuCommand>();
 
     void Awake()
@@ -83,6 +107,7 @@ public class OwnTugDrive : MonoBehaviour
         if (on && handle == null) BuildHandle();
         Active = on && drive != null;
         drive?.Reset();
+        if (drive != null) drive.HeadingHold = true;   // 19.4а-2: при каждом включении буксира — удержание курса включено
         menuState = published = JoystickState.Zero;
         if (handle != null)
         {
@@ -174,7 +199,8 @@ public class OwnTugDrive : MonoBehaviour
         go.SetActive(false);
         Transform t = go.transform;
         t.SetParent(head.parent, false);
-        t.localPosition = head.localPosition;
+        // 19.4а-2: сдвиг рукоятки от TelegraphHead — ShipTypeSwitcher.tugJoystickOffset (Tools/VR Bridge/Tug — запомнить положение джойстика)
+        t.localPosition = head.localPosition + (ShipTypeSwitcher.Instance != null ? ShipTypeSwitcher.Instance.tugJoystickOffset : Vector3.zero);
         // +Z рукоятки — к носу судна, в плоскости палубы
         WorldOrigin origin = FindAnyObjectByType<WorldOrigin>();
         Transform ship = origin != null && origin.ship != null ? origin.ship : head.parent;
@@ -184,6 +210,8 @@ public class OwnTugDrive : MonoBehaviour
         handle = go.AddComponent<TugJoystickHandle>();
         handle.Build(body, knob);
         handle.Changed += OnHandleChanged;
+        // 19.4а-2: тумблер «УДЕРЖ. КУРС» — справа от рукоятки (в её системе +X — к ПБ), двигается вместе с ней
+        headingSwitch = TugHeadingSwitch.Build(t, new Vector3(0.15f, 0f, 0f), this, "УДЕРЖ. КУРС");
         Debug.Log($"[Буксир] Рукоятка джойстика построена на месте {head.name} ({head.parent.name}).", this);
     }
 
@@ -205,6 +233,8 @@ public class OwnTugDrive : MonoBehaviour
             () => Active && !State.IsZero, hideWhenUnavailable: true).InMenu(menu);
         zero.CloseOnExecute = false;
         commands.Add(zero);
+        commands.Add(BridgeMenu.RegisterStepper(Group, () => $"Удержание курса: {(HeadingHold ? "вкл" : "выкл")}",
+            () => SetHeadingHold(!HeadingHold, "меню"), () => SetHeadingHold(!HeadingHold, "меню"), () => Active, hideWhenUnavailable: true).InMenu(menu));
         BridgeMenu.SetGroupExpanded(Group, true);
         BridgeMenu.SetGroupOrder(Group, 5);
     }
@@ -221,6 +251,7 @@ public class OwnTugDrive : MonoBehaviour
     private string StatusLine()
     {
         if (drive == null) return "Колонки: —";
-        return $"Колонки: ПБ {drive.UnitDirectionDeg(1):000}° {drive.UnitLoad(1) * 100:0} % · ЛБ {drive.UnitDirectionDeg(2):000}° {drive.UnitLoad(2) * 100:0} %";
+        string hold = !drive.HeadingHold ? "" : double.IsNaN(drive.HoldHeadingDeg) ? " · курс: разворот" : $" · держу курс {drive.HoldHeadingDeg % 360 + (drive.HoldHeadingDeg < 0 ? 360 : 0):000}°";
+        return $"Колонки: ПБ {drive.UnitDirectionDeg(1):000}° {drive.UnitLoad(1) * 100:0} % · ЛБ {drive.UnitDirectionDeg(2):000}° {drive.UnitLoad(2) * 100:0} %{hold}";
     }
 }

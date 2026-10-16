@@ -4,7 +4,10 @@
 // Мёртвая зона и рукоятка; пределы осей X_max, Y_max, N_max — колонки ровно на пределе, без лишних сил;
 // насыщение сохраняет направление; модель 3 СС буксира: полный вперёд/назад ≈ 11–13 уз, лагом — без разворота,
 // разворот — на месте; джойстик в ноль — буксир останавливается. Событие JoystickChanged — текст.
+// 19.4а-2: удержание курса — без него корпус на ходу уходит в циркуляцию, с ним курс держится на всех ходах;
+// ось разворота — угловая скорость, отпустил — новый курс; при нехватке упора — приоритет курса.
 // ============================================================
+using System;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -141,5 +144,84 @@ public class OwnTugTests
 
         var e = new ExerciseEvent(ExerciseEventType.JoystickChanged) { Value = 50, Value2 = 0, Index = -25, Subject = "рукой" };
         Assert.AreEqual("Джойстик: ход вперёд 50 %, разворот нос влево 25 % (рукой)", e.Describe());
+    }
+
+    // ─────────── 19.4а-2: удержание курса ───────────
+
+    private static ShipDynamicsModel Kicked(ShipParameters p, AzimuthDrive d, double surge)
+    {
+        ShipDynamicsModel m = Run(p, d, 90, null, new JoystickState(surge, 0, 0));
+        Run(p, d, 2, m, new JoystickState(surge, 0, 0.4));   // толчок рукоятки на разворот
+        return Run(p, d, 30, m, new JoystickState(surge, 0, 0));
+    }
+
+    private static ShipDynamicsModel Run(ShipParameters p, AzimuthDrive d, double seconds, ShipDynamicsModel m, JoystickState j)
+    {
+        d.Joystick = j;
+        return Run(p, d, seconds, m);
+    }
+
+    [Test]
+    public void HeadingHold_KickAtSpeed_CourseHeld()
+    {
+        ShipParameters p = Tug();
+        var raw = new AzimuthDrive(TugSpec.For(p)) { HeadingHold = false };
+        ShipDynamicsModel mr = Kicked(p, raw, 0.55);
+        Assert.Greater(Math.Abs(mr.R * 180 / Math.PI), 3.0, "без удержания корпус на ходу сам уходит в циркуляцию (ThesisNotes 19.29.6)");
+
+        var hold = new AzimuthDrive(TugSpec.For(p));
+        Assert.IsTrue(hold.HeadingHold, "по умолчанию — включено");
+        ShipDynamicsModel m = Kicked(p, hold, 0.55);
+        double psi0 = m.Psi;
+        double maxR = 0;
+        for (int i = 0; i < 30; i++) { Run(p, hold, 1.0, m); maxR = Math.Max(maxR, Math.Abs(m.R * 180 / Math.PI)); }
+        Assert.Less(maxR, 0.5, "°/с");
+        Assert.Less(Math.Abs(Math.IEEERemainder(m.Psi - psi0, 2 * Math.PI)) * 180 / Math.PI, 1.0, "курс держится");
+        Assert.That(m.U / Kn, Is.InRange(5.0, 7.5));
+    }
+
+    [Test]
+    public void HeadingHold_YawAxisIsRate_ReleaseHoldsNewCourse()
+    {
+        ShipParameters p = Tug();
+        var d = new AzimuthDrive(TugSpec.For(p));
+        ShipDynamicsModel m = Run(p, d, 60, null, new JoystickState(0.55, 0, 0));
+        Run(p, d, 10, m, new JoystickState(0.55, 0, 1));
+        Assert.That(m.R * 180 / Math.PI, Is.InRange(8.0, 11.0), "полный разворот — около RateMaxDegS");
+        Assert.IsTrue(double.IsNaN(d.HoldHeadingDeg), "пока разворот — курс не держится");
+        Run(p, d, 20, m, new JoystickState(0.55, 0, 0));
+        Assert.Less(Math.Abs(m.R * 180 / Math.PI), 0.2, "отпустил — поворот погашен");
+        Assert.IsFalse(double.IsNaN(d.HoldHeadingDeg), "новый курс запомнен");
+        double psi0 = m.Psi;
+        Run(p, d, 30, m);
+        Assert.Less(Math.Abs(Math.IEEERemainder(m.Psi - psi0, 2 * Math.PI)) * 180 / Math.PI, 0.5, "и держится");
+
+        var spin = new AzimuthDrive(TugSpec.For(p));
+        ShipDynamicsModel ms = Run(p, spin, 40, null, new JoystickState(0, 0, 1));
+        Assert.Less(Math.Sqrt(ms.East * ms.East + ms.North * ms.North), 2.0, "на месте — разворот без сноса");
+    }
+
+    [Test]
+    public void HeadingHold_FullAheadAndAstern_PriorityToHeading()
+    {
+        ShipParameters p = Tug();
+        foreach (double surge in new[] { 1.0, -1.0 })
+        {
+            var d = new AzimuthDrive(TugSpec.For(p));
+            ShipDynamicsModel m = Kicked(p, d, surge);
+            double psi0 = m.Psi;
+            Run(p, d, 30, m);
+            Assert.Less(Math.Abs(Math.IEEERemainder(m.Psi - psi0, 2 * Math.PI)) * 180 / Math.PI, 2.0, $"ход {surge}: курс держится");
+            Assert.Greater(Math.Abs(m.U / Kn), 10.0, $"ход {surge}: почти полный");
+        }
+        // Нехватка упора: ход уменьшается первым, момент и поперечная сила — сохраняются
+        TugSpec s = TugSpec.For(p);
+        var mm = new ShipDynamicsModel(p) { MotionOverride = MotionModel.Manoeuvring3Dof };
+        double n = 0.8 * TugJoystick.MaxYaw(s);
+        AzimuthAllocation.ApplyToHeadingFirst(mm, s, s.BollardPull, 0.0, n, out double fx1, out double fy1, out double fx2, out double fy2);
+        AzimuthAllocation.Resultant(fx1, fy1, fx2, fy2, s.ThrusterX, s.ThrusterY, out double rx, out _, out double rn);
+        Assert.AreEqual(n, rn, 1e-3 * n, "момент — полностью");
+        Assert.Less(rx, s.BollardPull, "ход уменьшен");
+        Assert.Greater(rx, 0.0);
     }
 }

@@ -166,6 +166,9 @@ Unity Test Runner → EditMode (сейчас **250**): `TestResults.xml` — п�
   - **события** `PilotOrder`, `TugWorkStage`, `TugWorkContact` (скорость, угол, место), `TugWorkHullContact` — в events.csv после 19.4б-2;
   - **тесты** `TugWorkTests` (7) — вывод для табл. 19.23–19.25; `TowingSceneTests`, `TugBerthTests` — проверка, что вынос `HullToHull` не изменил 19.3.
 
+### 2.6р. Удержание курса своего буксира (запрос 19.4а-2)
+- 👓 В шлеме видно: тумблер «УДЕРЖ. КУРС» справа от рукоятки джойстика. Закадровое: событие `HeadingHoldChanged` в events.csv; тесты `OwnTugTests` (+3) — вывод для табл. 19.26; пункт `Tools/VR Bridge/Tug — запомнить положение джойстика` (сдвиг рукоятки → `ShipTypeSwitcher.tugJoystickOffset`).
+
 ### 2.7. Источники значений параметров
 `Assets/Ocean/Settings/ShipParameters_Sources.md` — откуда взято каждое значение ShipParameters (Mariner, KCS, Model45m, допущения).
 

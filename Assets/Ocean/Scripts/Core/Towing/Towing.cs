@@ -137,6 +137,28 @@ public static class AzimuthAllocation
         return k;
     }
 
+    /// <summary>
+    /// 19.4а-2 (удержание курса своего буксира): как ApplyTo, но при нехватке упора сначала уменьшается X
+    /// (ход вперёд/назад — множитель s ∈ [0; 1], бисекция), а Y и N сохраняются; если и при X = 0 не хватает —
+    /// пропорционально (ApplyTo).
+    /// </summary>
+    public static double ApplyToHeadingFirst(ShipDynamicsModel m, TugSpec s, double X, double Y, double N,
+                                             out double fx1, out double fy1, out double fx2, out double fy2)
+    {
+        double max = 0.5 * s.BollardPull;
+        if (Solve(X, Y, N, s.ThrusterX, s.ThrusterY, max, out _, out _, out _, out _) < 1.0)
+        {
+            double lo = 0.0, hi = 1.0;
+            for (int i = 0; i < 20; i++)
+            {
+                double mid = 0.5 * (lo + hi);
+                if (Solve(mid * X, Y, N, s.ThrusterX, s.ThrusterY, max, out _, out _, out _, out _) >= 1.0) lo = mid; else hi = mid;
+            }
+            X *= lo;
+        }
+        return ApplyTo(m, s, X, Y, N, out fx1, out fy1, out fx2, out fy2);
+    }
+
     /// <summary>Обобщённые силы от упоров колонок (проверка разложения).</summary>
     public static void Resultant(double fx1, double fy1, double fx2, double fy2, double xa, double ya, out double X, out double Y, out double N)
     {
