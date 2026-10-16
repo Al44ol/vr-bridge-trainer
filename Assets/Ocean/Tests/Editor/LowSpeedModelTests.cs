@@ -23,6 +23,7 @@ public class LowSpeedModelTests
         p.length = 45f; p.beam = 8.71f; p.draft = 3f; p.blockCoefficient = 0.6f;
         p.serviceSpeedKnots = 15f; p.accelerationTimeConstant = 30f; p.decelerationTimeConstant = 60f;
         p.nomotoKPrime = 0.8f; p.nomotoTPrime = 2f;
+        p.hullParallelForwardL = 0.4f;   // 19.3б-2: контур — как корпус сцены (Hull + BowTip)
         return p;
     }
 

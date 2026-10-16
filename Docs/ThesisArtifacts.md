@@ -140,6 +140,12 @@ Unity Test Runner → EditMode (сейчас **250**): `TestResults.xml` — п�
   - **консоль** — `[Буксир] …`, `[Ветер] …`, `[Setup 19.3] Буксир создан автоматически…` (первый вход в Play Mode);
   - **тесты** `TowingSceneTests` — вывод: «стоп» держит место, обход носа при смене борта толкания (время, наибольший заход), дуга за кормой при смене тяги, строка состояния в «экзамене» и «обучении».
 
+### 2.6м. Корпус: вид = модель, контакт корпусов (запрос 19.3б-2)
+- 👓 В шлеме видно: корпус ложится на кранцы, не заходя в пирс; буксир обходит оконечности и не проходит сквозь корпус; меню «Ветер откуда: случайно / …». Не видно в шлеме:
+  - **`session.json → ship.hull_parallel_l`** (контур корпуса для схемы «У причала»), **`scenario.wind_random_sector_deg`**;
+  - **тесты** `TowingSceneTests.BowPullToPush_GoesAroundBow_NoHullContact`, `HullContact_ShipBowIntoTugSide_NoPassThrough` — вывод: время обхода, сила контакта корпусов, заход форштевня; `BerthAssessmentTests` — прогоны 19-01 (табл. 19.18);
+  - **стенды** `Mooring Trials`, `Towing Trials` — значения для Model45m с контуром 0,40 (ThesisNotes 19.26.4).
+
 ### 2.7. Источники значений параметров
 `Assets/Ocean/Settings/ShipParameters_Sources.md` — откуда взято каждое значение ShipParameters (Mariner, KCS, Model45m, допущения).
 

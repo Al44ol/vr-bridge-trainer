@@ -38,6 +38,8 @@ public sealed class BerthingPlan
     public double HaulDelayS;
     /// <summary>Выбирать «понемногу» (держать при скорости к причалу > 0,1 уз); false — без остановок.</summary>
     public bool CarefulHaul = true;
+    /// <summary>«Понемногу»: держать край, если он идёт к причалу быстрее HoldAboveKn; снова выбирать — медленнее ResumeBelowKn, уз.</summary>
+    public double HoldAboveKn = 0.06, ResumeBelowKn = 0.03;
     /// <summary>Перейти на крыло со стороны причала (через 5 с после начала).</summary>
     public bool GoToWing = true;
 }
@@ -190,7 +192,7 @@ public sealed class BerthingSimulation
                 {
                     double v = end == 0 ? br.BowSpeedKn : br.SternSpeedKn;
                     double gap = end == 0 ? br.BowGapM : br.SternGapM, other = end == 0 ? br.SternGapM : br.BowGapM;
-                    bool want = sys.InContact || ((haulEnd[end] ? v < 0.1 : v < 0.05) && gap >= other - 1.0);
+                    bool want = sys.InContact || ((haulEnd[end] ? v < Plan.HoldAboveKn : v < Plan.ResumeBelowKn) && gap >= other - 1.0);
                     if (want == haulEnd[end]) continue;
                     foreach (int i in end == 0 ? BowLines : SternLines)
                         if (sys.Lines[i].State == MooringLineState.Fast) Order(i, want ? LineOrder.HaulIn : LineOrder.Hold);

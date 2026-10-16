@@ -226,7 +226,7 @@ public struct BerthReadout
 
     private static void Point(BerthArea b, ShipParameters p, ShipDynamicsModel m, double x, int side, out double gap, out double speedKn)
     {
-        double y = side * MooringHull.HalfBeamAt(x, p.length, p.beam);
+        double y = side * MooringHull.HalfBeamAt(x, p);
         WorldPosition w = MooringHull.ToWorld(m.East, m.North, m.Psi, x, y);
         b.ToLocal(w, out _, out gap);
         WorldPosition v = MooringHull.PointVelocity(m, w);

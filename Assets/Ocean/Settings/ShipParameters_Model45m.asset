@@ -36,3 +36,4 @@ MonoBehaviour:
   rollDamping: 0.1
   heaveDamping: 0.25
   pitchDamping: 0.25
+  hullParallelForwardL: 0.4

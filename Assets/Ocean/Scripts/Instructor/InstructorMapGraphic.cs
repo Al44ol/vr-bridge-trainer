@@ -26,6 +26,8 @@ public class InstructorMapGraphic : DebriefMapGraphic
         public string Id = "";
         public WorldPosition Position;
         public double HeadingDeg, SpeedKnots, LengthM = 45, BeamM = 10;
+        /// <summary>19.3б-2: конец цилиндрической вставки, доля L (MooringHull).</summary>
+        public double ParallelL = MooringHull.ParallelForwardL;
         public Color Color = Color.white;
         public bool Own;
         public readonly List<WorldPosition> Trail = new List<WorldPosition>();
@@ -103,7 +105,7 @@ public class InstructorMapGraphic : DebriefMapGraphic
         L *= k; B *= k;
         double psi = s.HeadingDeg * Math.PI / 180.0;
         hull.Clear();
-        foreach ((double x, double y) in MooringHull.Outline(L, B)) hull.Add(MooringHull.ToWorld(s.Position.East, s.Position.North, psi, x, y));
+        foreach ((double x, double y) in MooringHull.Outline(L, B, s.ParallelL)) hull.Add(MooringHull.ToWorld(s.Position.East, s.Position.North, psi, x, y));
         Polygon(vh, hull, s.Color);
     }
 }

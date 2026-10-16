@@ -1,0 +1,48 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4a2ee9adcd7586b44889f3205a429281, type: 3}
+  m_Name: ShipParameters_Tug
+  m_EditorClassIdentifier: VRBridge.Core::ShipParameters
+  length: 22
+  serviceSpeedKnots: 11
+  accelerationTimeConstant: 13
+  decelerationTimeConstant: 13
+  asternFactor: 0.9
+  nomotoKPrime: 1.5
+  nomotoTPrime: 1
+  minCalcSpeed: 0.05
+  yawModel: 0
+  norrbinAlphaPrime: 0
+  turnSpeedLossCoeff: 0
+  maxRudderAngle: 35
+  rudderRate: 10
+  beam: 8
+  draft: 3.5
+  metacentricHeight: 1.5
+  blockCoefficient: 0.5
+  waterplaneCoefficient: 0.8
+  rollPeriod: 5.436057
+  heavePeriod: 4.1959896
+  pitchPeriod: 4.1959896
+  rollDamping: 0.1
+  heaveDamping: 0.25
+  pitchDamping: 0.25
+  motionModel: 1
+  yawGyrationRadiusL: 0.25
+  centreOfGravityX: 0
+  crossFlowDragCoeff: 0
+  matchTurningCircle: 0
+  rudderLeverL: -0.5
+  rudderSlipstreamFactor: 0.5
+  propellerSideForceFactor: 0
+  diagonalAddedMass: 1
+  fitYawToNomoto: 0

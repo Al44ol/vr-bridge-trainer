@@ -32,7 +32,7 @@ public sealed class LiveMapTracks
         Own.Position = navigation.PositionEastNorth;
         Own.HeadingDeg = navigation.Heading;
         Own.SpeedKnots = navigation.SpeedKnots;
-        if (navigation.parameters != null) { Own.LengthM = navigation.parameters.length; Own.BeamM = navigation.parameters.beam; }
+        if (navigation.parameters != null) { Own.LengthM = navigation.parameters.length; Own.BeamM = navigation.parameters.beam; Own.ParallelL = navigation.parameters.hullParallelForwardL; }
         AddTrail(Own);
 
         seen.Clear();

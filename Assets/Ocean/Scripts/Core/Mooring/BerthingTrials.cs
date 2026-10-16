@@ -97,7 +97,7 @@ public static class BerthingTrials
         m.East = mid.East;
         m.North = mid.North;
         double minN = double.PositiveInfinity;
-        foreach (var (x, y) in MooringHull.Outline(p.length, p.beam))
+        foreach (var (x, y) in MooringHull.Outline(p))
         {
             berth.ToLocal(MooringHull.ToWorld(m.East, m.North, m.Psi, x, y), out _, out double n);
             minN = Math.Min(minN, n);

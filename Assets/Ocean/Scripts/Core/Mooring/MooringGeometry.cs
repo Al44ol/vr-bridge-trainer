@@ -197,20 +197,32 @@ public static class MooringHull
     public const double ParallelForwardL = 0.25;
 
     /// <summary>Шестиугольник в связанных осях (x, y): корма-ЛБ, корма-ПБ, плечо-ПБ, нос, плечо-ЛБ.</summary>
-    public static (double x, double y)[] Outline(double length, double beam)
+    public static (double x, double y)[] Outline(double length, double beam) => Outline(length, beam, ParallelForwardL);
+
+    /// <summary>19.3б-2: то же, конец цилиндрической вставки — parallelL·L от миделя.</summary>
+    public static (double x, double y)[] Outline(double length, double beam, double parallelL)
     {
-        double h = 0.5 * length, w = 0.5 * beam, xs = ParallelForwardL * length;
+        double h = 0.5 * length, w = 0.5 * beam, xs = parallelL * length;
         return new[] { (-h, -w), (-h, w), (xs, w), (h, 0.0), (xs, -w) };
     }
 
+    /// <summary>Контур корпуса судна по его параметрам (ShipParameters.hullParallelForwardL).</summary>
+    public static (double x, double y)[] Outline(ShipParameters p) => Outline(p.length, p.beam, p.hullParallelForwardL);
+
     /// <summary>Полуширина корпуса на x (0 вне длины).</summary>
-    public static double HalfBeamAt(double x, double length, double beam)
+    public static double HalfBeamAt(double x, double length, double beam) => HalfBeamAt(x, length, beam, ParallelForwardL);
+
+    /// <summary>19.3б-2: то же, конец цилиндрической вставки — parallelL·L от миделя.</summary>
+    public static double HalfBeamAt(double x, double length, double beam, double parallelL)
     {
-        double h = 0.5 * length, w = 0.5 * beam, xs = ParallelForwardL * length;
+        double h = 0.5 * length, w = 0.5 * beam, xs = parallelL * length;
         if (x < -h || x > h) return 0.0;
         if (x <= xs) return w;
         return w * (h - x) / Math.Max(1e-9, h - xs);
     }
+
+    /// <summary>Полуширина корпуса судна на x по его параметрам.</summary>
+    public static double HalfBeamAt(double x, ShipParameters p) => HalfBeamAt(x, p.length, p.beam, p.hullParallelForwardL);
 
     /// <summary>Точка корпуса (x, y связанных осей) в мировых координатах.</summary>
     public static WorldPosition ToWorld(double east, double north, double psi, double x, double y)

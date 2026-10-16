@@ -95,8 +95,9 @@ public class MooringTests
         Assert.Greater(r.Fenders, 1);
         Assert.Greater(r.Series.Count, 10);
 
-        BerthingTrials.ImpactRun hard = BerthingTrials.Impact(p, b, 0.5, 0.0, false);
-        Assert.IsTrue(hard.FenderOverload, "0,5 уз — кранцы сверх номинала (подобраны на 2 × энергию 0,15 м/с при C_E 0,5)");
+        // 19.3б-2: у Model45m вставка до 0,40·L (корпус сцены) — навал принимают 6 кранцев, а не 5: номинал — около 0,5 уз
+        BerthingTrials.ImpactRun hard = BerthingTrials.Impact(p, b, 0.6, 0.0, false);
+        Assert.IsTrue(hard.FenderOverload, "0,6 уз — кранцы сверх номинала (подобраны на 2 × энергию 0,15 м/с при C_E 0,5)");
         Assert.Greater(hard.Energy, 5.0 * r.Energy, "энергия ∝ v²");
     }
 

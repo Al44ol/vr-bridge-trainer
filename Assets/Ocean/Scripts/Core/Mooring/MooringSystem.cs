@@ -148,7 +148,7 @@ public sealed class MooringSystem
 
     private void HullLocal(ShipDynamicsModel m)
     {
-        var outline = MooringHull.Outline(Parameters.length, Parameters.beam);
+        var outline = MooringHull.Outline(Parameters);
         for (int i = 0; i < outline.Length; i++)
         {
             WorldPosition w = MooringHull.ToWorld(m.East, m.North, m.Psi, outline[i].x, outline[i].y);
@@ -349,7 +349,7 @@ public sealed class MooringSystem
     public WorldPosition Fairlead(ShipDynamicsModel m, MooringLine line)
     {
         int side = line.State == MooringLineState.Fast ? line.Side : SideToBerth(m);
-        double y = side * MooringHull.HalfBeamAt(line.FairleadX, Parameters.length, Parameters.beam);
+        double y = side * MooringHull.HalfBeamAt(line.FairleadX, Parameters);
         return MooringHull.ToWorld(m.East, m.North, m.Psi, line.FairleadX, y);
     }
 
@@ -361,7 +361,7 @@ public sealed class MooringSystem
         MooringLine line = Lines[i];
         if (line.State == MooringLineState.Fast) { reason = "уже подан"; return false; }
         int side = SideToBerth(m);
-        double y = side * MooringHull.HalfBeamAt(line.FairleadX, Parameters.length, Parameters.beam);
+        double y = side * MooringHull.HalfBeamAt(line.FairleadX, Parameters);
         WorldPosition fl = MooringHull.ToWorld(m.East, m.North, m.Psi, line.FairleadX, y);
         WorldPosition target = MooringHull.ToWorld(m.East, m.North, m.Psi, line.FairleadX + line.LeadAlong, y);
         Berth.ToLocal(target, out double tt, out _);
@@ -417,7 +417,7 @@ public sealed class MooringSystem
     public double DistanceToFace(ShipDynamicsModel m, double x)
     {
         int side = SideToBerth(m);
-        double y = side * MooringHull.HalfBeamAt(x, Parameters.length, Parameters.beam);
+        double y = side * MooringHull.HalfBeamAt(x, Parameters);
         Berth.ToLocal(MooringHull.ToWorld(m.East, m.North, m.Psi, x, y), out _, out double n);
         return n;
     }
@@ -426,7 +426,7 @@ public sealed class MooringSystem
     public double ApproachSpeed(ShipDynamicsModel m, double x)
     {
         int side = SideToBerth(m);
-        double y = side * MooringHull.HalfBeamAt(x, Parameters.length, Parameters.beam);
+        double y = side * MooringHull.HalfBeamAt(x, Parameters);
         WorldPosition v = MooringHull.PointVelocity(m, MooringHull.ToWorld(m.East, m.North, m.Psi, x, y));
         WorldPosition n = Berth.NAxis;
         return -(v.East * n.East + v.North * n.North);

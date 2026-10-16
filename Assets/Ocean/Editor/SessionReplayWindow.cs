@@ -610,7 +610,7 @@ public class SessionReplayWindow : EditorWindow
         double L = session.Meta.ship.length_m, B = session.Meta.ship.beam_m;
         if (L > 0 && B > 0 && L / mpp >= 40.0)
         {
-            List<WorldPosition> hull = DebriefMap.HullOutline(s.Position, s.HeadingDeg, L, B);
+            List<WorldPosition> hull = DebriefMap.HullOutline(s.Position, s.HeadingDeg, L, B, session.Meta.ship.HullParallelL);
             var pts = new Vector3[hull.Count + 1];
             for (int i = 0; i < hull.Count; i++) pts[i] = P(hull[i]);
             pts[hull.Count] = pts[0];

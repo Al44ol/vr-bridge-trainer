@@ -169,6 +169,39 @@ public class ShipNavigation : MonoBehaviour
     /// <summary>Смена модели движения (меню, SetMotionModel): true — теперь 3 СС.</summary>
     public event Action<bool> MotionModelChanged;
 
+    // ─────────── 19.3б-2: точка модели = мидель видимого корпуса ───────────
+    // Корпус сцены (Hull + BowTip) построен не вокруг ShipRoot: его мидель — центр качки ShipMotion.pivotLocal
+    // (у модели 45 м — 5,4 м к носу и 2,7 м к ЛБ от ShipRoot). Контуры контактов (кранцы, кромка, буксир, мели, цели)
+    // считаются вокруг точки модели, поэтому ShipRoot ставится со сдвигом: мидель корпуса — в точке модели.
+    // Модель, запись и оценка от этого не меняются — только где судно нарисовано относительно мира.
+    [Header("Корпус (19.3б-2)")]
+    [Tooltip("Точка модели — мидель видимого корпуса (центр качки ShipMotion). Выкл — как до 19.3б-2 (точка модели = ShipRoot)")]
+    public bool alignHullCentre = true;
+    private ShipMotion hullFrame;
+
+    /// <summary>Мидель корпуса от ShipRoot в осях судна: к носу, к ПБ, м (0 — без совмещения).</summary>
+    public void HullOffset(out double forward, out double starboard)
+    {
+        forward = starboard = 0.0;
+        if (!alignHullCentre) return;
+        if (hullFrame == null)
+        {
+            Transform ship = worldOrigin != null ? worldOrigin.ship : null;
+            hullFrame = ship != null ? ship.GetComponent<ShipMotion>() : GetComponentInChildren<ShipMotion>();
+        }
+        if (hullFrame == null) return;
+        hullFrame.HullCentre(out float f, out float s);
+        forward = f; starboard = s;
+    }
+
+    /// <summary>Точка ShipRoot в мире при позиции модели (восток, север) и курсе psi (рад).</summary>
+    public WorldPosition RootFor(double east, double north, double psi)
+    {
+        HullOffset(out double f, out double s);
+        double sn = Math.Sin(psi), cs = Math.Cos(psi);
+        return new WorldPosition(east - (f * sn + s * cs), north - (f * cs - s * sn));
+    }
+
     void OnEnable()
     {
         if (worldOrigin != null)
@@ -298,8 +331,11 @@ public class ShipNavigation : MonoBehaviour
         model.Psi = ShipDynamicsModel.Wrap2Pi((transform.eulerAngles.y + bowYawOffset) * Mathf.Deg2Rad);
         if (worldOrigin != null)
         {
-            model.East = worldOrigin.ShipPosition.East;
-            model.North = worldOrigin.ShipPosition.North;
+            // 19.3б-2: WorldOrigin хранит точку ShipRoot, модель — мидель корпуса
+            HullOffset(out double f, out double s);
+            double sn = Math.Sin(model.Psi), cs = Math.Cos(model.Psi);
+            model.East = worldOrigin.ShipPosition.East + f * sn + s * cs;
+            model.North = worldOrigin.ShipPosition.North + f * cs - s * sn;
             worldOrigin.ExternalControl = true;
         }
         psiPrev = model.Psi; eastPrev = model.East; northPrev = model.North;
@@ -343,7 +379,8 @@ public class ShipNavigation : MonoBehaviour
         transform.rotation = Quaternion.Euler(0f, (float)(psiShown * Mathf.Rad2Deg) - bowYawOffset, 0f);
         if (worldOrigin != null)
         {
-            worldOrigin.SetShipPosition(eShown, nShown);
+            WorldPosition root = RootFor(eShown, nShown, psiShown);   // 19.3б-2: мидель корпуса — в точке модели
+            worldOrigin.SetShipPosition(root.East, root.North);
             worldOrigin.ShipSpeed = Paused ? 0f : (float)model.U;   // на паузе — без кильватерного следа
         }
     }
@@ -362,7 +399,8 @@ public class ShipNavigation : MonoBehaviour
         transform.rotation = Quaternion.Euler(0f, (float)(model.Psi * Mathf.Rad2Deg) - bowYawOffset, 0f);
         if (worldOrigin != null)
         {
-            worldOrigin.SetShipPosition(model.East, model.North);
+            WorldPosition root = RootFor(model.East, model.North, model.Psi);
+            worldOrigin.SetShipPosition(root.East, root.North);
             worldOrigin.ShipSpeed = Paused ? 0f : (float)model.U;
         }
     }

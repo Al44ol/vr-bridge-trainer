@@ -133,6 +133,11 @@ public class ShipParameters : ScriptableObject
     [Tooltip("19.3а: подбирать демпфирование рыскания k_N и Y'_δ по K', T' (false — k_N = 1 по Clarke, руля нет: Y'_δ = 0; буксир с колонками)")]
     public bool fitYawToNomoto = true;
 
+    [Header("Контур корпуса для контактов (19.3б-2)")]
+    [Tooltip("Конец цилиндрической вставки к носу от миделя, доля L: дальше — клин до форштевня (MooringHull). 0,25 — как до 19.3б-2; " +
+             "Model45m — 0,40: так нарисован корпус сцены (Hull — полной ширины до 0,40·L, BowTip — клин)")]
+    [Range(0f, 0.49f)] public float hullParallelForwardL = (float)MooringHull.ParallelForwardL;
+
     public const float KnotsToMs = 0.514444f;
     public float ServiceSpeedMs => serviceSpeedKnots * KnotsToMs;
 
@@ -180,6 +185,9 @@ public class ShipParameters : ScriptableObject
         rudderLeverL = o.rudderLeverL;
         rudderSlipstreamFactor = o.rudderSlipstreamFactor;
         propellerSideForceFactor = o.propellerSideForceFactor;
+        diagonalAddedMass = o.diagonalAddedMass;
+        fitYawToNomoto = o.fitYawToNomoto;
+        hullParallelForwardL = o.hullParallelForwardL;
     }
 
     /// <summary>Оценить собственные периоды качки по размерениям (формулы — в шапке файла).</summary>

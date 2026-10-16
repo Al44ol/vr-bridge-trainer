@@ -263,6 +263,22 @@ public class ShipMotion : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 19.3б-2: мидель корпуса (центр качки pivotLocal) от ShipRoot в осях судна: к носу, к ПБ, м.
+    /// ShipNavigation ставит ShipRoot так, чтобы эта точка была в точке модели (контуры контактов = видимый корпус).
+    /// </summary>
+    public void HullCentre(out float forward, out float starboard)
+    {
+        CaptureInitial();
+        Vector3 bow = initialRotation * BowLocalAxis;
+        bow.y = 0f;
+        bow = bow.sqrMagnitude > 1e-6f ? bow.normalized : Vector3.back;
+        Vector3 stb = Vector3.Cross(Vector3.up, bow);
+        Vector3 c = initialPosition + initialRotation * pivotLocal;
+        forward = Vector3.Dot(c, bow);
+        starboard = Vector3.Dot(c, stb);
+    }
+
     // Центр сетки точек — центр качки в системе судна (к носу, к ПБ) относительно ShipRoot
     private void SetGridCenter()
     {
@@ -281,7 +297,9 @@ public class ShipMotion : MonoBehaviour
         ShipDynamicsModel nav = navigation != null && navigation.isActiveAndEnabled ? navigation.Model : null;
         if (nav != null)
         {
-            east = nav.East; north = nav.North; psi = nav.Psi;
+            // 19.3б-2: точка модели — мидель корпуса; сетка точек считается от ShipRoot
+            WorldPosition root = navigation.RootFor(nav.East, nav.North, nav.Psi);
+            east = root.East; north = root.North; psi = nav.Psi;
             return;
         }
 

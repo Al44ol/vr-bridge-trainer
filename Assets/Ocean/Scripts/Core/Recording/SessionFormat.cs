@@ -297,6 +297,8 @@ public class SessionScenario
     public SessionMooringTask mooring = new SessionMooringTask();
     /// <summary>19.3б: ветер сценария, уз (0 — нет), и «откуда», °; изменения в упражнении — события WindChanged.</summary>
     public double wind_kn, wind_from_deg;
+    /// <summary>19.3б-2: 0 — направление задано; > 0 — случайное в секторе этой ширины, ° (фактическое — WindChanged «на начало»).</summary>
+    public double wind_random_sector_deg;
     /// <summary>19.3б: буксир можно вызвать в упражнении (меню B «Буксир»).</summary>
     public bool tug_available;
 
@@ -314,7 +316,8 @@ public class SessionScenario
             area = SessionArea.From(s.waterArea),
             motion_model = s.motionModel.ToString(),
             mooring = SessionMooringTask.From(s),
-            wind_kn = SessionMeta.R(s.windKnots), wind_from_deg = SessionMeta.R(s.windFromDeg), tug_available = s.tugAvailable
+            wind_kn = SessionMeta.R(s.windKnots), wind_from_deg = SessionMeta.R(s.windFromDeg), wind_random_sector_deg = SessionMeta.R(s.windRandomSectorDeg),
+            tug_available = s.tugAvailable
         };
         if (s.initial != null)
             r.initial = new SessionInitial
@@ -440,6 +443,8 @@ public class SessionShip
     public double beam_m, draft_m;
     /// <summary>Модель движения (запрос 19.1): Course1Dof — Номото/Норрбин, Manoeuvring3Dof — 3 СС.</summary>
     public string motion_model = "";
+    /// <summary>19.3б-2: контур корпуса — конец цилиндрической вставки к носу, доля L (MooringHull).</summary>
+    public double hull_parallel_l;
 
     public static SessionShip From(ShipParameters p) => new SessionShip
     {
@@ -453,8 +458,12 @@ public class SessionShip
         min_calc_speed_ms = SessionMeta.R(p.minCalcSpeed),
         max_rudder_deg = SessionMeta.R(p.maxRudderAngle), rudder_rate_deg_s = SessionMeta.R(p.rudderRate),
         beam_m = SessionMeta.R(p.beam), draft_m = SessionMeta.R(p.draft),
-        motion_model = p.motionModel.ToString()
+        motion_model = p.motionModel.ToString(),
+        hull_parallel_l = SessionMeta.R(p.hullParallelForwardL)
     };
+
+    /// <summary>Конец цилиндрической вставки, доля L (у записей до 19.3б-2 поля нет — 0,25, как было).</summary>
+    public double HullParallelL => hull_parallel_l > 0 ? hull_parallel_l : MooringHull.ParallelForwardL;
 }
 
 [Serializable]

@@ -210,15 +210,32 @@ public class TowingController : MonoBehaviour
 
     private double WindKnots => wind.SpeedMs / ShipParameters.KnotsToMs;
 
+    // 19.3б-2 (по проверке в шлеме): «Ветер откуда: < случайно / 000° (N) … 315° (NW) >», затем «Ветер: < нет / 10 … 25 уз >».
+    // «Случайно» — направление выбирается случайно при каждом выборе этого положения (и при загрузке сценария
+    // со случайным направлением); выбранное число видно в строке.
+    private bool windRandom;
+    private readonly System.Random windRng = new System.Random();
+
     private void RegisterWindCommands()
     {
         commands.Add(BridgeMenu.RegisterStepper(SettingsGroup,
+            () => $"Ветер откуда: {(windRandom ? "случайно · " : "")}{ScenarioText.Bearing(wind.FromDeg)} ({Compass(wind.FromDeg)})",
+            () => StepWindFrom(-1), () => StepWindFrom(+1)));
+        commands.Add(BridgeMenu.RegisterStepper(SettingsGroup,
             () => WindKnots < 0.05 ? "Ветер: нет" : $"Ветер: {ScenarioText.Num(WindKnots)} уз{(Operating ? "" : " <size=70%>(только 3 СС)</size>")}",
             () => StepWind(-1), () => StepWind(+1)));
-        commands.Add(BridgeMenu.RegisterStepper(SettingsGroup,
-            () => $"Ветер откуда: {ScenarioText.Bearing(wind.FromDeg)} ({Compass(wind.FromDeg)})",
-            () => SetWind(WindKnots, wind.FromDeg - 45.0, "меню"), () => SetWind(WindKnots, wind.FromDeg + 45.0, "меню"),
-            () => WindKnots >= 0.05));
+    }
+
+    // Положения: −1 — случайно, 0…7 — 000°, 045° … 315°
+    private void StepWindFrom(int dir)
+    {
+        int cur = windRandom ? -1 : (int)System.Math.Round((((wind.FromDeg % 360.0) + 360.0) % 360.0) / 45.0) % 8;
+        int next = Mathf.Clamp(cur + dir, -1, 7);
+        if (next == cur && !windRandom) return;
+        windRandom = next < 0;
+        double from = windRandom ? System.Math.Round(windRng.NextDouble() * 360.0) % 360.0 : next * 45.0;
+        if (WindKnots < 0.05) { wind = new Wind(0.0, from); UpdateInspector(); return; }   // без ветра — только направление на будущее
+        SetWind(WindKnots, from, windRandom ? "меню, случайно" : "меню");
     }
 
     private void StepWind(int dir)
@@ -438,7 +455,12 @@ public class TowingController : MonoBehaviour
         {
             if (system != null) Dismiss("загружен сценарий");
             ScenarioDefinition s = Runner != null ? Runner.Current : null;
-            if (s != null) SetWind(s.windKnots, s.windFromDeg, "сценарий");
+            if (s != null)
+            {
+                windRandom = s.windRandomSectorDeg > 0f;
+                double from = s.DrawWindFromDeg(windRng);   // 19.3б-2: случайное направление — заново при каждой загрузке
+                SetWind(s.windKnots, from, windRandom ? "сценарий, случайно" : "сценарий");
+            }
         }
         else if (e.Type == ExerciseEventType.ExerciseStarted)
         {

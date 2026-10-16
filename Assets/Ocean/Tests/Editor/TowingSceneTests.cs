@@ -114,33 +114,61 @@ public class TowingSceneTests
     }
 
     [Test]
-    public void PushSideChange_GoesAroundBow_NotThroughHull()
+    public void PushSideChange_GoesAroundEnd_NotThroughHull()
     {
-        // У миделя с ПБ (толкать «на ЛБ») → «толкать на ПБ»: буксир обходит нос и упирается в ЛБ
+        // У миделя с ПБ (толкать «на ЛБ») → «толкать на ПБ»: буксир обходит корму (ближняя оконечность) и упирается в ЛБ
         TowingSystem ts = Make(TugStation.Midship, out ShipDynamicsModel ship);
         TugCommand stop = TugOrders.Command(TugMode.Stop, 270, 0.25);
         ts.PlaceTug(ship, stop, 30);
         TowingSystem.ShipAxes(ship, ts.Tug.Bow, out _, out double y0);
         Assert.Greater(y0, 0.0, "толкать «на ЛБ» — буксир у ПБ");
         ts.Order(TugCommand.Push(90, 0.25), 0);
-        double t = 0, maxPen = -10, maxCenterPen = -10, contactAt = double.NaN;
+        double t = 0, maxPen = -10, maxCenterPen = -10, maxHull = 0, contactAt = double.NaN;
         bool around = false;
         Run(ts, ship, 360, ref t, () =>
         {
             around |= ts.GoingAround;
             if (!ts.PushContact) maxPen = Math.Max(maxPen, Penetration(ts, ship, ts.Tug.Bow));
             maxCenterPen = Math.Max(maxCenterPen, Penetration(ts, ship, TugCenter(ts)));
+            maxHull = Math.Max(maxHull, ts.HullContactForce);
             if (ts.PushContact && double.IsNaN(contactAt)) contactAt = t;
         });
         TowingSystem.ShipAxes(ship, ts.Tug.Bow, out double x1, out double y1);
         TestContext.Out.WriteLine($"Смена борта: обход {around}, касание ЛБ через {contactAt:F0} с, нос буксира x {x1:F1} y {y1:F1} м, " +
-                                  $"наибольший заход носа без касания {maxPen:F2} м, центра {maxCenterPen:F2} м; судно лагом {ship.V / ShipParameters.KnotsToMs:F2} уз");
+                                  $"наибольший заход носа без касания {maxPen:F2} м, центра {maxCenterPen:F2} м, контакт корпусов до {maxHull / 1000:F0} кН; судно лагом {ship.V / ShipParameters.KnotsToMs:F2} уз");
         Assert.IsTrue(around);
         Assert.IsFalse(double.IsNaN(contactAt), "буксир дошёл до ЛБ");
         Assert.Less(y1, 0.0);
         Assert.Less(maxPen, 0.3, "нос буксира не проходит сквозь корпус");
         Assert.Less(maxCenterPen, 0.0, "корпус буксира не проходит сквозь судно");
+        Assert.AreEqual(0.0, maxHull, 1e-9, "при обходе корпуса не соприкасались");
         Assert.Greater(ship.V, 0.0, "толкает на ПБ");
+    }
+
+    [Test]
+    public void BowPullToPush_GoesAroundBow_NoHullContact()
+    {
+        // 19.3б-2 (проверка в шлеме 16.10.2026: буксир прошёл сквозь нос): у носа на линии «вперёд» → «толкать на ПБ»
+        TowingSystem ts = Make(TugStation.Bow, out ShipDynamicsModel ship);
+        TugCommand stop = TugOrders.Command(TugMode.Stop, 0, 0.1);
+        ts.PlaceTug(ship, stop, 30);
+        ts.Order(stop, 0);
+        ts.Order(TugCommand.Push(90, 0.1), 0);
+        double t = 0, maxHull = 0, maxPen = -10, contactAt = double.NaN;
+        Run(ts, ship, 300, ref t, () =>
+        {
+            maxHull = Math.Max(maxHull, ts.HullContactForce);
+            if (!ts.PushContact) maxPen = Math.Max(maxPen, Penetration(ts, ship, ts.Tug.Bow));
+            if (ts.PushContact && double.IsNaN(contactAt)) contactAt = t;
+        });
+        TowingSystem.ShipAxes(ship, ts.Tug.Bow, out double x, out double y);
+        TestContext.Out.WriteLine($"У носа «вперёд» → толкать на ПБ: касание ЛБ через {contactAt:F0} с у x {x:F1} м (точка {ts.PushPointX:F1}), y {y:F1}; " +
+                                  $"контакт корпусов до {maxHull / 1000:F0} кН, заход носа без касания {maxPen:F2} м");
+        Assert.IsFalse(double.IsNaN(contactAt));
+        Assert.Less(y, 0.0, "толкать на ПБ — буксир у ЛБ");
+        Assert.That(x, Is.InRange(5.0, 18.0), "упирается в носовой части (судно от толчка у носа разворачивается — точка смещается)");
+        Assert.Less(maxHull, 50e3, "корпусом — не больше лёгкого касания");
+        Assert.Less(maxPen, 0.3, "нос буксира не заходит в корпус");
     }
 
     [Test]
@@ -168,6 +196,34 @@ public class TowingSceneTests
         Assert.Less(maxPen, 0.0);
         Assert.Greater(minBehind, 5.0, "проходит за кормой");
         Assert.IsTrue(ts.Line.Fast);
+    }
+
+    [Test]
+    public void HullContact_ShipBowIntoTugSide_NoPassThrough()
+    {
+        // 19.3б-2: судно 2 уз носом в борт буксира, стоящего поперёк в 40 м впереди (буксир пассивный — регуляторы 0)
+        TowingSystem ts = Make(TugStation.Stern, out ShipDynamicsModel ship);
+        ship.Teleport(0, 0, 0, 2.0 * ShipParameters.KnotsToMs, 0);
+        ship.SpeedFactor = 0.0;
+        ts.Tug.Omega = ts.Tug.OmegaHeading = 0.0;
+        ts.Order(TugCommand.Stop, 0);
+        ts.Tug.Model.Teleport(0, 0.5 * ts.ShipParams.length + 40.0, Math.PI / 2.0, 0, 0);
+        double t = 0, maxStem = -10, maxF = 0, tugMoved = 0;
+        WorldPosition tug0 = ts.Tug.Position;
+        Run(ts, ship, 120, ref t, () =>
+        {
+            // Форштевень судна в корпусе буксира
+            WorldPosition stem = MooringHull.ToWorld(ship.East, ship.North, ship.Psi, 0.5 * ts.ShipParams.length, 0);
+            TowingSystem.ShipAxes(ts.Tug.Model, stem, out double x, out double y);
+            double half = MooringHull.HalfBeamAt(x, ts.Tug.Model.Parameters);
+            if (half > 0) maxStem = Math.Max(maxStem, half - Math.Abs(y));
+            maxF = Math.Max(maxF, ts.HullContactForce);
+        });
+        tugMoved = ts.Tug.Position.North - tug0.North;
+        TestContext.Out.WriteLine($"Судно 2 уз в борт буксира: наибольший заход форштевня {maxStem:F2} м, сила до {maxF / 1000:F0} кН, буксир сдвинут на {tugMoved:F1} м, ход судна {ship.U / ShipParameters.KnotsToMs:F2} уз");
+        Assert.Greater(maxF, 0.0, "был контакт корпусов");
+        Assert.Less(maxStem, 0.5, "форштевень не проходит сквозь буксир");
+        Assert.Greater(tugMoved, 1.0, "буксир отжат вперёд");
     }
 
     [Test]
@@ -326,6 +382,20 @@ public class TowingSceneTests
         var calm = ScriptableObject.CreateInstance<ScenarioDefinition>();
         StringAssert.DoesNotContain("Ветер", ExerciseTasks.BriefingFacts(calm), "у прежних сценариев строк нет");
         StringAssert.DoesNotContain("Буксир", ExerciseTasks.BriefingFacts(calm));
+        // 19.3б-2: направление ветра — заданное или случайное в секторе
+        var rng = new System.Random(1);
+        Assert.AreEqual(90.0, s.DrawWindFromDeg(rng), "сектор 0 — заданное");
+        s.windFromDeg = 330f; s.windRandomSectorDeg = 90f;
+        var seen = new HashSet<double>();
+        for (int i = 0; i < 200; i++)
+        {
+            double d = s.DrawWindFromDeg(rng);
+            seen.Add(d);
+            Assert.LessOrEqual(Math.Abs(Math.IEEERemainder(d - 330.0, 360.0)), 45.0 + 0.5, $"{d} — в секторе 330° ± 45°");
+        }
+        Assert.Greater(seen.Count, 20, "направления разные");
+        StringAssert.Contains("Ветер: 20 уз, направление — около 330°", ExerciseTasks.BriefingFacts(s));
+        Assert.AreEqual(90.0, SessionScenario.From(s).wind_random_sector_deg);
         Assert.AreEqual("нет", ScenarioText.Wind(0, 90));
         Assert.AreEqual("005°", ScenarioText.Bearing(365));
     }

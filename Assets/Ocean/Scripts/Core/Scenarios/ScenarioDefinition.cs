@@ -174,8 +174,19 @@ public class ScenarioDefinition : ScriptableObject
     public float windKnots;
     [Tooltip("Ветер — откуда, ° (0 = N, по часовой)")]
     public float windFromDeg;
+    [Tooltip("19.3б-2: 0 — направление задано (windFromDeg); > 0 — случайное при каждой загрузке в секторе этой ширины вокруг windFromDeg, °; 360 — любое")]
+    [Range(0f, 360f)] public float windRandomSectorDeg;
     [Tooltip("Буксир можно вызвать из меню B («Буксир») во время упражнения; в свободном плавании — всегда")]
     public bool tugAvailable;
+
+    /// <summary>19.3б-2: направление ветра при загрузке: заданное или случайное в секторе (random — источник случайных чисел).</summary>
+    public double DrawWindFromDeg(System.Random random)
+    {
+        if (windRandomSectorDeg <= 0f || random == null) return windFromDeg;
+        double sector = Math.Min(360.0, windRandomSectorDeg);
+        double d = windFromDeg + (random.NextDouble() - 0.5) * sector;
+        return Math.Round(((d % 360.0) + 360.0) % 360.0);
+    }
 
     /// <summary>Сценарий швартовки (задания вместо маршрута).</summary>
     public bool IsMooring => mooring != null && mooring.enabled;

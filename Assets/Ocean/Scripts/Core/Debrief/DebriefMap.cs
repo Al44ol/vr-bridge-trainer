@@ -191,7 +191,7 @@ public static class DebriefMap
         {
             bool fender = e.Type == ExerciseEventType.BerthingImpact, quay = e.Type == ExerciseEventType.QuayImpact;
             if (!fender && !quay) continue;
-            WorldPosition p = ContactPoint(area, e.Position, e.HeadingDeg, L, B);
+            WorldPosition p = ContactPoint(area, e.Position, e.HeadingDeg, L, B, s.Meta.ship.HullParallelL);
             string speed = ScenarioText.Num(e.Value, 2);
             // Повторные касания в том же месте (ближе 5 м) — одна отметка, скорости через «·»: «навал 0,29 · 0,05 уз»
             MapMarker same = d.Markers.Find(x => x.Layer == MapLayer.Berthing && x.Ok == fender && (x.Position - p).Magnitude < BerthingMergeM);
@@ -212,12 +212,12 @@ public static class DebriefMap
     public const double BerthingMergeM = 5.0;
 
     /// <summary>Точка касания: ближайшая к кромке вершина контура корпуса (MooringHull), перенесённая на кромку ближайшего причала.</summary>
-    public static WorldPosition ContactPoint(SessionArea area, WorldPosition ship, double headingDeg, double length, double beam)
+    public static WorldPosition ContactPoint(SessionArea area, WorldPosition ship, double headingDeg, double length, double beam, double parallelL = MooringHull.ParallelForwardL)
     {
         BerthArea b = NearestBerth(area, ship, out _, out _);
         if (b == null || length <= 0 || beam <= 0) return ship;
         double psi = headingDeg * Math.PI / 180.0, bestN = double.MaxValue, bestT = 0;
-        foreach ((double x, double y) in MooringHull.Outline(length, beam))
+        foreach ((double x, double y) in MooringHull.Outline(length, beam, parallelL))
         {
             b.ToLocal(MooringHull.ToWorld(ship.East, ship.North, psi, x, y), out double t, out double n);
             if (n < bestN) { bestN = n; bestT = t; }
@@ -243,11 +243,11 @@ public static class DebriefMap
     }
 
     /// <summary>Контур корпуса L × B (MooringHull) в точке с курсом, мировые координаты.</summary>
-    public static List<WorldPosition> HullOutline(WorldPosition ship, double headingDeg, double length, double beam)
+    public static List<WorldPosition> HullOutline(WorldPosition ship, double headingDeg, double length, double beam, double parallelL = MooringHull.ParallelForwardL)
     {
         var pts = new List<WorldPosition>(5);
         double psi = headingDeg * Math.PI / 180.0;
-        foreach ((double x, double y) in MooringHull.Outline(length, beam)) pts.Add(MooringHull.ToWorld(ship.East, ship.North, psi, x, y));
+        foreach ((double x, double y) in MooringHull.Outline(length, beam, parallelL)) pts.Add(MooringHull.ToWorld(ship.East, ship.North, psi, x, y));
         return pts;
     }
 
@@ -298,7 +298,7 @@ public static class DebriefMap
             {
                 TrackSample st = s.StateAt(t);
                 if (b.DistanceTo(st.Position) > BerthViewWithinM) continue;
-                List<WorldPosition> hull = HullOutline(st.Position, st.HeadingDeg, L, B);
+                List<WorldPosition> hull = HullOutline(st.Position, st.HeadingDeg, L, B, s.Meta.ship.HullParallelL);
                 d.Polygons.Add(new MapPolygon { Layer = MapLayer.HullOutline, Points = hull, Label = ScenarioText.Clock(t) });
                 if (b.DistanceTo(st.Position) <= NearM) foreach (WorldPosition p in hull) r.Include(p);
             }
