@@ -12,7 +12,8 @@
 // Документ — AreaDocument (Core): правка → Commit (отмена), сохранение с историей, черновик раз в 2 мин.
 // 21.2б — знаки МАМС: палитра 8 типов, щелчок по пустому месту — поставить в узел сетки, щелчок по
 // знаку — выделить и тянуть, Delete — удалить, справа — свойства знака (имя, тип, положение, огонь);
-// правка знаков — AidEditing (Core). 21.3 — мели, суша, фарватеры, причалы; 21.4 — слой сценария.
+// правка знаков — AidEditing (Core). 21.3а — мели и суша (ScenarioEditorShapes.cs, partial-класс);
+// 21.3б — фарватеры, причалы; 21.4 — слой сценария.
 // ============================================================
 using System;
 using System.Collections;
@@ -27,9 +28,9 @@ using UnityEngine.Rendering.Universal;
 using UnityEngine.UI;
 using UnityEngine.XR;
 
-public class ScenarioEditorApp : MonoBehaviour
+public partial class ScenarioEditorApp : MonoBehaviour
 {
-    private enum Tool { Select, Bounds, Aid }
+    private enum Tool { Select, Bounds, Aid, Shoal, Land }
 
     private const float TopBar = 56f, PaletteWidth = 230f, PropsWidth = 440f, StatusBar = 32f, Pad = 8f;
     private static readonly Color Background = new Color(0.05f, 0.06f, 0.08f, 1f);
@@ -221,15 +222,19 @@ public class ScenarioEditorApp : MonoBehaviour
             y -= MonitorUi.RowHeight + MonitorUi.Gap;
         }
         y -= 2f * MonitorUi.Gap;
-        TextMeshProUGUI soon = MonitorUi.Text(p, "Скоро: мели и суша, фарватеры, причалы — 21.3; сценарий — 21.4.", 14f, MonitorUi.MutedColor, TextAlignmentOptions.TopLeft);
-        MonitorUi.TopLeft(soon.rectTransform, Pad, y, w, 56f);
-        y -= 64f;   // три строки при ширине палитры
+        y -= 2f * MonitorUi.Gap;
+        BuildShapePalette(p, ref y, w);   // 21.3а
+        y -= 2f * MonitorUi.Gap;
+        TextMeshProUGUI soon = MonitorUi.Text(p, "Скоро: фарватеры и причалы — 21.3б; сценарий — 21.4.", 14f, MonitorUi.MutedColor, TextAlignmentOptions.TopLeft);
+        MonitorUi.TopLeft(soon.rectTransform, Pad, y, w, 40f);
+        y -= 44f;   // две строки при ширине палитры
         TextMeshProUGUI help = MonitorUi.Text(p,
-            "Колесо — масштаб\nПравая кнопка (в «Выборе» и левая на пустом месте) — сдвиг\n" +
-            "Знак: щелчок по пустому месту — поставить, по знаку — выделить и тянуть; Delete — удалить\n" +
-            "Ctrl+Z / Ctrl+Y — отменить / повторить\nCtrl+S — сохранить\nEsc — «Выбор», ещё раз — снять выделение",
+            "Колесо — масштаб; правая кнопка — сдвиг\n" +
+            "Знак: щелчок — поставить; по знаку — тянуть\n" +
+            "Мель, суша: щелчки — вершины, Enter — замкнуть\n" +
+            "Delete — удалить; Esc — «Выбор» / снять выделение\nCtrl+Z / Ctrl+Y, Ctrl+S",
             14f, MonitorUi.MutedColor, TextAlignmentOptions.TopLeft);
-        MonitorUi.TopLeft(help.rectTransform, Pad, y, w, 260f);
+        MonitorUi.TopLeft(help.rectTransform, Pad, y, w, 200f);
     }
 
     private static string AidTitle(AidType t)
@@ -332,9 +337,10 @@ public class ScenarioEditorApp : MonoBehaviour
                   () => SelAid != null && !string.IsNullOrEmpty(SelAid.lightCharacter));
         ui.Button(g, ref xa, ya, half, "Удалить знак", MonitorUi.StopColor, DeleteAid);
         ya -= MonitorUi.RowHeight + 3f * MonitorUi.Gap;
+        float ys = BuildShapeProps(p, w);   // 21.3а: свойства мели / суши
         ShowPropsGroup();
 
-        float yc = Mathf.Min(y, ya);
+        float yc = Mathf.Min(y, Mathf.Min(ya, ys));
         Header(p, "Проверка", ref yc);
         checkText = MonitorUi.Text(p, "", 15f, Color.white, TextAlignmentOptions.TopLeft);
         MonitorUi.TopLeft(checkText.rectTransform, Pad, yc, w, 1080f - TopBar - StatusBar + yc - Pad);
@@ -380,6 +386,10 @@ public class ScenarioEditorApp : MonoBehaviour
         mapDirty = true;
         selectedAid = -1;
         dragAid = false;
+        selShape = AreaShape.None;
+        draft.Clear();
+        dragVertex = -1;
+        dragShape = false;
         ShowPropsGroup();
         FitArea();
         FillFields();
@@ -443,6 +453,7 @@ public class ScenarioEditorApp : MonoBehaviour
         Set(nMinField, MonitorUi.Num(a.boundsMin.North, 0));
         Set(nMaxField, MonitorUi.Num(a.boundsMax.North, 0));
         FillAidFields();
+        FillShapeFields();
     }
 
     // ─────────── Знаки (21.2б) ───────────
@@ -456,23 +467,30 @@ public class ScenarioEditorApp : MonoBehaviour
         EventSystem es = EventSystem.current;
         if (es != null && es.currentSelectedGameObject != null) es.SetSelectedGameObject(null);   // onEndEdit — прежнему знаку
         selectedAid = i;
+        if (i >= 0) selShape = AreaShape.None;   // 21.3а: выделено что-то одно
         ShowPropsGroup();
         FillAidFields();
         Refresh();
     }
 
-    // После отмены / повтора — тот же знак по имени (номер в списке мог измениться)
-    private void Reselect(string name)
+    // После отмены / повтора — тот же знак или фигура по имени (номер в списке мог измениться)
+    private (string aid, AreaShapeKind kind, string shape) SelectionKey() =>
+        (SelAid?.name, selShape.Kind, doc != null ? PolygonEditing.Name(doc.Area, selShape) : null);
+
+    private void Reselect((string aid, AreaShapeKind kind, string shape) key)
     {
-        selectedAid = name == null || doc == null ? -1 : doc.Area.aids.FindIndex(x => x != null && x.name == name);
+        selectedAid = key.aid == null || doc == null ? -1 : doc.Area.aids.FindIndex(x => x != null && x.name == key.aid);
+        selShape = doc != null ? PolygonEditing.Find(doc.Area, key.kind, key.shape) : AreaShape.None;
+        hotVertex = hotMid = dragVertex = -1;
         ShowPropsGroup();
     }
 
     private void ShowPropsGroup()
     {
-        bool aid = SelAid != null;
-        if (areaGroup != null) areaGroup.gameObject.SetActive(!aid);
+        bool aid = SelAid != null, shape = !aid && SelVerts != null;
+        if (areaGroup != null) areaGroup.gameObject.SetActive(!aid && !shape);
         if (aidGroup != null) aidGroup.gameObject.SetActive(aid);
+        if (shapeGroup != null) shapeGroup.gameObject.SetActive(shape);
     }
 
     private void FillAidFields()
@@ -526,13 +544,13 @@ public class ScenarioEditorApp : MonoBehaviour
 
     private void Undo()
     {
-        string sel = SelAid?.name;
+        var sel = SelectionKey();
         if (doc != null && doc.Undo()) { Reselect(sel); mapDirty = true; FillFields(); Refresh(); }
     }
 
     private void Redo()
     {
-        string sel = SelAid?.name;
+        var sel = SelectionKey();
         if (doc != null && doc.Redo()) { Reselect(sel); mapDirty = true; FillFields(); Refresh(); }
     }
 
@@ -541,6 +559,9 @@ public class ScenarioEditorApp : MonoBehaviour
         tool = t;
         dragHandle = -1;
         dragAid = false;
+        draft.Clear();   // 21.3а: недорисованная фигура отменяется
+        dragVertex = -1;
+        dragShape = false;
         Refresh();
     }
 
@@ -732,13 +753,14 @@ public class ScenarioEditorApp : MonoBehaviour
         }
         bool ctrl = k.leftCtrlKey.isPressed || k.rightCtrlKey.isPressed;
         bool shift = k.leftShiftKey.isPressed || k.rightShiftKey.isPressed;
+        if (!dialogOpen && DraftKeys(k)) return;   // 21.3а: Enter, Backspace, Esc при рисовании
         if (k.escapeKey.wasPressedThisFrame)
         {
             if (dialogOpen && doc != null) CloseDialog();
             else if (tool != Tool.Select) SetTool(Tool.Select);
-            else SelectAid(-1);
+            else { SelectAid(-1); SelectShape(AreaShape.None); }
         }
-        if (!dialogOpen && k.deleteKey.wasPressedThisFrame) DeleteAid();
+        if (!dialogOpen && k.deleteKey.wasPressedThisFrame) DeleteSelected();
         if (dialogOpen || !ctrl) return;
         if (k.zKey.wasPressedThisFrame) { if (shift) Redo(); else Undo(); }
         else if (k.yKey.wasPressedThisFrame) Redo();
@@ -762,11 +784,16 @@ public class ScenarioEditorApp : MonoBehaviour
 
         // Нажатие
         int hot = tool == Tool.Bounds && inside ? NearestHandle(px, py, 12.0) : -1;
-        int hotAid = tool != Tool.Bounds && inside && !dragAid && dragHandle < 0 ? AidEditing.HitTest(doc.Area, viewport, px, py, 11.0) : -1;
+        ShapeHover(inside, px, py, world);   // 21.3а: ручки выделенной фигуры, фигура под курсором
+        bool shapeHandle = hotVertex >= 0 || hotMid >= 0;
+        int hotAid = tool != Tool.Bounds && inside && !dragAid && dragHandle < 0 && dragVertex < 0 && !dragShape && !shapeHandle && draft.Count == 0
+            ? AidEditing.HitTest(doc.Area, viewport, px, py, 11.0) : -1;
         if (inside && (m.rightButton.wasPressedThisFrame || m.middleButton.wasPressedThisFrame)) { panning = true; lastLocal = local; }
         if (inside && m.leftButton.wasPressedThisFrame)
         {
             if (hot >= 0) dragHandle = hot;
+            else if (IsDrawTool(tool) && draft.Count > 0) DraftClick(local, px, py, snapped);
+            else if (shapeHandle) ShapeHandlePress(snapped);
             else if (hotAid >= 0)
             {
                 // Знак под курсором — выделить; двигается, когда мышь сдвинулась больше чем на 3 пикс.
@@ -784,9 +811,12 @@ public class ScenarioEditorApp : MonoBehaviour
                 dragMoved = true;
                 pressLocal = local;
             }
+            else if (IsDrawTool(tool)) DraftClick(local, px, py, snapped);   // первая вершина мели / суши
+            else if (tool == Tool.Select && ShapeBodyPress(local, world, snapped)) { }
             else
             {
                 SelectAid(-1);
+                SelectShape(AreaShape.None);
                 panning = true;
                 lastLocal = local;
             }
@@ -804,6 +834,7 @@ public class ScenarioEditorApp : MonoBehaviour
             if (!dragMoved && (local - pressLocal).magnitude > 3f) dragMoved = true;
             if (dragMoved) { AidEditing.Move(doc.Area, selectedAid, snapped); FillAidFields(); }
         }
+        if (dragVertex >= 0 || dragShape) ShapeDrag(local, snapped);
         // Отпустили
         bool anyHeld = m.leftButton.isPressed || m.rightButton.isPressed || m.middleButton.isPressed;
         if (!anyHeld)
@@ -818,13 +849,16 @@ public class ScenarioEditorApp : MonoBehaviour
                 dragAid = false;
                 if (doc.Commit()) { FillFields(); Refresh(); }   // поставили или передвинули — один шаг отмены
             }
+            ShapeRelease();
             panning = false;
         }
 
         hoverAid = dragAid ? selectedAid : hotAid;
         overlay.HotHandle = dragHandle >= 0 ? dragHandle : hot;
         overlay.HotAid = hoverAid;
-        overlay.ShowCursor = inside && (tool == Tool.Bounds || (tool == Tool.Aid && hotAid < 0) || (dragAid && dragMoved));
+        overlay.ShowCursor = inside && (tool == Tool.Bounds || (tool == Tool.Aid && hotAid < 0) || (dragAid && dragMoved) ||
+                                        (IsDrawTool(tool) && !shapeHandle) || dragVertex >= 0 || (dragShape && shapeMoved));
+        FeedShapeOverlay(snapped);
         overlay.Cursor = snapped;
         cursorWorld = world;
         cursorInside = inside;
@@ -968,6 +1002,9 @@ public class ScenarioEditorApp : MonoBehaviour
             AidToNavigation x = doc.Area.aids[hoverAid];
             pos += $" · знак «{x.name}» — {IalaMarks.Get(x.type).TitleRu.ToLowerInvariant()}, {x.Light}";
         }
+        else if (cursorInside && !hoverShape.IsNone)
+            pos += $" · {PolygonEditing.Title(hoverShape.Kind).ToLowerInvariant()} «{PolygonEditing.Name(doc.Area, hoverShape)}»";
+        if (draft.Count > 0) { statusText.text = pos + DraftStatus(); return; }   // 21.3а: подсказка рисования
         string saved = doc.SavedAt.HasValue ? $"сохранено {doc.SavedAt.Value:HH:mm}" : doc.Dirty ? "не сохранено" : "";
         statusText.text = $"{pos} · 1 пикс. = {MonitorUi.Num(viewport.MetersPerPixel, viewport.MetersPerPixel < 10 ? 1 : 0)} м · сетка {MapGrid.StepTitle(GridStep)}" +
                           $"{(snap ? " (привязка)" : "")} · {saved}{(lastDraftText.Length > 0 ? " · " + lastDraftText : "")}";

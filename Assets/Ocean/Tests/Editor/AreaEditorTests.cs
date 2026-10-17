@@ -302,4 +302,113 @@ public class AreaEditorTests
         Assert.AreEqual(AidType.CardinalEast, back.Area.aids[0].type);
         Assert.AreEqual("E-1", back.Area.aids[0].name);
     }
+
+    // ─────────── 21.3а: мели и суша ───────────
+    private static List<WorldPosition> Square(double e0, double n0, double size) => new List<WorldPosition>
+    {
+        new WorldPosition(e0, n0), new WorldPosition(e0 + size, n0), new WorldPosition(e0 + size, n0 + size), new WorldPosition(e0, n0 + size)
+    };
+
+    [Test]
+    public void Shapes_AddNamesHitRemove_FindAfterUndo()
+    {
+        AreaDocument doc = AreaDocument.New("Фигуры");
+        WaterArea a = doc.Area;
+        Assert.IsTrue(PolygonEditing.Add(a, AreaShapeKind.Shoal, Square(0, 0, 100).GetRange(0, 2)).IsNone, "меньше 3 вершин — нет фигуры");
+        AreaShape land = PolygonEditing.Add(a, AreaShapeKind.Land, Square(-500, -500, 1000));
+        AreaShape s1 = PolygonEditing.Add(a, AreaShapeKind.Shoal, Square(0, 0, 100));
+        AreaShape s2 = PolygonEditing.Add(a, AreaShapeKind.Shoal, Square(50, 50, 100));
+        Assert.AreEqual("Суша-1", PolygonEditing.Name(a, land));
+        Assert.AreEqual("Мель-1", PolygonEditing.Name(a, s1));
+        Assert.AreEqual("Мель-2", PolygonEditing.Name(a, s2));
+        Assert.AreEqual(2f, a.shoals[0].depth, 1e-6, "мель по умолчанию — 2 м при глубине 30 м");
+        Assert.AreEqual(10f, a.land[0].height, 1e-6);
+
+        Assert.AreEqual(s2, PolygonEditing.HitShape(a, new WorldPosition(75, 75)), "наложение мелей — поставленная позже");
+        Assert.AreEqual(s1, PolygonEditing.HitShape(a, new WorldPosition(25, 25)), "мель поверх суши");
+        Assert.AreEqual(land, PolygonEditing.HitShape(a, new WorldPosition(-300, 0)));
+        Assert.IsTrue(PolygonEditing.HitShape(a, new WorldPosition(900, 900)).IsNone);
+        doc.Commit();
+
+        Assert.IsTrue(PolygonEditing.Remove(a, s1));
+        Assert.AreEqual("Мель-1", PolygonEditing.NextName(a, AreaShapeKind.Shoal), "первый свободный номер");
+        doc.Commit();
+        Assert.IsTrue(doc.Undo());
+        Assert.AreEqual(2, doc.Area.shoals.Count);
+        AreaShape found = PolygonEditing.Find(doc.Area, AreaShapeKind.Shoal, "Мель-2");
+        Assert.AreEqual(1, found.Index, "после отмены — по имени");
+    }
+
+    [Test]
+    public void Shapes_VertexHandles_InsertRemoveTranslate()
+    {
+        List<WorldPosition> sq = Square(0, 0, 100);
+        // 1 пикс. = 1 м, центр окна (500; 400) — точка (50; 50): вершина (0; 0) — пиксель (450; 350)
+        var v = new MapViewport { Follow = false, WidthPx = 1000, HeightPx = 800, MetersPerPixel = 1.0, Center = new WorldPosition(50, 50) };
+        Assert.AreEqual(0, PolygonEditing.NearestVertex(sq, v, 455, 352, 9.0));
+        Assert.AreEqual(-1, PolygonEditing.NearestVertex(sq, v, 470, 350, 9.0));
+        Assert.AreEqual(0, PolygonEditing.NearestMidpoint(sq, v, 500, 352, 9.0), "середина южной стороны");
+        Assert.AreEqual(3, PolygonEditing.NearestMidpoint(sq, v, 451, 400, 9.0), "середина западной стороны (через замыкание)");
+
+        int i = PolygonEditing.InsertVertex(sq, 0, PolygonEditing.Midpoint(sq, 0));
+        Assert.AreEqual(1, i);
+        Assert.AreEqual(5, sq.Count);
+        Assert.AreEqual(50.0, sq[1].East, 1e-9);
+        Assert.IsTrue(PolygonEditing.RemoveVertex(sq, 1));
+        Assert.IsTrue(PolygonEditing.RemoveVertex(sq, 3));
+        Assert.IsFalse(PolygonEditing.RemoveVertex(sq, 0), "треугольник — меньше нельзя");
+
+        var from = new List<WorldPosition>(sq);
+        PolygonEditing.Translate(sq, from, 50, -100);
+        Assert.AreEqual(50.0, sq[0].East, 1e-9);
+        Assert.AreEqual(-100.0, sq[0].North, 1e-9);
+        PolygonEditing.Translate(sq, from, 0, 0);
+        Assert.AreEqual(0.0, sq[0].North, 1e-9, "сдвиг — от исходных вершин, без накопления");
+    }
+
+    [Test]
+    public void Shapes_AreaPerimeter_SelfIntersection()
+    {
+        List<WorldPosition> sq = Square(0, 0, 100);
+        Assert.AreEqual(10000.0, PolygonEditing.AreaM2(sq), 1e-6);
+        Assert.AreEqual(400.0, PolygonEditing.Perimeter(sq), 1e-6);
+        Assert.IsFalse(PolygonEditing.SelfIntersects(sq));
+        var bow = new List<WorldPosition> { new WorldPosition(0, 0), new WorldPosition(100, 100), new WorldPosition(100, 0), new WorldPosition(0, 100) };
+        Assert.IsTrue(PolygonEditing.SelfIntersects(bow), "«бабочка»");
+        var l = new List<WorldPosition>
+        {
+            new WorldPosition(0, 0), new WorldPosition(200, 0), new WorldPosition(200, 100),
+            new WorldPosition(100, 100), new WorldPosition(100, 200), new WorldPosition(0, 200)
+        };
+        Assert.IsFalse(PolygonEditing.SelfIntersects(l), "невыпуклая «Г» — не самопересечение");
+        Assert.AreEqual(30000.0, PolygonEditing.AreaM2(l), 1e-6);
+    }
+
+    [Test]
+    public void Shapes_Checks_AndSaved()
+    {
+        WaterArea demo = Demo();
+        ScenarioCatalog cat = Catalog(demo);
+        string root = TempRoot();
+        AreaDocument doc = AreaDocument.New("Мели");
+        WaterArea a = doc.Area;
+        AreaShape deep = PolygonEditing.Add(a, AreaShapeKind.Shoal, Square(0, 0, 100));
+        a.shoals[deep.Index].depth = 40f;
+        PolygonEditing.Add(a, AreaShapeKind.Land, new List<WorldPosition> { new WorldPosition(0, 0), new WorldPosition(100, 100), new WorldPosition(100, 0), new WorldPosition(0, 100) });
+        PolygonEditing.Add(a, AreaShapeKind.Shoal, Square(20000, 0, 100));
+        AreaCheckResult r = AreaChecks.Check(a, cat);
+        string all = string.Join("; ", r.Warnings);
+        Assert.IsTrue(r.Warnings.Exists(w => w.Contains("Мель-1") && w.Contains("не мельче")), all);
+        Assert.IsTrue(r.Warnings.Exists(w => w.Contains("Суша-1") && w.Contains("пересекаются")), all);
+        Assert.IsTrue(r.Warnings.Exists(w => w.Contains("Мель-2") && w.Contains("вне района")), all);
+        Assert.AreEqual(0, r.Errors.Count);
+
+        doc.Commit();
+        Assert.AreEqual(AreaSaveStatus.Saved, doc.Save(root, cat, false, new DateTime(2026, 10, 18, 12, 0, 0)));
+        AreaDocument back = AreaDocument.Open(doc.FilePath, new List<string>());
+        Assert.AreEqual(2, back.Area.shoals.Count);
+        Assert.AreEqual(4, back.Area.land[0].vertices.Count);
+        Assert.AreEqual(40f, back.Area.shoals[0].depth, 1e-6);
+        Assert.AreEqual(0f, back.Area.DepthAt(new WorldPosition(10, 50)), 1e-6, "суша в тренажёре — глубина 0");
+    }
 }

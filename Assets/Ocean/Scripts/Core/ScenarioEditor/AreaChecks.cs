@@ -4,7 +4,8 @@
 // Ошибки — сохранить можно, но сценарий на такой акватории работать не будет как задумано:
 // пустое имя, имя встроенной, границы наоборот, глубина ≤ 0. Предупреждения — знаки, мели и
 // причалы вне района, многоугольник меньше 3 вершин, фарватер меньше 2 точек, повтор имён знаков;
-// 21.2б — огонь знака не по МАМС (AidEditing.LightWarning).
+// 21.2б — огонь знака не по МАМС (AidEditing.LightWarning); 21.3а — у мелей и суши стороны
+// пересекаются, фигура целиком вне района, мель не мельче глубины по умолчанию.
 // ============================================================
 using System.Collections.Generic;
 
@@ -50,10 +51,16 @@ public static class AreaChecks
                 if (s == null) continue;
                 if (s.vertices == null || s.vertices.Count < 3) r.Warnings.Add($"Мель «{s.name}»: меньше 3 вершин — не учитывается.");
                 if (s.depth < 0f) r.Warnings.Add($"Мель «{s.name}»: глубина отрицательная.");
+                else if (s.depth >= a.defaultDepth) r.Warnings.Add($"Мель «{s.name}»: {s.depth:0.#} м — не мельче глубины по умолчанию, на глубину не влияет.");
+                ShapeWarnings(r, a, $"Мель «{s.name}»", s.vertices);   // 21.3а
             }
         if (a.land != null)
             foreach (LandArea l in a.land)
-                if (l != null && (l.vertices == null || l.vertices.Count < 3)) r.Warnings.Add($"Суша «{l.name}»: меньше 3 вершин — не учитывается.");
+            {
+                if (l == null) continue;
+                if (l.vertices == null || l.vertices.Count < 3) r.Warnings.Add($"Суша «{l.name}»: меньше 3 вершин — не учитывается.");
+                ShapeWarnings(r, a, $"Суша «{l.name}»", l.vertices);
+            }
         if (a.fairways != null)
             foreach (FairwayLine f in a.fairways)
             {
@@ -70,5 +77,13 @@ public static class AreaChecks
                 if (b.Length < 20.0) r.Warnings.Add($"Причал № {i} «{b.name}»: короче 20 м.");
             }
         return r;
+    }
+
+    // 21.3а: стороны пересекаются; фигура целиком вне района
+    private static void ShapeWarnings(AreaCheckResult r, WaterArea a, string tag, List<WorldPosition> v)
+    {
+        if (v == null || v.Count < 3) return;
+        if (PolygonEditing.SelfIntersects(v)) r.Warnings.Add($"{tag}: стороны пересекаются — закрашивается не вся фигура.");
+        if (PolygonEditing.OutsideBounds(a, v)) r.Warnings.Add($"{tag} вне района.");
     }
 }

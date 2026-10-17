@@ -5,6 +5,8 @@
 // только то, что нужно для правки: сетка шага привязки (прорежена до читаемой), рамка границ района
 // с ручками в углах и на серединах сторон (выделенная — ярче), крестик узла привязки под курсором.
 // 21.2б — знаки МАМС (форма и цвет по типу, выделенный — жёлтое кольцо, под курсором — голубое).
+// 21.3а — мель/суша: выделенная — жёлтый контур, квадратные ручки вершин и круглые — середин сторон;
+// под курсором — голубой контур; рисуемая — голубая ломаная, линия к курсору и замыкание.
 // Координаты: пиксель окна MapViewport = локальная точка от левого нижнего угла этой графики.
 // ============================================================
 using System.Collections.Generic;
@@ -34,6 +36,12 @@ public class EditorMapOverlay : MaskableGraphic
     public int SelectedAid = -1, HotAid = -1;
     /// <summary>Только значок знака этого типа в центре (кнопка палитры), без карты.</summary>
     public AidType? Swatch;
+    /// <summary>21.3а: выделенная фигура (контур, ручки вершин и середин сторон), фигура под курсором, рисуемый контур.</summary>
+    public readonly List<WorldPosition> Shape = new List<WorldPosition>();
+    public readonly List<WorldPosition> HoverShape = new List<WorldPosition>();
+    public readonly List<WorldPosition> Draft = new List<WorldPosition>();
+    public int HotVertex = -1, HotMid = -1;
+    public bool ShapeHandles, DraftCloseHot;
 
     /// <summary>Ручки рамки: 0–3 — углы (ЮЗ, ЮВ, СВ, СЗ), 4–7 — середины сторон (Ю, В, С, З).</summary>
     public static List<WorldPosition> BoundsHandles(WorldPosition min, WorldPosition max)
@@ -87,6 +95,36 @@ public class EditorMapOverlay : MaskableGraphic
                     Quad(vh, c - new Vector2(h, h), c + new Vector2(h, h), i == HotHandle ? HandleHot : HandleColor);
                 }
             }
+        }
+
+        // 21.3а: фигуры
+        if (HoverShape.Count >= 2) Outline(vh, HoverShape, r, 1.5f, new Color(CursorColor.r, CursorColor.g, CursorColor.b, 0.6f), true);
+        if (Shape.Count >= 2)
+        {
+            Outline(vh, Shape, r, 2f, HandleHot, true);
+            if (ShapeHandles)
+            {
+                for (int i = 0; i < Shape.Count; i++)
+                {
+                    Vector2 m = Px(PolygonEditing.Midpoint(Shape, i), r);
+                    Disc(vh, m, i == HotMid ? 6f : 4f, i == HotMid ? HandleHot : new Color(HandleColor.r, HandleColor.g, HandleColor.b, 0.7f));
+                }
+                for (int i = 0; i < Shape.Count; i++)
+                {
+                    Vector2 c = Px(Shape[i], r);
+                    float h = i == HotVertex ? 7f : 5f;
+                    Quad(vh, c - new Vector2(h + 1f, h + 1f), c + new Vector2(h + 1f, h + 1f), new Color(0.05f, 0.05f, 0.06f, 1f));
+                    Quad(vh, c - new Vector2(h, h), c + new Vector2(h, h), i == HotVertex ? HandleHot : Color.white);
+                }
+            }
+        }
+        if (Draft.Count > 0)
+        {
+            Outline(vh, Draft, r, 2f, CursorColor, false);
+            Seg(vh, Px(Draft[Draft.Count - 1], r), Px(Cursor, r), 1.5f, new Color(CursorColor.r, CursorColor.g, CursorColor.b, 0.6f));
+            if (Draft.Count >= 2) Seg(vh, Px(Cursor, r), Px(Draft[0], r), 1f, new Color(CursorColor.r, CursorColor.g, CursorColor.b, 0.25f));
+            for (int i = 0; i < Draft.Count; i++) Disc(vh, Px(Draft[i], r), 4f, CursorColor);
+            if (DraftCloseHot) Ring(vh, Px(Draft[0], r), 10f, 2f, HandleHot);
         }
 
         for (int i = 0; i < Aids.Count; i++)
@@ -147,6 +185,29 @@ public class EditorMapOverlay : MaskableGraphic
                 Diamond(vh, c, 3f, dark);
                 break;
         }
+    }
+
+    // Ломаная по точкам мира (closed — с замыканием)
+    private void Outline(VertexHelper vh, List<WorldPosition> pts, Rect r, float w, Color col, bool closed)
+    {
+        int n = pts.Count;
+        for (int i = 0; i + 1 < n; i++) Seg(vh, Px(pts[i], r), Px(pts[i + 1], r), w, col);
+        if (closed && n >= 3) Seg(vh, Px(pts[n - 1], r), Px(pts[0], r), w, col);
+    }
+
+    // Отрезок толщиной w пикс.
+    private static void Seg(VertexHelper vh, Vector2 a, Vector2 b, float w, Color col)
+    {
+        Vector2 d = b - a;
+        if (d.sqrMagnitude < 1e-6f) return;
+        Vector2 nrm = new Vector2(-d.y, d.x).normalized * (0.5f * w);
+        int i = vh.currentVertCount;
+        vh.AddVert(new Vector3(a.x + nrm.x, a.y + nrm.y), col, Vector2.zero);
+        vh.AddVert(new Vector3(b.x + nrm.x, b.y + nrm.y), col, Vector2.zero);
+        vh.AddVert(new Vector3(b.x - nrm.x, b.y - nrm.y), col, Vector2.zero);
+        vh.AddVert(new Vector3(a.x - nrm.x, a.y - nrm.y), col, Vector2.zero);
+        vh.AddTriangle(i, i + 1, i + 2);
+        vh.AddTriangle(i, i + 2, i + 3);
     }
 
     private static void Tri(VertexHelper vh, Vector2 a, Vector2 b, Vector2 d, Color col)
