@@ -279,4 +279,56 @@ public class OwnTugTests
         Assert.Less(rx, s.BollardPull, "ход уменьшен");
         Assert.Greater(rx, 0.0);
     }
+
+    // ─────────── 19.4а-5: пульт буксира ───────────
+
+    [Test]
+    public void ConsoleMonitor_Lines()
+    {
+        var d = new TugMonitorData
+        {
+            HeadingDeg = 329.94, SpeedKn = 5.83, SwayKn = -0.22, RotDegMin = 72.4, HeadingHold = true, HoldHeadingDeg = double.NaN,
+            DepthM = 30.0, DraftM = 3.5, WindKn = 20.0, WindFromDeg = 330.0, Berth = "", Pilot = "Лоцман: «Толкайте к причалу»", Failure = ""
+        };
+        string m = TugConsoleText.Monitor(d);
+        StringAssert.Contains("ГЛУБИНА 30 м <size=75%>под килем 26,5 м", m);
+        StringAssert.Contains("<b>КУРС</b> 329,9°", m.Replace('.', ','));
+        StringAssert.Contains("автомат: разворот", m);
+        StringAssert.Contains("<b>ХОД</b> 5,8 уз вперёд", m);
+        StringAssert.Contains("<b>ЛАГОМ</b> 0,22 уз на ЛБ", m);
+        StringAssert.Contains("<b>ПОВОРОТ</b> 72 °/мин вправо", m);
+        StringAssert.Contains("ветер 20 уз, откуда 330°", m);
+        StringAssert.Contains("Лоцман: «Толкайте к причалу»", m);
+        StringAssert.DoesNotContain("РУЛЬ", m, "у буксира руля и телеграфа нет");
+
+        d.HoldHeadingDeg = -30.0; d.SpeedKn = 0.01; d.SwayKn = 0.001; d.RotDegMin = 0.2; d.WindKn = 0; d.Alarm = "НА МЕЛИ"; d.Failure = "ОТКАЗ ГД";
+        m = TugConsoleText.Monitor(d);
+        StringAssert.Contains("НА МЕЛИ", m);
+        StringAssert.DoesNotContain("ГЛУБИНА", m, "сигнализация вместо глубины");
+        StringAssert.Contains("автомат 330°", m);
+        StringAssert.Contains("<b>ХОД</b> 0", m);
+        StringAssert.Contains("<b>ЛАГОМ</b> 0", m);
+        StringAssert.Contains("<b>ПОВОРОТ</b> 0", m);
+        StringAssert.Contains("ветра нет", m);
+        StringAssert.Contains("ОТКАЗ ГД", m);
+        d.Alarm = ""; d.DepthM = double.NaN; d.HeadingHold = false;
+        m = TugConsoleText.Monitor(d);
+        StringAssert.Contains("ГЛУБИНА —", m);
+        StringAssert.Contains("автомат выкл", m);
+    }
+
+    [Test]
+    public void ConsolePods_DirectionAndLoad()
+    {
+        Assert.AreEqual("ПБ 045° · 50 %", TugConsoleText.Pod("ПБ", 45.2, 0.5));
+        Assert.AreEqual("ЛБ 315° · 100 %", TugConsoleText.Pod("ЛБ", -45.0, 1.3));
+        Assert.AreEqual("ПБ — · 0 %", TugConsoleText.Pod("ПБ", 180.0, 0.001));
+        // Колонки по джойстику: ход вперёд — обе вперёд (0°), загрузка — доля T_гак/2
+        var d = new AzimuthDrive(TugSpec.For(Tug())) { HeadingHold = false };
+        d.Joystick = new JoystickState(TugJoystick.StepPosition(2), 0, 0);
+        var m = new ShipDynamicsModel(Tug()) { MotionOverride = MotionModel.Manoeuvring3Dof };
+        for (int i = 0; i < 1000; i++) { d.Apply(m, 0.02); m.Step(0.02); }
+        StringAssert.StartsWith("ПБ 000° · 50 %", TugConsoleText.Pod("ПБ", d.UnitDirectionDeg(1), d.UnitLoad(1)));
+        StringAssert.StartsWith("ЛБ 000° · 50 %", TugConsoleText.Pod("ЛБ", d.UnitDirectionDeg(2), d.UnitLoad(2)));
+    }
 }

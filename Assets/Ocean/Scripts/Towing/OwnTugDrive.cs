@@ -259,6 +259,20 @@ public class OwnTugDrive : MonoBehaviour
         handle.Changed += OnHandleChanged;
         handle.Released += OnHandleReleased;
 
+        // 19.4а-5: пульт буксира — рукоятка, тумблер и экран джойстика по его якорям (поверхность искать не нужно)
+        TugConsole tugConsole = TugConsole.Instance;
+        if (tugConsole != null)
+        {
+            t.SetPositionAndRotation(tugConsole.JoystickAnchor.position, tugConsole.JoystickAnchor.rotation);
+            headingSwitch = TugHeadingSwitch.Build(t, Vector3.zero, this, "УДЕРЖ. КУРС");
+            Quaternion sq = headingSwitch.transform.rotation;
+            headingSwitch.transform.SetPositionAndRotation(tugConsole.SwitchAnchor.position,
+                Quaternion.FromToRotation(sq * Vector3.up, tugConsole.SwitchAnchor.up) * sq);
+            indicator = TugJoystickIndicator.Build(tugConsole.JoystickScreen, this, 0.00054f);
+            Debug.Log("[Буксир] Рукоятка джойстика построена на пульте буксира: тумблер слева от неё, экран джойстика — справа на приборной панели.", this);
+            return;
+        }
+
         // 19.4а-3: рукоятка и тумблер — на поверхности пульта (луч сверху), основанием по её наклону; +Z — к носу
         var console = new List<Renderer>();
         if (sts != null)

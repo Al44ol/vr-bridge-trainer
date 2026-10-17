@@ -1,0 +1,338 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e29b6137c9df46e299746d690022116e, type: 3}
+  m_Name: Assessment_TugWork
+  m_EditorClassIdentifier: VRBridge.Core::AssessmentCriteria
+  notes: "\u041A\u0440\u0438\u0442\u0435\u0440\u0438\u0438 \u043E\u0446\u0435\u043D\u043A\u0438
+    (C2). \u0417\u043D\u0430\u0447\u0435\u043D\u0438\u044F \u043F\u043E \u0443\u043C\u043E\u043B\u0447\u0430\u043D\u0438\u044E
+    \u2014 \u043F\u0440\u0435\u0434\u0432\u0430\u0440\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0435,
+    \u043E\u0431\u043E\u0441\u043D\u043E\u0432\u044B\u0432\u0430\u044E\u0442\u0441\u044F
+    \u0432 \u0433\u043B\u0430\u0432\u0435 2 \u0412\u041A\u0420."
+  settings:
+    defaultRequiredCpaNm: 0.5
+    riskCpaFactor: 2
+    riskHorizonMin: 20
+    headOnSectorDeg: 6
+    targetTurnDeg: 10
+    bearingWindowS: 60
+    steadyBearingDegPerMin: 1
+    actionRudderDeg: 5
+    actionCourseDeg: 30
+    actionSpeedReduction: 0.5
+    significantTurnDeg: 5
+    standOnFreeTcpaMin: 3
+    standOnFreeRangeNm: 1
+    standOnHeadingTolDeg: 10
+    standOnSpeedTol: 0.2
+    routeReturnAllowanceMin: 10
+    wheelOverRudderDeg: 20
+    passScore: 70
+    weightEncounters: 0.6
+    weightReaction: 0.1
+    weightRoute: 0.3
+    weightVisibility: 0.3
+    restrictedVisibilityNm: 2
+    blastToleranceS: 0.5
+    signalGapS: 3
+    makingWayKnots: 0.5
+    safeSpeedGraceS: 120
+    minimumSteerageSf: 0.2
+    weightMooring: 1
+    weightTowing: 0.5
+    criteria:
+    - code: E1
+      enabled: 1
+      mandatory: 1
+      full: 1
+      pass: 1
+      zero: 0
+      weight: 10
+    - code: E2
+      enabled: 1
+      mandatory: 0
+      full: 3
+      pass: 2
+      zero: 1
+      weight: 6
+    - code: E3
+      enabled: 1
+      mandatory: 1
+      full: 1
+      pass: 1
+      zero: 0
+      weight: 10
+    - code: E4
+      enabled: 1
+      mandatory: 1
+      full: 1
+      pass: 1
+      zero: 0
+      weight: 10
+    - code: E5
+      enabled: 1
+      mandatory: 0
+      full: 1
+      pass: 1
+      zero: 0
+      weight: 3
+    - code: E6
+      enabled: 1
+      mandatory: 1
+      full: 1
+      pass: 1
+      zero: 2
+      weight: 10
+    - code: E7
+      enabled: 1
+      mandatory: 1
+      full: 1
+      pass: 1
+      zero: 0
+      weight: 6
+    - code: E8
+      enabled: 1
+      mandatory: 1
+      full: 1
+      pass: 1
+      zero: 0.5
+      weight: 10
+    - code: R8b
+      enabled: 0
+      mandatory: 1
+      full: 0.5
+      pass: 0.3
+      zero: 0
+      weight: 6
+    - code: E9
+      enabled: 1
+      mandatory: 0
+      full: 30
+      pass: 60
+      zero: 120
+      weight: 1
+    - code: N1
+      enabled: 1
+      mandatory: 0
+      full: 15
+      pass: 30
+      zero: 60
+      weight: 1
+    - code: N2
+      enabled: 1
+      mandatory: 0
+      full: 15
+      pass: 30
+      zero: 60
+      weight: 1
+    - code: R1
+      enabled: 0
+      mandatory: 1
+      full: 0.5
+      pass: 1
+      zero: 1.5
+      weight: 8
+    - code: R2
+      enabled: 0
+      mandatory: 0
+      full: 0.25
+      pass: 0.5
+      zero: 0.75
+      weight: 5
+    - code: R3
+      enabled: 0
+      mandatory: 0
+      full: 0
+      pass: 30
+      zero: 60
+      weight: 5
+    - code: R4
+      enabled: 0
+      mandatory: 1
+      full: 1
+      pass: 1
+      zero: 0
+      weight: 8
+    - code: R5
+      enabled: 0
+      mandatory: 1
+      full: 1
+      pass: 1
+      zero: 1.0001
+      weight: 4
+    - code: R6
+      enabled: 0
+      mandatory: 0
+      full: 0.25
+      pass: 0.5
+      zero: 1
+      weight: 6
+    - code: R7
+      enabled: 0
+      mandatory: 0
+      full: 0.25
+      pass: 0.5
+      zero: 1
+      weight: 5
+    - code: R8a
+      enabled: 0
+      mandatory: 0
+      full: 0.9
+      pass: 0.75
+      zero: 0.5
+      weight: 5
+    - code: F1
+      enabled: 1
+      mandatory: 1
+      full: 120
+      pass: 120
+      zero: 240
+      weight: 8
+    - code: F2
+      enabled: 1
+      mandatory: 0
+      full: 1
+      pass: 0.75
+      zero: 0.5
+      weight: 4
+    - code: F3
+      enabled: 1
+      mandatory: 1
+      full: 1
+      pass: 1.1
+      zero: 1.5
+      weight: 8
+    - code: F4
+      enabled: 1
+      mandatory: 0
+      full: 1.1
+      pass: 1.25
+      zero: 1.75
+      weight: 4
+    - code: F5
+      enabled: 1
+      mandatory: 1
+      full: 30
+      pass: 60
+      zero: 120
+      weight: 8
+    - code: F6
+      enabled: 1
+      mandatory: 1
+      full: 1
+      pass: 1
+      zero: 0
+      weight: 8
+    - code: M1
+      enabled: 0
+      mandatory: 1
+      full: 1
+      pass: 1
+      zero: 0
+      weight: 10
+    - code: M2
+      enabled: 0
+      mandatory: 1
+      full: 0.15
+      pass: 0.3
+      zero: 0.5
+      weight: 8
+    - code: M3
+      enabled: 0
+      mandatory: 1
+      full: 0.5
+      pass: 1
+      zero: 1.5
+      weight: 6
+    - code: M4
+      enabled: 0
+      mandatory: 1
+      full: 0
+      pass: 0
+      zero: 1
+      weight: 8
+    - code: M5
+      enabled: 0
+      mandatory: 0
+      full: 3
+      pass: 10
+      zero: 20
+      weight: 4
+    - code: M6
+      enabled: 0
+      mandatory: 1
+      full: 0
+      pass: 0
+      zero: 1
+      weight: 8
+    - code: M7
+      enabled: 0
+      mandatory: 0
+      full: 0
+      pass: 10
+      zero: 30
+      weight: 4
+    - code: M8
+      enabled: 0
+      mandatory: 0
+      full: 1
+      pass: 1.5
+      zero: 2
+      weight: 3
+    - code: M9
+      enabled: 0
+      mandatory: 0
+      full: 1
+      pass: 1
+      zero: 0
+      weight: 2
+    - code: G1
+      enabled: 1
+      mandatory: 1
+      full: 0
+      pass: 0
+      zero: 1
+      weight: 8
+    - code: G2
+      enabled: 1
+      mandatory: 0
+      full: 0
+      pass: 10
+      zero: 30
+      weight: 4
+    - code: G3
+      enabled: 1
+      mandatory: 0
+      full: 25
+      pass: 50
+      zero: 100
+      weight: 4
+    - code: G4
+      enabled: 1
+      mandatory: 0
+      full: 0.3
+      pass: 0.6
+      zero: 1.2
+      weight: 3
+    - code: A1
+      enabled: 1
+      mandatory: 1
+      full: 0
+      pass: 0
+      zero: 1
+      weight: 0
+    - code: A2
+      enabled: 1
+      mandatory: 1
+      full: 0
+      pass: 0
+      zero: 1
+      weight: 0

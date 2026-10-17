@@ -9,6 +9,7 @@
 //   • движение буксира: «вперёд 5,8 уз · лагом 0,3 уз на ПБ · 1,2 °/с вправо» (TugJoystick.MotionTitle) и автомат курса.
 // Обновление 10 раз в секунду. Видна во всех режимах тренажёра (приборы буксира, не подсказка).
 // Временно — до мониторов на пульте (запрос 16): тогда строки переедут туда, табличка отключится (enabled).
+// 19.4а-5: на пульте буксира (TugConsole) — экран справа на приборной панели (scale 0,00054: 38 × 27 см).
 // ============================================================
 using TMPro;
 using UnityEngine;
@@ -31,23 +32,23 @@ public class TugJoystickIndicator : MonoBehaviour
     private float nextText;
 
     /// <summary>Построить табличку: parent — рукоятка (TugJoystick); место и поворот задаёт вызывающий.</summary>
-    public static TugJoystickIndicator Build(Transform parent, OwnTugDrive drive)
+    public static TugJoystickIndicator Build(Transform parent, OwnTugDrive drive, float scale = Scale)
     {
         var go = new GameObject("TugJoystickIndicator", typeof(RectTransform));
         go.transform.SetParent(parent, false);
         var ind = go.AddComponent<TugJoystickIndicator>();
         ind.drive = drive;
-        ind.Construct();
+        ind.Construct(scale);
         return ind;
     }
 
-    private void Construct()
+    private void Construct(float scale)
     {
         var canvas = gameObject.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
         var rt = (RectTransform)transform;
         rt.sizeDelta = new Vector2(W, H);
-        transform.localScale = Vector3.one * Scale;
+        transform.localScale = Vector3.one * scale;
         Img("Background", transform, Vector2.zero, new Vector2(W, H), Bg);
 
         // Крест хода и лагом: слева, с рисками ступеней

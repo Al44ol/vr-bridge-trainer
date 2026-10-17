@@ -32,6 +32,8 @@
 //     подруливающего скрыты (рендеры и коллайдеры), на месте телеграфа — рукоятка джойстика (OwnTugDrive);
 //   • движитель — две азимутальные колонки (OwnTugDrive, ShipNavigation.SetAzimuthDrive), меню B «Джойстик»;
 //   • сценарии на буксире переключают тип на модель 45 м сами (ScenarioRunner.Load) — упражнение на буксире — 19.4б.
+//   • 19.4а-5: на буксире вместо стойки МОСТИКИ — свой пульт (TugConsole: рукоятка, тумблер, ТИФОН, СВЕТ, три экрана);
+//     стойка и NavDisplay скрыты; сдвиг пульта — tugConsoleOffset.
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -102,6 +104,9 @@ public class ShipTypeSwitcher : MonoBehaviour
     [Tooltip("19.4а-2: сдвиг рукоятки джойстика (и тумблера «УДЕРЖ. КУРС») от TelegraphHead в системе Ship, м. " +
              "В Play Mode подвинуть Ship/TugJoystick → Tools/VR Bridge/Tug — запомнить положение джойстика → после выхода Ctrl+S")]
     public Vector3 tugJoystickOffset;
+    [Tooltip("19.4а-5: сдвиг пульта буксира (с рукояткой, тумблером, ТИФОН, СВЕТ и экранами) от места стойки МОСТИКИ в системе Ship, м. " +
+             "В Play Mode подвинуть Ship/TugConsole → Tools/VR Bridge/Tug — запомнить положение пульта → после выхода Ctrl+S")]
+    public Vector3 tugConsoleOffset;
 
     public ShipType Type { get; private set; } = ShipType.Model45m;
     public event Action TypeChanged;
@@ -148,6 +153,7 @@ public class ShipTypeSwitcher : MonoBehaviour
     private readonly List<Collider> controlColliders = new List<Collider>();
     private bool[] controlRendererWas = new bool[0], controlColliderWas = new bool[0];
     private OwnTugDrive tugDrive;
+    private TugConsole tugConsole;
 
     public const string BoatIdSuffix = "-FB";
     public const string BoatTitleSuffix = " (катер)";
@@ -314,6 +320,7 @@ public class ShipTypeSwitcher : MonoBehaviour
         if (boatRoot != null) boatRoot.SetActive(boat);
         if (tugRoot != null) tugRoot.SetActive(tug);
         SetControlsHidden(tug);
+        if (tugConsole != null) tugConsole.SetOnTug(tug);   // 19.4а-5: пульт буксира вместо стойки и NavDisplay
 
         if (water != null)
         {
@@ -387,6 +394,9 @@ public class ShipTypeSwitcher : MonoBehaviour
         }
 
         CollectControls();
+        // 19.4а-5: свой пульт (место — по стойке МОСТИКИ, пока она видна)
+        Material[] boatMats = boatRoot.GetComponent<MeshRenderer>().sharedMaterials;
+        tugConsole = TugConsole.Build(this, bow, boatMats != null && boatMats.Length > 0 ? boatMats[0] : null);
         Debug.Log($"[Судно] Буксир построен: мидель (Ship) {tugOrigin}, палуба {deck} м над водой (судно ниже на {-tugVerticalOffset:F2} м), " +
                   $"скрываемых органов управления: {controlRenderers.Count} рендеров, {controlColliders.Count} коллайдеров.", this);
     }
