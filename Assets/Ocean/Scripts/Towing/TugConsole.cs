@@ -146,8 +146,8 @@ public class TugConsole : MonoBehaviour
         Transform deskFrame = Frame("Desk", DeskEdge, out _);
         HornAnchor = Anchor(deskFrame, "HornAnchor", new Vector3(-0.5f, 0.002f, -0.02f));
         LightAnchor = Anchor(deskFrame, "LightAnchor", new Vector3(-0.3f, 0.002f, 0f));
-        SwitchAnchor = Anchor(deskFrame, "SwitchAnchor", new Vector3(0.12f, 0.002f, 0f));
-        JoystickAnchor = Anchor(deskFrame, "JoystickAnchor", new Vector3(0.36f, 0.002f, -0.04f));
+        SwitchAnchor = Anchor(deskFrame, "SwitchAnchor", new Vector3(0.04f, 0.002f, 0f));        // 19.4а-5: левее на 8 см (было 0,12)
+        JoystickAnchor = Anchor(deskFrame, "JoystickAnchor", new Vector3(0.28f, 0.002f, -0.04f));   // левее на 8 см (было 0,36)
     }
 
     private Material Mat(Material template, string name, Color color, float smooth)
@@ -371,6 +371,7 @@ public class TugConsole : MonoBehaviour
                 Quaternion q = m.t.rotation;
                 // Как на стойке, но «вверх» — нормаль столешницы (как тумблер «УДЕРЖ. КУРС», 19.4а-3)
                 m.t.SetPositionAndRotation(m.anchor.position, Quaternion.FromToRotation(q * Vector3.up, m.anchor.up) * q);
+                SitOnDesk(m.t, m.anchor);
             }
             else if (m.parent != null)
             {
@@ -379,6 +380,24 @@ public class TugConsole : MonoBehaviour
                 m.t.localRotation = m.rot;
             }
         }
+    }
+
+    // 19.4а-5 (по проверке в Unity): модель кнопки ТИФОН лежит ниже своей точки привязки — после переноса объект
+    // поднимается так, чтобы нижняя точка его видимых частей легла на столешницу (по границам рендеров)
+    private static void SitOnDesk(Transform t, Transform anchor)
+    {
+        float min = float.MaxValue;
+        foreach (Renderer r in t.GetComponentsInChildren<Renderer>(false))
+        {
+            if (!r.enabled) continue;
+            Bounds b = r.bounds;
+            for (int i = 0; i < 8; i++)
+            {
+                Vector3 w = new Vector3((i & 1) == 0 ? b.min.x : b.max.x, (i & 2) == 0 ? b.min.y : b.max.y, (i & 4) == 0 ? b.min.z : b.max.z);
+                min = Mathf.Min(min, Vector3.Dot(w - anchor.position, anchor.up));
+            }
+        }
+        if (min < float.MaxValue && min < 0f) t.position += anchor.up * (0.002f - min);
     }
 
     // ─────────── Экраны: обновление ───────────
