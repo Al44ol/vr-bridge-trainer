@@ -60,6 +60,8 @@ public class DebriefMapGraphic : MaskableGraphic
     public DebriefMapData Data => data;
     public int ViewIndex => viewIndex;
     public DebriefMapView View => data != null && viewIndex >= 0 && viewIndex < data.Views.Count ? data.Views[viewIndex] : null;
+    /// <summary>21.2а: рисовать свою сетку (в редакторе сценариев — выкл: там сетка привязки EditorMapOverlay).</summary>
+    public bool ShowGrid = true;
     /// <summary>Шаг сетки, м (для подписи).</summary>
     public double GridStepM { get; private set; }
 
@@ -94,10 +96,13 @@ public class DebriefMapGraphic : MaskableGraphic
         if (View == null) return;
 
         // Сетка
-        for (double e = Math.Ceiling(view.MinE / GridStepM) * GridStepM; e <= view.MaxE; e += GridStepM)
-            Segment(vh, new WorldPosition(e, view.MinN), new WorldPosition(e, view.MaxN), 1f, GridColor);
-        for (double n = Math.Ceiling(view.MinN / GridStepM) * GridStepM; n <= view.MaxN; n += GridStepM)
-            Segment(vh, new WorldPosition(view.MinE, n), new WorldPosition(view.MaxE, n), 1f, GridColor);
+        if (ShowGrid)
+        {
+            for (double e = Math.Ceiling(view.MinE / GridStepM) * GridStepM; e <= view.MaxE; e += GridStepM)
+                Segment(vh, new WorldPosition(e, view.MinN), new WorldPosition(e, view.MaxN), 1f, GridColor);
+            for (double n = Math.Ceiling(view.MinN / GridStepM) * GridStepM; n <= view.MaxN; n += GridStepM)
+                Segment(vh, new WorldPosition(view.MinE, n), new WorldPosition(view.MaxE, n), 1f, GridColor);
+        }
 
         foreach (MapPolygon p in data.Polygons)
             if (p.Layer == MapLayer.Land || p.Layer == MapLayer.Shoal) Polygon(vh, p.Points, p.Layer == MapLayer.Land ? LandColor : ShoalColor);

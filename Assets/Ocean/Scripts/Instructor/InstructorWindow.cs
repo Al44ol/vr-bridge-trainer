@@ -843,8 +843,12 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         eventsText = Block(ref y, 262f, 15f);
         x = Pad;
         Button(column, ref x, y, 200f, "Текущий балл", ButtonColor, ShowScore, null, null, () => assessment != null && Phase != ScenarioRunner.Phase.Idle);
+        // 21.2а: редактор сценариев и карт — не во время упражнения (тренажёр выгружается, обратно — заново)
+        float ex = Pad + w - 220f;
+        Button(column, ref ex, y, 220f, "Редактор сценариев", NeutralColor, TrainerScenes.OpenEditor, null, null,
+               () => Phase != ScenarioRunner.Phase.Running);
         scoreText = MakeText(column, "", 15f, Color.white, TextAlignmentOptions.TopLeft);
-        Place(scoreText.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(x, y), new Vector2(w - (x - Pad), 110f), new Vector2(0f, 1f));
+        Place(scoreText.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(x, y), new Vector2(w - (x - Pad) - 226f, 110f), new Vector2(0f, 1f));
     }
 
     // ─────────── Элементы ───────────

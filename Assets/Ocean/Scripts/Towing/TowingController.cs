@@ -87,7 +87,7 @@ public class TowingController : MonoBehaviour
 
     // Сцена без компонента — поставить на объект навигации (ShipRoot)
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-    private static void Ensure()
+    internal static void Ensure()   // 21.2а: и при повторной загрузке сцены — TrainerScenes
     {
         if (FindAnyObjectByType<TowingController>() != null) return;
         ShipNavigation nav = FindAnyObjectByType<ShipNavigation>();

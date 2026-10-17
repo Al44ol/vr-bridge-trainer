@@ -32,7 +32,7 @@ public class ScenarioFiles : MonoBehaviour
     private ScenarioRunner runner;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-    private static void Ensure()
+    internal static void Ensure()   // 21.2а: и при повторной загрузке сцены — TrainerScenes
     {
         if (FindAnyObjectByType<ScenarioFiles>() != null) return;
         ScenarioRunner r = FindAnyObjectByType<ScenarioRunner>();

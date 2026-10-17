@@ -32,7 +32,7 @@ public class TrainerModeSwitch : MonoBehaviour
 
     // Сцена без компонента — поставить на объект сценария (или отдельный)
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-    private static void Ensure()
+    internal static void Ensure()   // 21.2а: и при повторной загрузке сцены — TrainerScenes
     {
         if (FindAnyObjectByType<TrainerModeSwitch>() != null) return;
         ScenarioRunner runner = FindAnyObjectByType<ScenarioRunner>();

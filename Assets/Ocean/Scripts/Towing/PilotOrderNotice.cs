@@ -35,7 +35,7 @@ public class PilotOrderNotice : MonoBehaviour
     private AudioClip tone;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-    private static void Ensure()
+    internal static void Ensure()   // 21.2а: и при повторной загрузке сцены — TrainerScenes
     {
         if (FindAnyObjectByType<PilotOrderNotice>() != null || FindAnyObjectByType<ScenarioRunner>() == null) return;
         ShipTypeSwitcher ship = FindAnyObjectByType<ShipTypeSwitcher>();
