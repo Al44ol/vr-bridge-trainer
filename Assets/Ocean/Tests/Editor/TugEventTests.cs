@@ -84,7 +84,12 @@ public class TugEventTests
         string html = SessionReport.Build(s, SessionAssessment.Assess(s), DebriefMap.Build(s, r));
         StringAssert.Contains("Случайное событие</h3>", html);
         StringAssert.Contains("Событие: нос отходит до 6", html);
-        StringAssert.Contains("«Нос отходит, до 6°. Корма ложится. Буксир — к носу»", html);
+        StringAssert.Contains("«Нос отходит, до 6°. Корма ложится. Буксир — к носу, правый борт, 48 м от миделя»", html);
+        // 19.4г-2: пока буксир идёт к носу — напоминания «к носу! ещё N м» раз в 20 с, у конца — не повторяются
+        var remind = sim.Events.FindAll(e => e.Type == ExerciseEventType.PilotOrder && e.Index == (int)PilotOrderKind.ToEnd && e.Time > start.Time);
+        ExerciseEvent atEnd = sim.Events.Find(e => e.Type == ExerciseEventType.TugWorkEvent && e.Index == (int)TugEventPhase.AtEnd);
+        Assert.IsTrue(remind.TrueForAll(e => e.Time <= atEnd.Time), "после «упёрся у конца» напоминаний нет");
+        TestContext.Out.WriteLine("напоминания: " + string.Join(" | ", remind.ConvertAll(e => $"{ScenarioText.Clock(e.Time)} {e.Subject}")));
         DebriefPlot p = DebriefPlots.Build(s, r).Find(x => x.Key == "tug_power");
         Assert.IsTrue(p.Marks.Exists(m => m.Label == "нос отходит"), "отметка события на графике упора");
     }
@@ -102,6 +107,25 @@ public class TugEventTests
         Assert.AreEqual(g13Passed, g13.Passed, $"{variant}: G13 — {g13.Note}");
         Assert.AreEqual(passed, r.Passed, $"{variant}: {r.Headline()}; не выполнены {string.Join(", ", r.MandatoryFailed)}");
         TestContext.Out.WriteLine($"{variant}: {r.Headline()}; G12 {g12.Note}; G13 {g13.Note}");
+    }
+
+    // 19.4г-2 (по проверке: на 0,6 уз судно легло ровно за 17 с, а G12 = 0): полным упором к причалу — событие не развилось
+    [Test]
+    public void FastApproach_EventNotDeveloped_G12G13NotAssessed()
+    {
+        TugWorkSimulation sim = Run("tugevent_fast", out RecordedSession s);
+        TugWorkSystem sys = sim.System;
+        TestContext.Out.WriteLine($"угол {sys.EventMaxAngleDeg:0.00}°, не развилось {sys.EventNotDeveloped}; {sim.LiveResult.Headline()}; финиш {ScenarioText.Clock(sim.EndTime)} ({sim.EndReason}); не выполнены {string.Join(", ", sim.LiveResult.MandatoryFailed)}; G12 {Item(sim.LiveResult, "G12").Note}; G10 {Item(sim.LiveResult, "G10").Note}");
+        Assert.IsTrue(sys.EventFired && sys.EventNotDeveloped && sys.EventDone && !sys.TugAtEnd);
+        Assert.Less(sys.EventMaxAngleDeg, TugWorkSystem.NotDevelopedAngleDeg);
+        Assert.IsTrue(sim.Events.Exists(e => e.Type == ExerciseEventType.TugWorkEvent && e.Index == (int)TugEventPhase.NotDeveloped));
+        Assert.IsTrue(sim.Events.Exists(e => e.Type == ExerciseEventType.PilotOrder && e.Subject == TugWorkText.NotDevelopedText));
+        CriterionResult g12 = Item(sim.LiveResult, "G12"), g13 = Item(sim.LiveResult, "G13");
+        Assert.IsFalse(g12.Evaluated, g12.Note);
+        Assert.IsFalse(g13.Evaluated, g13.Note);
+        StringAssert.Contains("событие не развилось", g12.Note);
+        string html = SessionReport.Build(s, SessionAssessment.Assess(s), DebriefMap.Build(s, sim.LiveResult));
+        StringAssert.Contains("Событие не развилось", html);
     }
 
     [Test]

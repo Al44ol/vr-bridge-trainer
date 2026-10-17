@@ -208,7 +208,7 @@ Unity Test Runner → EditMode (сейчас **250**): `TestResults.xml` — п�
   - **events.csv** — `TugWorkEvent` (новый тип в конце перечня; Index — фаза 1–4, Value — угол или время, Value2 — зазор или место, Subject — «нос» / «корма»), `PilotOrder` вида `ToEnd` (9);
   - **консоль** — `[Работа буксира] Событие взведено: нос отойдёт до N° при зазоре g м` (при «Начать»; обучающемуся не видно);
   - **session.json** → `scenario.tug_work.angle_event`, `event_gap_min_m` … `end_zone_x`;
-  - **прогоны** — `Tools/VR Bridge/Assessment Report` → `ThesisData/Assessment/<дата>/tugevent_runs.csv` (G5–G13), `tugevent/<вариант>/` (запись, report.html с таблицей «Случайное событие»), раздел summary.md (ThesisNotes, табл. 19.34);
+  - **прогоны** — `Tools/VR Bridge/Assessment Report` → `ThesisData/Assessment/<дата>/tugevent_runs.csv` (G5–G13), `tugevent/<вариант>/` (запись, report.html с таблицей «Случайное событие»); с 19.4г-2 — пятый вариант `tugevent_fast` («событие не развилось», табл. 19.34), раздел summary.md (ThesisNotes, табл. 19.34);
   - **ассет** `Scenario_19-03_TugWork.asset` — версия 4, обновляется сам при входе в Play Mode; G12, G13 дописываются в наборы сами (AddMissing).
 ### 2.7. Источники значений параметров
 `Assets/Ocean/Settings/ShipParameters_Sources.md` — откуда взято каждое значение ShipParameters (Mariner, KCS, Model45m, допущения).

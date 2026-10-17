@@ -1157,6 +1157,15 @@ public sealed class ExerciseAssessor
             SkipMooring(r, AssessmentCatalog.G13, final, "события не было");
             return;
         }
+        // 19.4г-2: судно легло ровно раньше, чем отошёл конец — оценивать нечего
+        ExerciseEvent nd = tugEvents.Find(e => e.Index == (int)TugEventPhase.NotDeveloped);
+        if (nd.Type == ExerciseEventType.TugWorkEvent)
+        {
+            string why = $"событие не развилось: судно легло ровно через {AssessmentResult.Num(nd.Value2)} с, угол не больше {AssessmentResult.Num(nd.Value, 1)}°";
+            SkipMooring(r, AssessmentCatalog.G12, final, why);
+            SkipMooring(r, AssessmentCatalog.G13, final, why);
+            return;
+        }
         ExerciseEvent at = tugEvents.Find(e => e.Index == (int)TugEventPhase.AtEnd), done = tugEvents.Find(e => e.Index == (int)TugEventPhase.Done);
         bool hasAt = at.Type == ExerciseEventType.TugWorkEvent, hasDone = done.Type == ExerciseEventType.TugWorkEvent;
         double windowEnd = hasDone ? done.Time : end;

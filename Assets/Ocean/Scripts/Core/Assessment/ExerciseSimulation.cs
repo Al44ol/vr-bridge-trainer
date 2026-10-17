@@ -525,7 +525,7 @@ public static class DemoAssessmentRuns
     /// толкать по командам); не перешёл (толкает у миделя 50 %, не слушая «стоп»); не к тому концу (к корме, там самый малый);
     /// поздно (перешёл через 90 с после команды).
     /// </summary>
-    public static readonly string[] TugEventVariants = { "tugevent_correct", "tugevent_stay", "tugevent_wrong", "tugevent_late" };
+    public static readonly string[] TugEventVariants = { "tugevent_correct", "tugevent_stay", "tugevent_wrong", "tugevent_late", "tugevent_fast" };
 
     public static void ConfigureTugEvent(TugWorkSimulation sim, string variant)
     {
@@ -539,6 +539,7 @@ public static class DemoAssessmentRuns
             case "tugevent_stay": sim.Plan.IgnoreEvent = true; sim.Plan.PushPower = 0.5; break;
             case "tugevent_wrong": sim.Plan.WrongEnd = true; break;
             case "tugevent_late": sim.Plan.RelocateDelayS = 90.0; break;
+            case "tugevent_fast": sim.Plan.FixedPush = true; sim.Plan.PushPower = 1.0; sim.Plan.IgnoreEvent = true; break;   // 19.4г-2: полным к причалу — судно ложится ровно
         }
     }
 
@@ -580,6 +581,7 @@ public static class DemoAssessmentRuns
             case "tugevent_stay": return "событие: не перешёл, толкает у миделя";
             case "tugevent_wrong": return "событие: пошёл не к тому концу (к корме)";
             case "tugevent_late": return "событие: перешёл к носу через 90 с";
+            case "tugevent_fast": return "событие: полным упором к причалу (быстрый подход)";
             default: return variant;
         }
     }

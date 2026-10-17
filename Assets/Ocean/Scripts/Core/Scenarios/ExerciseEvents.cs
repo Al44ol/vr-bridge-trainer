@@ -330,6 +330,7 @@ public struct ExerciseEvent
                     case TugEventPhase.ToEnd: return $"Событие: {Subject} отходит до {ScenarioText.Num(Value, 1)}° (зазор {ScenarioText.Num(Value2, 1)} м) — буксиру к нему";
                     case TugEventPhase.AtEnd: return $"Буксир упёрся у конца ({Subject}) через {ScenarioText.Num(Value)} с";
                     case TugEventPhase.Pinned: return $"Ближний конец у кранцев, на стопоре; угол {ScenarioText.Num(Value, 1)}°";
+                    case TugEventPhase.NotDeveloped: return $"Событие не развилось: судно легло ровно через {ScenarioText.Num(Value2)} с, угол не больше {ScenarioText.Num(Value, 1)}°";
                     default: return $"Судно у кранцев, событие закончено; угол {ScenarioText.Num(Value, 1)}°";
                 }
             case ExerciseEventType.HeadingHoldChanged:
