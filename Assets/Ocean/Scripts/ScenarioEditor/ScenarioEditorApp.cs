@@ -10,7 +10,9 @@
 // Мышь: колесо — масштаб к курсору; правая/средняя кнопка (и левая на пустом месте) — сдвиг;
 // «Границы района» — тянуть ручки рамки (с привязкой к сетке). Клавиши: Ctrl+Z / Ctrl+Y, Ctrl+S, Esc.
 // Документ — AreaDocument (Core): правка → Commit (отмена), сохранение с историей, черновик раз в 2 мин.
-// 21.2б — знаки МАМС; 21.3 — мели, суша, фарватеры, причалы; 21.4 — слой сценария.
+// 21.2б — знаки МАМС: палитра 8 типов, щелчок по пустому месту — поставить в узел сетки, щелчок по
+// знаку — выделить и тянуть, Delete — удалить, справа — свойства знака (имя, тип, положение, огонь);
+// правка знаков — AidEditing (Core). 21.3 — мели, суша, фарватеры, причалы; 21.4 — слой сценария.
 // ============================================================
 using System;
 using System.Collections;
@@ -27,7 +29,7 @@ using UnityEngine.XR;
 
 public class ScenarioEditorApp : MonoBehaviour
 {
-    private enum Tool { Select, Bounds }
+    private enum Tool { Select, Bounds, Aid }
 
     private const float TopBar = 56f, PaletteWidth = 230f, PropsWidth = 440f, StatusBar = 32f, Pad = 8f;
     private static readonly Color Background = new Color(0.05f, 0.06f, 0.08f, 1f);
@@ -40,6 +42,14 @@ public class ScenarioEditorApp : MonoBehaviour
     private EditorMapOverlay overlay;
     private TextMeshProUGUI titleText, checkText, statusText;
     private TMP_InputField nameField, depthField, descField, eMinField, eMaxField, nMinField, nMaxField;
+    // 21.2б: знаки
+    private RectTransform areaGroup, aidGroup;
+    private TMP_InputField aidNameField, aidEField, aidNField, aidLightField;
+    private readonly List<TextMeshProUGUI> aidLabels = new List<TextMeshProUGUI>();
+    private AidType aidType = AidType.LateralPort;
+    private int selectedAid = -1, hoverAid = -1;
+    private bool dragAid, dragMoved;
+    private Vector2 pressLocal;
 
     private AreaDocument doc;
     private DebriefMapData mapData;
@@ -190,18 +200,51 @@ public class ScenarioEditorApp : MonoBehaviour
         ui.Button(p, ref x, y, w, "Границы района", MonitorUi.NeutralColor, () => SetTool(Tool.Bounds), null,
                   () => tool == Tool.Bounds ? MonitorUi.ActiveColor : MonitorUi.NeutralColor, () => doc != null);
         y -= MonitorUi.RowHeight + 3f * MonitorUi.Gap;
-        Header(p, "Скоро", ref y);
-        foreach (string s in new[] { "Знаки МАМС — 21.2б", "Мели и суша — 21.3", "Фарватеры — 21.3", "Причалы — 21.3", "Сценарий — 21.4" })
+
+        // 21.2б: знаки МАМС — выбрать тип, щелчок по карте ставит знак
+        Header(p, "Знаки МАМС", ref y);
+        foreach (AidType t in AidEditing.Palette)
         {
+            AidType tt = t;
             x = Pad;
-            ui.Button(p, ref x, y, w, s, MonitorUi.DisabledColor, null);
+            RectTransform b = ui.Button(p, ref x, y, w, AidTitle(tt), MonitorUi.NeutralColor, () => { aidType = tt; SetTool(Tool.Aid); }, null,
+                                        () => tool == Tool.Aid && aidType == tt ? MonitorUi.ActiveColor : MonitorUi.NeutralColor, () => doc != null);
+            TextMeshProUGUI bt = b.GetComponentInChildren<TextMeshProUGUI>();
+            bt.alignment = TextAlignmentOptions.Left;
+            bt.rectTransform.offsetMin = new Vector2(36f, bt.rectTransform.offsetMin.y);
+            var sw = new GameObject("Swatch", typeof(RectTransform));
+            sw.transform.SetParent(b, false);
+            MonitorUi.Place(sw.GetComponent<RectTransform>(), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(18f, 0f), new Vector2(26f, 26f), new Vector2(0.5f, 0.5f));
+            EditorMapOverlay g = sw.AddComponent<EditorMapOverlay>();
+            g.raycastTarget = false;
+            g.Swatch = tt;
             y -= MonitorUi.RowHeight + MonitorUi.Gap;
         }
         y -= 2f * MonitorUi.Gap;
+        TextMeshProUGUI soon = MonitorUi.Text(p, "Скоро: мели и суша, фарватеры, причалы — 21.3; сценарий — 21.4.", 14f, MonitorUi.MutedColor, TextAlignmentOptions.TopLeft);
+        MonitorUi.TopLeft(soon.rectTransform, Pad, y, w, 40f);
+        y -= 44f;
         TextMeshProUGUI help = MonitorUi.Text(p,
-            "Колесо — масштаб\nПравая кнопка или левая на пустом месте — сдвиг\nCtrl+Z / Ctrl+Y — отменить / повторить\nCtrl+S — сохранить\nEsc — инструмент «Выбор»",
+            "Колесо — масштаб\nПравая кнопка (в «Выборе» и левая на пустом месте) — сдвиг\n" +
+            "Знак: щелчок по пустому месту — поставить, по знаку — выделить и тянуть; Delete — удалить\n" +
+            "Ctrl+Z / Ctrl+Y — отменить / повторить\nCtrl+S — сохранить\nEsc — «Выбор», ещё раз — снять выделение",
             14f, MonitorUi.MutedColor, TextAlignmentOptions.TopLeft);
-        MonitorUi.TopLeft(help.rectTransform, Pad, y, w, 160f);
+        MonitorUi.TopLeft(help.rectTransform, Pad, y, w, 260f);
+    }
+
+    private static string AidTitle(AidType t)
+    {
+        switch (t)
+        {
+            case AidType.LateralPort: return "Левый латеральный";
+            case AidType.LateralStarboard: return "Правый латеральный";
+            case AidType.CardinalNorth: return "Северный (N)";
+            case AidType.CardinalEast: return "Восточный (E)";
+            case AidType.CardinalSouth: return "Южный (S)";
+            case AidType.CardinalWest: return "Западный (W)";
+            case AidType.IsolatedDanger: return "Отдельной опасности";
+            default: return "Осевой";
+        }
     }
 
     private void BuildMap()
@@ -235,27 +278,75 @@ public class ScenarioEditorApp : MonoBehaviour
         RectTransform p = MonitorUi.Panel(root, "Props", MonitorUi.PanelColor);
         MonitorUi.Place(p, new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(0f, StatusBar), new Vector2(PropsWidth, -(TopBar + StatusBar)), new Vector2(1f, 0f));
         float w = PropsWidth - 2f * Pad, y = -Pad;
-        Header(p, "Акватория", ref y);
-        nameField = Row(p, "Имя", ref y, w, false, TMP_InputField.ContentType.Standard, v => Edit(() => doc.Rename(v)));
-        depthField = Row(p, "Глубина по умолчанию, м", ref y, w, false, TMP_InputField.ContentType.Standard,
+        float half = (w - MonitorUi.Gap) * 0.5f;
+        // Свойства акватории — когда знак не выделен
+        RectTransform g = areaGroup = Group(p, "AreaProps");
+        Header(g, "Акватория", ref y);
+        nameField = Row(g, "Имя", ref y, w, false, TMP_InputField.ContentType.Standard, v => Edit(() => doc.Rename(v)));
+        depthField = Row(g, "Глубина по умолчанию, м", ref y, w, false, TMP_InputField.ContentType.Standard,
                          v => EditNumber(v, d => d > 0.0, d => doc.Area.defaultDepth = (float)d));
-        Label(p, "Описание", ref y, w);
-        descField = MonitorUi.Field(p, Pad, y, w, 90f, "для кого и для чего", true, TMP_InputField.ContentType.Standard,
+        Label(g, "Описание", ref y, w);
+        descField = MonitorUi.Field(g, Pad, y, w, 90f, "для кого и для чего", true, TMP_InputField.ContentType.Standard,
                                     v => Edit(() => { doc.Area.description = v; doc.Commit(); }), 16f);
         y -= 90f + 2f * MonitorUi.Gap;
-        Header(p, "Границы района, м", ref y);
-        float half = (w - MonitorUi.Gap) * 0.5f;
-        Label(p, "Восток: от … до", ref y, w);
-        eMinField = MonitorUi.Field(p, Pad, y, half, 34f, "", false, TMP_InputField.ContentType.Standard, v => EditBound(v, 0));
-        eMaxField = MonitorUi.Field(p, Pad + half + MonitorUi.Gap, y, half, 34f, "", false, TMP_InputField.ContentType.Standard, v => EditBound(v, 1));
+        Header(g, "Границы района, м", ref y);
+        Label(g, "Восток: от … до", ref y, w);
+        eMinField = MonitorUi.Field(g, Pad, y, half, 34f, "", false, TMP_InputField.ContentType.Standard, v => EditBound(v, 0));
+        eMaxField = MonitorUi.Field(g, Pad + half + MonitorUi.Gap, y, half, 34f, "", false, TMP_InputField.ContentType.Standard, v => EditBound(v, 1));
         y -= 34f + MonitorUi.Gap;
-        Label(p, "Север: от … до", ref y, w);
-        nMinField = MonitorUi.Field(p, Pad, y, half, 34f, "", false, TMP_InputField.ContentType.Standard, v => EditBound(v, 2));
-        nMaxField = MonitorUi.Field(p, Pad + half + MonitorUi.Gap, y, half, 34f, "", false, TMP_InputField.ContentType.Standard, v => EditBound(v, 3));
+        Label(g, "Север: от … до", ref y, w);
+        nMinField = MonitorUi.Field(g, Pad, y, half, 34f, "", false, TMP_InputField.ContentType.Standard, v => EditBound(v, 2));
+        nMaxField = MonitorUi.Field(g, Pad + half + MonitorUi.Gap, y, half, 34f, "", false, TMP_InputField.ContentType.Standard, v => EditBound(v, 3));
         y -= 34f + 3f * MonitorUi.Gap;
-        Header(p, "Проверка", ref y);
+
+        // 21.2б: свойства выделенного знака — на месте свойств акватории
+        g = aidGroup = Group(p, "AidProps");
+        float ya = -Pad;
+        Header(g, "Знак МАМС", ref ya);
+        TextMeshProUGUI hint = MonitorUi.Text(g, "Delete — удалить · Esc — снять выделение (к свойствам акватории)", 14f, MonitorUi.MutedColor, TextAlignmentOptions.TopLeft);
+        MonitorUi.TopLeft(hint.rectTransform, Pad, ya, w, 20f);
+        ya -= 24f;
+        aidNameField = Row(g, "Имя", ref ya, w, false, TMP_InputField.ContentType.Standard,
+                           v => EditAid(x => { string n = (v ?? "").Trim(); if (n.Length == 0) return false; x.name = n; return true; }));
+        Label(g, "Тип", ref ya, w);
+        float xa = Pad;
+        ui.Button(g, ref xa, ya, 48f, "<", MonitorUi.NeutralColor, () => CycleAidType(-1));
+        ui.Button(g, ref xa, ya, w - 2f * 48f - 2f * MonitorUi.Gap, "", MonitorUi.NeutralColor, () => CycleAidType(1),
+                  () => SelAid != null ? IalaMarks.Get(SelAid.type).TitleRu : "");
+        ui.Button(g, ref xa, ya, 48f, ">", MonitorUi.NeutralColor, () => CycleAidType(1));
+        ya -= MonitorUi.RowHeight + MonitorUi.Gap;
+        Label(g, "Положение, м: восток … север", ref ya, w);
+        aidEField = MonitorUi.Field(g, Pad, ya, half, 34f, "", false, TMP_InputField.ContentType.Standard, v => EditAidPos(v, true));
+        aidNField = MonitorUi.Field(g, Pad + half + MonitorUi.Gap, ya, half, 34f, "", false, TMP_InputField.ContentType.Standard, v => EditAidPos(v, false));
+        ya -= 34f + MonitorUi.Gap;
+        Label(g, "Огонь (пусто — по типу знака)", ref ya, w);
+        aidLightField = MonitorUi.Field(g, Pad, ya, w, 34f, "", false, TMP_InputField.ContentType.Standard,
+                                        v => EditAid(x => { x.lightCharacter = (v ?? "").Trim(); return true; }));
+        ya -= 34f + MonitorUi.Gap;
+        TextMeshProUGUI lh = MonitorUi.Text(g, "По МАМС: Fl R 4s · Fl G 4s · Q · Q(3) 10s · Q(6)+LFl 15s · Q(9) 15s · Fl(2) 5s · LFl 10s",
+                                            14f, MonitorUi.MutedColor, TextAlignmentOptions.TopLeft);
+        MonitorUi.TopLeft(lh.rectTransform, Pad, ya, w, 40f);
+        ya -= 44f;
+        xa = Pad;
+        ui.Button(g, ref xa, ya, half, "Огонь по умолчанию", MonitorUi.NeutralColor, () => EditAid(x => { x.lightCharacter = ""; return true; }), null, null,
+                  () => SelAid != null && !string.IsNullOrEmpty(SelAid.lightCharacter));
+        ui.Button(g, ref xa, ya, half, "Удалить знак", MonitorUi.StopColor, DeleteAid);
+        ya -= MonitorUi.RowHeight + 3f * MonitorUi.Gap;
+        ShowPropsGroup();
+
+        float yc = Mathf.Min(y, ya);
+        Header(p, "Проверка", ref yc);
         checkText = MonitorUi.Text(p, "", 15f, Color.white, TextAlignmentOptions.TopLeft);
-        MonitorUi.TopLeft(checkText.rectTransform, Pad, y, w, 380f);
+        MonitorUi.TopLeft(checkText.rectTransform, Pad, yc, w, 1080f - TopBar - StatusBar + yc - Pad);
+    }
+
+    private static RectTransform Group(RectTransform p, string name)
+    {
+        var go = new GameObject(name, typeof(RectTransform));
+        go.transform.SetParent(p, false);
+        RectTransform rt = go.GetComponent<RectTransform>();
+        MonitorUi.Stretch(rt, 0f, 0f, 0f, 0f);
+        return rt;
     }
 
     private TMP_InputField Row(RectTransform p, string label, ref float y, float w, bool multiline, TMP_InputField.ContentType type, UnityEngine.Events.UnityAction<string> onEnd)
@@ -287,6 +378,9 @@ public class ScenarioEditorApp : MonoBehaviour
         doc = d;
         lastDraftText = "";
         mapDirty = true;
+        selectedAid = -1;
+        dragAid = false;
+        ShowPropsGroup();
         FitArea();
         FillFields();
         Refresh();
@@ -348,6 +442,81 @@ public class ScenarioEditorApp : MonoBehaviour
         Set(eMaxField, MonitorUi.Num(a.boundsMax.East, 0));
         Set(nMinField, MonitorUi.Num(a.boundsMin.North, 0));
         Set(nMaxField, MonitorUi.Num(a.boundsMax.North, 0));
+        FillAidFields();
+    }
+
+    // ─────────── Знаки (21.2б) ───────────
+    private AidToNavigation SelAid => doc != null && AidEditing.Valid(doc.Area, selectedAid) ? doc.Area.aids[selectedAid] : null;
+
+    /// <summary>Выделить знак (−1 — снять); незаконченный ввод в поле сначала применяется к прежнему знаку.</summary>
+    private void SelectAid(int i)
+    {
+        if (doc == null || !AidEditing.Valid(doc.Area, i)) i = -1;
+        if (i == selectedAid) return;
+        EventSystem es = EventSystem.current;
+        if (es != null && es.currentSelectedGameObject != null) es.SetSelectedGameObject(null);   // onEndEdit — прежнему знаку
+        selectedAid = i;
+        ShowPropsGroup();
+        FillAidFields();
+        Refresh();
+    }
+
+    // После отмены / повтора — тот же знак по имени (номер в списке мог измениться)
+    private void Reselect(string name)
+    {
+        selectedAid = name == null || doc == null ? -1 : doc.Area.aids.FindIndex(x => x != null && x.name == name);
+        ShowPropsGroup();
+    }
+
+    private void ShowPropsGroup()
+    {
+        bool aid = SelAid != null;
+        if (areaGroup != null) areaGroup.gameObject.SetActive(!aid);
+        if (aidGroup != null) aidGroup.gameObject.SetActive(aid);
+    }
+
+    private void FillAidFields()
+    {
+        AidToNavigation x = SelAid;
+        if (x == null) return;
+        Set(aidNameField, x.name);
+        Set(aidEField, MonitorUi.Num(x.position.East, 1));
+        Set(aidNField, MonitorUi.Num(x.position.North, 1));
+        Set(aidLightField, x.lightCharacter ?? "");
+        if (aidLightField.placeholder is TextMeshProUGUI ph) ph.text = "по умолчанию: " + IalaMarks.Get(x.type).DefaultLight;
+    }
+
+    // Правка выделенного знака из поля; change → false — значение не принято (вернуть прежнее)
+    private void EditAid(Func<AidToNavigation, bool> change)
+    {
+        AidToNavigation x = SelAid;
+        if (x == null) return;
+        Edit(() => { if (change(x)) doc.Commit(); });
+    }
+
+    private void EditAidPos(string text, bool east)
+    {
+        if (!MonitorUi.TryNumber(text, out double v)) { FillFields(); return; }
+        EditAid(x => { x.position = east ? new WorldPosition(v, x.position.North) : new WorldPosition(x.position.East, v); return true; });
+    }
+
+    private void CycleAidType(int d)
+    {
+        AidToNavigation x = SelAid;
+        if (x == null) return;
+        int n = AidEditing.Palette.Length;
+        int k = Array.IndexOf(AidEditing.Palette, x.type);
+        AidType t = AidEditing.Palette[((k < 0 ? 0 : k) + d + n) % n];
+        Edit(() => { AidEditing.SetType(doc.Area, selectedAid, t); doc.Commit(); });
+    }
+
+    private void DeleteAid()
+    {
+        if (doc == null || !AidEditing.Remove(doc.Area, selectedAid)) return;
+        selectedAid = -1;
+        dragAid = false;
+        ShowPropsGroup();
+        Edit(() => doc.Commit());
     }
 
     private static void Set(TMP_InputField f, string v)
@@ -357,18 +526,21 @@ public class ScenarioEditorApp : MonoBehaviour
 
     private void Undo()
     {
-        if (doc != null && doc.Undo()) { mapDirty = true; FillFields(); Refresh(); }
+        string sel = SelAid?.name;
+        if (doc != null && doc.Undo()) { Reselect(sel); mapDirty = true; FillFields(); Refresh(); }
     }
 
     private void Redo()
     {
-        if (doc != null && doc.Redo()) { mapDirty = true; FillFields(); Refresh(); }
+        string sel = SelAid?.name;
+        if (doc != null && doc.Redo()) { Reselect(sel); mapDirty = true; FillFields(); Refresh(); }
     }
 
     private void SetTool(Tool t)
     {
         tool = t;
         dragHandle = -1;
+        dragAid = false;
         Refresh();
     }
 
@@ -563,8 +735,10 @@ public class ScenarioEditorApp : MonoBehaviour
         if (k.escapeKey.wasPressedThisFrame)
         {
             if (dialogOpen && doc != null) CloseDialog();
-            else SetTool(Tool.Select);
+            else if (tool != Tool.Select) SetTool(Tool.Select);
+            else SelectAid(-1);
         }
+        if (!dialogOpen && k.deleteKey.wasPressedThisFrame) DeleteAid();
         if (dialogOpen || !ctrl) return;
         if (k.zKey.wasPressedThisFrame) { if (shift) Redo(); else Undo(); }
         else if (k.yKey.wasPressedThisFrame) Redo();
@@ -588,11 +762,34 @@ public class ScenarioEditorApp : MonoBehaviour
 
         // Нажатие
         int hot = tool == Tool.Bounds && inside ? NearestHandle(px, py, 12.0) : -1;
+        int hotAid = tool != Tool.Bounds && inside && !dragAid && dragHandle < 0 ? AidEditing.HitTest(doc.Area, viewport, px, py, 11.0) : -1;
         if (inside && (m.rightButton.wasPressedThisFrame || m.middleButton.wasPressedThisFrame)) { panning = true; lastLocal = local; }
         if (inside && m.leftButton.wasPressedThisFrame)
         {
             if (hot >= 0) dragHandle = hot;
-            else { panning = true; lastLocal = local; }
+            else if (hotAid >= 0)
+            {
+                // Знак под курсором — выделить; двигается, когда мышь сдвинулась больше чем на 3 пикс.
+                SelectAid(hotAid);
+                dragAid = true;
+                dragMoved = false;
+                pressLocal = local;
+            }
+            else if (tool == Tool.Aid)
+            {
+                // Поставить знак выбранного типа в узел сетки; пока кнопка нажата — его можно тянуть
+                int i = AidEditing.Add(doc.Area, aidType, snapped);
+                SelectAid(i);
+                dragAid = true;
+                dragMoved = true;
+                pressLocal = local;
+            }
+            else
+            {
+                SelectAid(-1);
+                panning = true;
+                lastLocal = local;
+            }
         }
         // Перетаскивание
         if (panning)
@@ -602,6 +799,11 @@ public class ScenarioEditorApp : MonoBehaviour
             viewport.Pan(d.x, d.y);
         }
         if (dragHandle >= 0) MoveHandle(dragHandle, snapped);
+        if (dragAid && SelAid != null)
+        {
+            if (!dragMoved && (local - pressLocal).magnitude > 3f) dragMoved = true;
+            if (dragMoved) { AidEditing.Move(doc.Area, selectedAid, snapped); FillAidFields(); }
+        }
         // Отпустили
         bool anyHeld = m.leftButton.isPressed || m.rightButton.isPressed || m.middleButton.isPressed;
         if (!anyHeld)
@@ -611,11 +813,18 @@ public class ScenarioEditorApp : MonoBehaviour
                 dragHandle = -1;
                 if (doc.Commit()) { FillFields(); Refresh(); }
             }
+            if (dragAid)
+            {
+                dragAid = false;
+                if (doc.Commit()) { FillFields(); Refresh(); }   // поставили или передвинули — один шаг отмены
+            }
             panning = false;
         }
 
+        hoverAid = dragAid ? selectedAid : hotAid;
         overlay.HotHandle = dragHandle >= 0 ? dragHandle : hot;
-        overlay.ShowCursor = inside && tool == Tool.Bounds;
+        overlay.HotAid = hoverAid;
+        overlay.ShowCursor = inside && (tool == Tool.Bounds || (tool == Tool.Aid && hotAid < 0) || (dragAid && dragMoved));
         overlay.Cursor = snapped;
         cursorWorld = world;
         cursorInside = inside;
@@ -662,7 +871,9 @@ public class ScenarioEditorApp : MonoBehaviour
         viewport.SetSize(Mathf.Max(1f, mapRect.rect.width), Mathf.Max(1f, mapRect.rect.height));
         if (mapDirty || mapData == null)
         {
-            mapData = DebriefMap.BuildStatic(SessionArea.From(doc.Area), null);
+            SessionArea sa = SessionArea.From(doc.Area);
+            sa.aids.Clear();   // знаки рисует слой редактора (тянуть без перестройки карты)
+            mapData = DebriefMap.BuildStatic(sa, null);
             mapStatic.SetView(mapData, 0);
             mapDirty = false;
             builtVersion = -1;
@@ -671,6 +882,11 @@ public class ScenarioEditorApp : MonoBehaviour
         overlay.BoundsMin = doc.Area.boundsMin;
         overlay.BoundsMax = doc.Area.boundsMax;
         overlay.ShowHandles = tool == Tool.Bounds;
+        overlay.Aids.Clear();
+        foreach (AidToNavigation x in doc.Area.aids) if (x != null) overlay.Aids.Add((x.position, x.type));
+        overlay.SelectedAid = SelAid != null ? selectedAid : -1;
+        overlay.SetVerticesDirty();
+        AidLabels();
         if (viewport.Version != builtVersion)
         {
             builtVersion = viewport.Version;
@@ -678,6 +894,39 @@ public class ScenarioEditorApp : MonoBehaviour
             mapStatic.SetVerticesDirty();
             overlay.SetVerticesDirty();
         }
+    }
+
+    // Имена знаков рядом со значками; гуще 60 на экране — не подписывать (каша)
+    private void AidLabels()
+    {
+        List<AidToNavigation> aids = doc.Area.aids;
+        Rect r = overlay.rectTransform.rect;
+        int visible = 0;
+        foreach (AidToNavigation x in aids)
+            if (x != null && r.Contains(overlay.Px(x.position, r))) visible++;
+        bool show = visible <= 60;
+        int used = 0;
+        for (int i = 0; i < aids.Count; i++)
+        {
+            AidToNavigation x = aids[i];
+            if (!show || x == null) continue;
+            Vector2 c = overlay.Px(x.position, r);
+            if (!r.Contains(c)) continue;
+            if (used >= aidLabels.Count)
+            {
+                TextMeshProUGUI t = MonitorUi.Text(overlay.transform, "", 14f, Color.white, TextAlignmentOptions.Left);
+                t.textWrappingMode = TextWrappingModes.NoWrap;
+                MonitorUi.Place(t.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(240f, 20f), new Vector2(0f, 0.5f));
+                aidLabels.Add(t);
+            }
+            TextMeshProUGUI l = aidLabels[used++];
+            if (l.text != x.name) l.text = x.name;
+            l.color = i == selectedAid ? EditorMapOverlay.HandleHot : new Color(1f, 1f, 1f, 0.8f);
+            l.rectTransform.anchoredPosition = c + new Vector2(12f, 0f);
+            if (!l.gameObject.activeSelf) l.gameObject.SetActive(true);
+        }
+        for (int i = used; i < aidLabels.Count; i++)
+            if (aidLabels[i].gameObject.activeSelf) aidLabels[i].gameObject.SetActive(false);
     }
 
     private void WriteDraft()
@@ -714,6 +963,11 @@ public class ScenarioEditorApp : MonoBehaviour
         string pos = cursorInside
             ? $"E {MonitorUi.Num(cursorWorld.East, 0)} м · N {MonitorUi.Num(cursorWorld.North, 0)} м · глубина {MonitorUi.Num(doc.Area.DepthAt(cursorWorld), 1)} м"
             : "курсор вне карты";
+        if (cursorInside && AidEditing.Valid(doc.Area, hoverAid))
+        {
+            AidToNavigation x = doc.Area.aids[hoverAid];
+            pos += $" · знак «{x.name}» — {IalaMarks.Get(x.type).TitleRu.ToLowerInvariant()}, {x.Light}";
+        }
         string saved = doc.SavedAt.HasValue ? $"сохранено {doc.SavedAt.Value:HH:mm}" : doc.Dirty ? "не сохранено" : "";
         statusText.text = $"{pos} · 1 пикс. = {MonitorUi.Num(viewport.MetersPerPixel, viewport.MetersPerPixel < 10 ? 1 : 0)} м · сетка {MapGrid.StepTitle(GridStep)}" +
                           $"{(snap ? " (привязка)" : "")} · {saved}{(lastDraftText.Length > 0 ? " · " + lastDraftText : "")}";

@@ -4,6 +4,7 @@
 // Карта акватории под ним — DebriefMapGraphic (то же, что в окне инструктора и разборе). Здесь —
 // только то, что нужно для правки: сетка шага привязки (прорежена до читаемой), рамка границ района
 // с ручками в углах и на серединах сторон (выделенная — ярче), крестик узла привязки под курсором.
+// 21.2б — знаки МАМС (форма и цвет по типу, выделенный — жёлтое кольцо, под курсором — голубое).
 // Координаты: пиксель окна MapViewport = локальная точка от левого нижнего угла этой графики.
 // ============================================================
 using System.Collections.Generic;
@@ -28,6 +29,11 @@ public class EditorMapOverlay : MaskableGraphic
     public int HotHandle = -1;
     public bool ShowCursor;
     public WorldPosition Cursor;
+    /// <summary>21.2б: знаки МАМС (рисуются здесь, а не картой — тянуть без перестройки карты).</summary>
+    public readonly List<(WorldPosition p, AidType t)> Aids = new List<(WorldPosition, AidType)>();
+    public int SelectedAid = -1, HotAid = -1;
+    /// <summary>Только значок знака этого типа в центре (кнопка палитры), без карты.</summary>
+    public AidType? Swatch;
 
     /// <summary>Ручки рамки: 0–3 — углы (ЮЗ, ЮВ, СВ, СЗ), 4–7 — середины сторон (Ю, В, С, З).</summary>
     public static List<WorldPosition> BoundsHandles(WorldPosition min, WorldPosition max)
@@ -45,6 +51,7 @@ public class EditorMapOverlay : MaskableGraphic
     protected override void OnPopulateMesh(VertexHelper vh)
     {
         vh.Clear();
+        if (Swatch.HasValue) { AidSymbol(vh, GetPixelAdjustedRect().center, Swatch.Value); return; }   // значок кнопки палитры
         if (Viewport == null) return;
         Rect r = GetPixelAdjustedRect();
         MapRect b = Viewport.Bounds;
@@ -82,6 +89,15 @@ public class EditorMapOverlay : MaskableGraphic
             }
         }
 
+        for (int i = 0; i < Aids.Count; i++)
+        {
+            Vector2 c = Px(Aids[i].p, r);
+            if (c.x < r.xMin - 20f || c.x > r.xMax + 20f || c.y < r.yMin - 20f || c.y > r.yMax + 20f) continue;
+            if (i == SelectedAid) Ring(vh, c, 13f, 2.5f, HandleHot);
+            else if (i == HotAid) Ring(vh, c, 12f, 1.5f, CursorColor);
+            AidSymbol(vh, c, Aids[i].t);
+        }
+
         if (ShowCursor)
         {
             Vector2 c = Px(Cursor, r);
@@ -97,6 +113,77 @@ public class EditorMapOverlay : MaskableGraphic
     {
         Viewport.ToPixel(p, out double px, out double py);
         return new Vector2(r.xMin + (float)px, r.yMin + (float)py);
+    }
+
+    // Знак по форме МАМС (упрощённо, вид сверху): левый — квадрат (цилиндр), правый — треугольник (конус),
+    // кардинальные — ромб с чёрной серединой, отдельной опасности — круг с красной серединой,
+    // осевой — красный круг с белой серединой
+    public static void AidSymbol(VertexHelper vh, Vector2 c, AidType t)
+    {
+        Color main = DebriefMapGraphic.AidColor(t), dark = new Color(0.05f, 0.05f, 0.06f, 1f);
+        switch (t)
+        {
+            case AidType.LateralPort:
+                Quad(vh, c - new Vector2(6.5f, 6.5f), c + new Vector2(6.5f, 6.5f), dark);
+                Quad(vh, c - new Vector2(5f, 5f), c + new Vector2(5f, 5f), main);
+                break;
+            case AidType.LateralStarboard:
+                Tri(vh, c + new Vector2(0f, 9f), c + new Vector2(-8f, -6f), c + new Vector2(8f, -6f), dark);
+                Tri(vh, c + new Vector2(0f, 6.5f), c + new Vector2(-5.5f, -4.5f), c + new Vector2(5.5f, -4.5f), main);
+                break;
+            case AidType.IsolatedDanger:
+                Disc(vh, c, 7f, dark);
+                Disc(vh, c, 5.5f, new Color(0.8f, 0.8f, 0.8f, 1f));
+                Disc(vh, c, 2.5f, new Color(1f, 0.3f, 0.25f, 1f));
+                break;
+            case AidType.SafeWater:
+                Disc(vh, c, 7f, dark);
+                Disc(vh, c, 5.5f, main);
+                Disc(vh, c, 2.5f, Color.white);
+                break;
+            default:   // кардинальные
+                Diamond(vh, c, 9f, dark);
+                Diamond(vh, c, 7f, new Color(1f, 0.85f, 0.2f, 1f));
+                Diamond(vh, c, 3f, dark);
+                break;
+        }
+    }
+
+    private static void Tri(VertexHelper vh, Vector2 a, Vector2 b, Vector2 d, Color col)
+    {
+        int i = vh.currentVertCount;
+        vh.AddVert(new Vector3(a.x, a.y), col, Vector2.zero);
+        vh.AddVert(new Vector3(b.x, b.y), col, Vector2.zero);
+        vh.AddVert(new Vector3(d.x, d.y), col, Vector2.zero);
+        vh.AddTriangle(i, i + 1, i + 2);
+    }
+
+    private static void Diamond(VertexHelper vh, Vector2 c, float h, Color col)
+    {
+        Tri(vh, c + new Vector2(0f, h), c + new Vector2(-h, 0f), c + new Vector2(h, 0f), col);
+        Tri(vh, c + new Vector2(0f, -h), c + new Vector2(h, 0f), c + new Vector2(-h, 0f), col);
+    }
+
+    private static void Disc(VertexHelper vh, Vector2 c, float rad, Color col)
+    {
+        const int n = 16;
+        for (int k = 0; k < n; k++)
+        {
+            float a0 = 2f * Mathf.PI * k / n, a1 = 2f * Mathf.PI * (k + 1) / n;
+            Tri(vh, c, c + rad * new Vector2(Mathf.Cos(a0), Mathf.Sin(a0)), c + rad * new Vector2(Mathf.Cos(a1), Mathf.Sin(a1)), col);
+        }
+    }
+
+    private static void Ring(VertexHelper vh, Vector2 c, float rad, float w, Color col)
+    {
+        const int n = 24;
+        for (int k = 0; k < n; k++)
+        {
+            float a0 = 2f * Mathf.PI * k / n, a1 = 2f * Mathf.PI * (k + 1) / n;
+            Vector2 d0 = new Vector2(Mathf.Cos(a0), Mathf.Sin(a0)), d1 = new Vector2(Mathf.Cos(a1), Mathf.Sin(a1));
+            Tri(vh, c + rad * d0, c + (rad - w) * d0, c + rad * d1, col);
+            Tri(vh, c + rad * d1, c + (rad - w) * d0, c + (rad - w) * d1, col);
+        }
     }
 
     private static void Quad(VertexHelper vh, Vector2 a, Vector2 b, Color c)

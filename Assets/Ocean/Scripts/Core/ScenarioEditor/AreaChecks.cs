@@ -3,7 +3,8 @@
 //
 // Ошибки — сохранить можно, но сценарий на такой акватории работать не будет как задумано:
 // пустое имя, имя встроенной, границы наоборот, глубина ≤ 0. Предупреждения — знаки, мели и
-// причалы вне района, многоугольник меньше 3 вершин, фарватер меньше 2 точек, повтор имён знаков.
+// причалы вне района, многоугольник меньше 3 вершин, фарватер меньше 2 точек, повтор имён знаков;
+// 21.2б — огонь знака не по МАМС (AidEditing.LightWarning).
 // ============================================================
 using System.Collections.Generic;
 
@@ -40,6 +41,8 @@ public static class AreaChecks
                 string tag = $"Знак «{x.name}»";
                 if (!a.InBounds(x.position)) r.Warnings.Add($"{tag} вне района.");
                 if (!string.IsNullOrWhiteSpace(x.name) && !names.Add(x.name)) r.Warnings.Add($"{tag}: имя повторяется.");
+                string light = AidEditing.LightWarning(x.type, x.lightCharacter);   // 21.2б
+                if (light != null) r.Warnings.Add($"{tag}: {light}.");
             }
         if (a.shoals != null)
             foreach (ShoalArea s in a.shoals)

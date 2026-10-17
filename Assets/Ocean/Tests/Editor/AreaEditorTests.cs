@@ -1,5 +1,6 @@
 // ============================================================
-// AreaEditorTests.cs — Редактор акватории: документ, отмена, сохранение, черновик, сетка, проверка (запрос 21.2а, Core)
+// AreaEditorTests.cs — Редактор акватории: документ, отмена, сохранение, черновик, сетка, проверка (запрос 21.2а, Core);
+// знаки МАМС — имена, правка и отмена, попадание мышью, огонь по МАМС (21.2б)
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -196,5 +197,109 @@ public class AreaEditorTests
         Assert.IsTrue(r.Warnings.Exists(w => w.Contains("имя повторяется")));
         a.name = "WaterArea_Demo";
         Assert.IsTrue(AreaChecks.Check(a, cat).Errors.Exists(e => e.Contains("занято встроенной")));
+    }
+
+    // ─────────── 21.2б: знаки МАМС ───────────
+    [Test]
+    public void Aids_NamesAddMoveRemoveType_Undo()
+    {
+        AreaDocument doc = AreaDocument.New("Знаки");
+        WaterArea a = doc.Area;
+        Assert.AreEqual(0, AidEditing.Add(a, AidType.LateralPort, new WorldPosition(100, 200)));
+        AidEditing.Add(a, AidType.LateralPort, new WorldPosition(150, 200));
+        AidEditing.Add(a, AidType.CardinalNorth, new WorldPosition(0, 500));
+        Assert.AreEqual(new[] { "Л-1", "Л-2", "N-1" }, a.aids.ConvertAll(x => x.name).ToArray());
+        Assert.IsTrue(doc.Commit());
+        Assert.IsTrue(AidEditing.Remove(a, 0));
+        Assert.IsFalse(AidEditing.Remove(a, 5), "нет такого знака");
+        Assert.AreEqual("Л-1", AidEditing.NextName(a, AidType.LateralPort), "первый свободный номер");
+        doc.Commit();
+        AidEditing.Move(a, 0, new WorldPosition(175, 225));
+        doc.Commit();
+
+        // Тип: имя по умолчанию следует за типом, своё имя остаётся
+        AidEditing.SetType(a, 0, AidType.LateralStarboard);
+        Assert.AreEqual("П-1", a.aids[0].name);
+        a.aids[1].name = "Поворот";
+        AidEditing.SetType(a, 1, AidType.CardinalSouth);
+        Assert.AreEqual("Поворот", a.aids[1].name);
+        Assert.AreEqual(AidType.CardinalSouth, a.aids[1].type);
+        doc.Commit();
+
+        // Отмена — по шагам назад
+        Assert.IsTrue(doc.Undo());
+        Assert.AreEqual("Л-2", doc.Area.aids[0].name);
+        Assert.AreEqual(175.0, doc.Area.aids[0].position.East, 1e-9);
+        Assert.IsTrue(doc.Undo());
+        Assert.AreEqual(150.0, doc.Area.aids[0].position.East, 1e-9, "до переноса");
+        Assert.IsTrue(doc.Undo());
+        Assert.AreEqual(3, doc.Area.aids.Count, "до удаления");
+        Assert.IsTrue(doc.Redo());
+        Assert.AreEqual(2, doc.Area.aids.Count);
+    }
+
+    [Test]
+    public void Aids_HitTest_WithinPixels_LaterOnTop()
+    {
+        var a = ScriptableObject.CreateInstance<WaterArea>();
+        a.aids.Add(new AidToNavigation("A", AidType.LateralPort, 0, 0));
+        a.aids.Add(new AidToNavigation("B", AidType.LateralStarboard, 100, 0));
+        a.aids.Add(new AidToNavigation("C", AidType.SafeWater, 100, 0));
+        var v = new MapViewport { Follow = false, WidthPx = 1000, HeightPx = 800, MetersPerPixel = 2.0, Center = new WorldPosition(0, 0) };
+        // A — в центре (500; 400), B и C — на 50 пикс. правее
+        Assert.AreEqual(0, AidEditing.HitTest(a, v, 505, 404, 11.0));
+        Assert.AreEqual(-1, AidEditing.HitTest(a, v, 520, 400, 11.0), "дальше 11 пикс. — мимо");
+        Assert.AreEqual(2, AidEditing.HitTest(a, v, 551, 400, 11.0), "наложение — поставленный позже");
+    }
+
+    [Test]
+    public void Aids_LightWarning_IalaRegionA()
+    {
+        foreach (AidType t in AidEditing.Palette)
+        {
+            Assert.IsNull(AidEditing.LightWarning(t, ""), "пусто — по типу");
+            Assert.IsNull(AidEditing.LightWarning(t, IalaMarks.Get(t).DefaultLight), "огонь по умолчанию верен: " + t);
+        }
+        Assert.IsNull(AidEditing.LightWarning(AidType.LateralPort, "Fl R 4s"));
+        Assert.IsNull(AidEditing.LightWarning(AidType.LateralPort, "Q R"));
+        StringAssert.Contains("красный", AidEditing.LightWarning(AidType.LateralPort, "Fl G 4s"));
+        Assert.IsNull(AidEditing.LightWarning(AidType.LateralStarboard, "Fl(3) G 10s"));
+        StringAssert.Contains("зелёный", AidEditing.LightWarning(AidType.LateralStarboard, "Fl 4s"));
+        Assert.IsNull(AidEditing.LightWarning(AidType.CardinalNorth, "VQ"));
+        Assert.IsNotNull(AidEditing.LightWarning(AidType.CardinalNorth, "Q(3) 10s"));
+        Assert.IsNull(AidEditing.LightWarning(AidType.CardinalEast, "VQ(3) 5s"));
+        Assert.IsNull(AidEditing.LightWarning(AidType.CardinalSouth, "VQ(6)+LFl 10s"));
+        Assert.IsNotNull(AidEditing.LightWarning(AidType.CardinalSouth, "Q(6) 15s"));
+        Assert.IsNull(AidEditing.LightWarning(AidType.CardinalWest, "Q(9) 15s"));
+        Assert.IsNotNull(AidEditing.LightWarning(AidType.CardinalWest, "Q(9) R 15s"), "кардинальные — белые");
+        Assert.IsNull(AidEditing.LightWarning(AidType.IsolatedDanger, "Fl(2) 10s"));
+        Assert.IsNotNull(AidEditing.LightWarning(AidType.IsolatedDanger, "Fl 5s"));
+        Assert.IsNull(AidEditing.LightWarning(AidType.SafeWater, "Iso 4s"));
+        Assert.IsNull(AidEditing.LightWarning(AidType.SafeWater, "Mo(A) 6s"));
+        Assert.IsNotNull(AidEditing.LightWarning(AidType.SafeWater, "Fl R 4s"));
+        StringAssert.Contains("не распознан", AidEditing.LightWarning(AidType.LateralPort, "мигает R"));
+        StringAssert.Contains("не распознан", AidEditing.LightWarning(AidType.CardinalEast, "Q(x) 10s"));
+    }
+
+    [Test]
+    public void Aids_Checks_LightWarning_DemoClean_SavedLightKept()
+    {
+        WaterArea demo = Demo();
+        ScenarioCatalog cat = Catalog(demo);
+        AreaCheckResult d = AreaChecks.Check(AreaDocument.CopyOf(demo, "Копия").Area, cat);
+        Assert.AreEqual(0, d.Warnings.Count, "демо без замечаний: " + string.Join("; ", d.Warnings));
+
+        string root = TempRoot();
+        AreaDocument doc = AreaDocument.New("Огни");
+        int i = AidEditing.Add(doc.Area, AidType.CardinalEast, new WorldPosition(10, 10));
+        doc.Area.aids[i].lightCharacter = "Q(9) 15s";
+        doc.Commit();
+        AreaCheckResult r = AreaChecks.Check(doc.Area, cat);
+        Assert.IsTrue(r.Warnings.Exists(w => w.Contains("E-1") && w.Contains("Q(3)")), string.Join("; ", r.Warnings));
+        Assert.AreEqual(AreaSaveStatus.Saved, doc.Save(root, cat, false, new DateTime(2026, 10, 17, 12, 0, 0)));
+        AreaDocument back = AreaDocument.Open(doc.FilePath, new List<string>());
+        Assert.AreEqual("Q(9) 15s", back.Area.aids[0].lightCharacter);
+        Assert.AreEqual(AidType.CardinalEast, back.Area.aids[0].type);
+        Assert.AreEqual("E-1", back.Area.aids[0].name);
     }
 }

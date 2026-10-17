@@ -183,7 +183,7 @@ public class DebriefMapGraphic : MaskableGraphic
     }
 
     // ─────────── Примитивы ───────────
-    protected static Color AidColor(AidType t)
+    public static Color AidColor(AidType t)
     {
         switch (IalaMarks.Get(t).MainColor)
         {
