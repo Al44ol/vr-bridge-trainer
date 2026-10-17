@@ -27,7 +27,7 @@ public class TugWorkTests
         var crit = ScriptableObject.CreateInstance<AssessmentCriteria>();
         crit.settings = DemoTugWorkScenario.Assessment();
         var s = ScriptableObject.CreateInstance<ScenarioDefinition>();
-        DemoTugWorkScenario.Fill(s, area, Tug(), LowSpeedModelTests.Model45m(), crit);
+        DemoTugWorkScenario.Fill(s, area, Tug(), LowSpeedModelTests.Mariner(), crit);   // 19.4б-3: клиент — Mariner
         return s;
     }
 
@@ -64,7 +64,7 @@ public class TugWorkTests
         Assert.AreEqual(ScenarioMotionModel.Manoeuvring3Dof, s.motionModel);
         Assert.IsTrue(s.Ends(ScenarioEndConditions.TugWorkDone));
         Assert.IsFalse(s.Ends(ScenarioEndConditions.Arrival));
-        Assert.AreEqual(20f, s.windKnots);
+        Assert.AreEqual(15f, s.windKnots, "19.4б-3: 15 уз (Mariner)");
         Assert.AreEqual(60f, s.windRandomSectorDeg);
         Assert.IsFalse(s.tugAvailable, "буксир не вызывается — он свой");
 
@@ -72,7 +72,9 @@ public class TugWorkTests
         Assert.AreEqual(s.initial.position.East, own.East, 0.01, "начальные условия сценария = TugWorkSystem.Place");
         Assert.AreEqual(s.initial.position.North, own.North, 0.01);
         Assert.AreEqual(150.0, sys.BowDistance(own), 0.1, "нос буксира в 150 м от борта");
-        Assert.AreEqual(30.0, sys.Client.GapM, 0.5, "клиент в 30 м от кромки");
+        Assert.AreEqual(30.0 - sys.Client.Berth.fenderOuterDiameterM, sys.Client.GapM, 0.5, "клиент в 30 м от кромки (зазор — до кранцев)");
+        Assert.AreEqual(DemoWaterArea.Berth2Index, s.tugWork.berthIndex, "причал №2");
+        Assert.AreEqual(DemoTugWorkScenario.Version, s.demoVersion);
         Assert.AreEqual(-1, sys.Client.SideToBerth, "причал у клиента по ЛБ");
         Assert.AreEqual(1, sys.WorkSide, "буксир — у ПБ");
         s.tugWork.enabled = false;
@@ -132,14 +134,14 @@ public class TugWorkTests
     {
         ScenarioDefinition s = Scenario();
         TugWorkSystem sys = System(s, out ShipDynamicsModel own);
-        PutTug(sys, own, 15.0, 0.3, 0.0, 0.2);
+        PutTug(sys, own, 20.0, 0.3, 0.0, 0.2);
         for (int i = 0; i < 200 && sys.Contacts.Count == 0; i++)
         {
             sys.Apply(own, 0.02, i * 0.02);
             own.Step(0.02);
         }
         Assert.AreEqual(1, sys.Contacts.Count);
-        Assert.IsFalse(sys.Contacts[0].inZone, "15 м от миделя — вне зоны ± 10 м");
+        Assert.IsFalse(sys.Contacts[0].inZone, "20 м от миделя — вне зоны ± 15 м");
         Assert.IsFalse(sys.Done(TugWorkStage.Approach));
         Assert.AreEqual(PilotOrderKind.Approach, sys.Order);
     }
@@ -191,7 +193,7 @@ public class TugWorkTests
             if (i > 1) Assert.GreaterOrEqual(sys.DoneAt((TugWorkStage)i), sys.DoneAt((TugWorkStage)(i - 1)), "по порядку");
         }
         // Команды лоцмана — по одной, по порядку, после заданий
-        List<ExerciseEvent> orders = sim.Events.FindAll(e => e.Type == ExerciseEventType.PilotOrder);
+        List<ExerciseEvent> orders = sim.Events.FindAll(e => e.Type == ExerciseEventType.PilotOrder && e.Index <= (int)PilotOrderKind.LetGo);   // команды заданий
         Assert.AreEqual(4, orders.Count);
         for (int i = 0; i < 4; i++) Assert.AreEqual(i + 1, orders[i].Index);
         Assert.AreEqual(0.0, orders[0].Time, 0.1);

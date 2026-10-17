@@ -135,6 +135,9 @@ public class ScenarioDefinition : ScriptableObject
     public string id = "S-00";
     public string title = "Новый сценарий";
     [TextArea(6, 20)] public string briefing = "";
+    [Tooltip("19.4б-3: версия демо-сценария, созданного кодом (Demo…Scenario.Version); ассет с меньшей версией заполняется " +
+             "заново при входе в Play Mode. 0 — сценарий не из кода или до 19.4б-3")]
+    public int demoVersion;
 
     [Header("Акватория и судно")]
     public WaterArea waterArea;

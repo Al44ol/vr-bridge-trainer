@@ -243,10 +243,12 @@ public class MooringRecordingTests
 
             DebriefMapData map = DebriefMap.Build(s, null);
             Assert.IsTrue(map.HasBerths);
-            Assert.AreEqual(1, map.Polygons.FindAll(x => x.Layer == MapLayer.Pier).Count);
-            Assert.AreEqual(sc.waterArea.berths[0].FenderPositions().Count, map.Polygons.FindAll(x => x.Layer == MapLayer.Fender).Count);
-            Assert.AreEqual(sc.waterArea.berths[0].BollardPositions().Count, map.Markers.FindAll(x => x.Layer == MapLayer.Bollard).Count);
-            Assert.AreEqual(1, map.Lines.FindAll(x => x.Layer == MapLayer.Quay).Count);
+            int nb = sc.waterArea.berths.Count, fenders = 0, bollards = 0;   // 19.4б-3: причалов два
+            foreach (BerthArea ba in sc.waterArea.berths) { fenders += ba.FenderPositions().Count; bollards += ba.BollardPositions().Count; }
+            Assert.AreEqual(nb, map.Polygons.FindAll(x => x.Layer == MapLayer.Pier).Count);
+            Assert.AreEqual(fenders, map.Polygons.FindAll(x => x.Layer == MapLayer.Fender).Count);
+            Assert.AreEqual(bollards, map.Markers.FindAll(x => x.Layer == MapLayer.Bollard).Count);
+            Assert.AreEqual(nb, map.Lines.FindAll(x => x.Layer == MapLayer.Quay).Count);
 
             DebriefMapView berth = map.Views.Find(v => v.Key == "berth");
             Assert.IsNotNull(berth, "вид «У причала» в сценарии швартовки");
@@ -304,7 +306,7 @@ public class MooringRecordingTests
 
         // Окно инструктора и планшет: неподвижный слой с причалом, границы его включают
         DebriefMapData st = DebriefMap.BuildStatic(SessionArea.From(area), null);
-        Assert.AreEqual(1, st.Polygons.FindAll(x => x.Layer == MapLayer.Pier).Count);
+        Assert.AreEqual(area.berths.Count, st.Polygons.FindAll(x => x.Layer == MapLayer.Pier).Count);   // 19.4б-3: причалов два
         Assert.IsTrue(st.Views[0].Bounds.Contains(area.berths[0].Middle));
     }
 }

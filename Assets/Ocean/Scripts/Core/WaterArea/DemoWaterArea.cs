@@ -18,6 +18,8 @@
 //   • суша: западный и северный берег (12 м), остров на востоке (25 м) — ориентиры.
 //   • причал №1 (19.2б): кромка 80 м вдоль второго колена (060°) в 500 м за концом
 //     фарватера и в 120 м левее оси; кранцы под Model45m, швартовка левым бортом.
+//   • причал №2 (19.4б-3): продолжение той же кромки через 300 м, ≈ 258 м, кранцы под Mariner 161 м
+//     (судно-клиент упражнения 19-03 на своём буксире).
 // Корректность расстановки проверяют тесты WaterAreaTests (стороны буёв,
 // мели вне коридора, кардинальные знаки с нужной стороны мели).
 // ============================================================
@@ -79,6 +81,44 @@ public static class DemoWaterArea
         b.fenderSpacingM = BerthFenderSpacing;
         b.depthM = 8f;
         return b;
+    }
+
+    // ── Причал №2 (запрос 19.4б-3) — под судно-клиента Mariner упражнения 19-03 ──
+    /// <summary>Номер причала №2 в WaterArea.berths.</summary>
+    public const int Berth2Index = 1;
+    /// <summary>Начало кромки №2 — за концом кромки №1 по той же линии, м (между причалами — чистая вода).</summary>
+    public const double Berth2Gap = 300.0;
+    /// <summary>Размерения судна под причал №2 (ShipParameters_Mariner: L, B, d, C_B).</summary>
+    public const double Berth2ShipLength = 160.93, Berth2ShipBeam = 23.16, Berth2ShipDraft = 8.0, Berth2ShipBlock = 0.7;
+
+    /// <summary>
+    /// Причал №2: продолжение кромки №1 (060°, вода к юго-востоку) через Berth2Gap м; длина, кранцы, кнехты, глубина —
+    /// по PIANC под Mariner (BerthArea.ForShip: 1,6·L ≈ 258 м, глубина d + 3 м = 11 м).
+    /// </summary>
+    public static BerthArea Berth2()
+    {
+        BerthArea b1 = Berth();
+        WorldPosition d = b1.b - b1.a;
+        double len1 = d.Magnitude;
+        var u = new WorldPosition(d.East / len1, d.North / len1);
+        BerthArea b = BerthArea.ForShip(Berth2ShipLength, Berth2ShipBeam, Berth2ShipDraft, Berth2ShipBlock);
+        double len = (b.b - b.a).Magnitude;
+        b.name = "Причал №2";
+        b.a = new WorldPosition(b1.b.East + Berth2Gap * u.East, b1.b.North + Berth2Gap * u.North);
+        b.b = new WorldPosition(b.a.East + len * u.East, b.a.North + len * u.North);
+        return b;
+    }
+
+    /// <summary>Дописать причал №2 в акваторию, если его нет (ассет WaterArea_Demo до 19.4б-3). true — дописан.</summary>
+    public static bool EnsureBerth2(WaterArea area)
+    {
+        if (area == null) return false;
+        if (area.berths == null) area.berths = new List<BerthArea>();
+        if (area.berths.Count > Berth2Index) return false;
+        if (area.berths.Count < Berth2Index) area.berths.Add(Berth());
+        area.berths.Add(Berth2());
+        area.MarkChanged();
+        return true;
     }
 
     /// <summary>Заполнить акваторию демонстрационными объектами (прежнее содержимое удаляется).</summary>
@@ -156,6 +196,7 @@ public static class DemoWaterArea
 
         // ── Причал (19.2б) ──
         area.berths.Add(Berth());
+        area.berths.Add(Berth2());   // 19.4б-3: под Mariner (упражнение 19-03)
 
         area.MarkChanged();
     }

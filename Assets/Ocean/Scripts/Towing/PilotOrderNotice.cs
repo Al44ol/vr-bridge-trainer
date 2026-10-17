@@ -15,6 +15,8 @@ public class PilotOrderNotice : MonoBehaviour
 {
     [Tooltip("Сколько секунд видна надпись")]
     public float showSeconds = 6f;
+    [Tooltip("19.4б-3: обстановка («До причала … м, идёт … уз») — секунд, без сигнала")]
+    public float infoSeconds = 4f;
     public float distanceFromHead = 1.1f;
     [Tooltip("Над уровнем глаз, м (оповещение о провале — 0,22 м)")]
     public float upOffset = 0.05f;
@@ -28,7 +30,7 @@ public class PilotOrderNotice : MonoBehaviour
     private Canvas canvas;
     private TextMeshProUGUI label;
     private CanvasGroup group;
-    private float hideAt;
+    private float hideAt, lastCommandAt = -100f;
     private AudioSource audioSource;
     private AudioClip tone;
 
@@ -56,10 +58,17 @@ public class PilotOrderNotice : MonoBehaviour
 
     private void OnEvent(ExerciseEvent e)
     {
-        if (e.Type == ExerciseEventType.PilotOrder && e.InExercise) Show(e.Subject);
+        if (e.Type != ExerciseEventType.PilotOrder || !e.InExercise) return;
+        // 19.4б-3: обстановка («До причала …») — короче и без сигнала; команды — с сигналом
+        bool info = e.Index == (int)PilotOrderKind.Info;
+        if (info && Time.unscaledTime - lastCommandAt < 3f) return;   // не перекрывать только что поданную команду (обстановка — и на мониторе)
+        if (!info) lastCommandAt = Time.unscaledTime;
+        Show(e.Subject, info ? infoSeconds : showSeconds, !info);
     }
 
-    public void Show(string order)
+    public void Show(string order) => Show(order, showSeconds, true);
+
+    public void Show(string order, float seconds, bool withTone)
     {
         Build();
         label.text = $"<size=70%>ЛОЦМАН</size>\n<b>«{order}»</b>";
@@ -75,8 +84,8 @@ public class PilotOrderNotice : MonoBehaviour
         }
         canvas.enabled = true;
         group.alpha = 1f;
-        hideAt = Time.unscaledTime + showSeconds;
-        if (toneVolume > 0f) audioSource.PlayOneShot(tone, toneVolume);
+        hideAt = Time.unscaledTime + seconds;
+        if (withTone && toneVolume > 0f) audioSource.PlayOneShot(tone, toneVolume);
     }
 
     void Update()

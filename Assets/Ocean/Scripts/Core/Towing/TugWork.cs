@@ -61,7 +61,11 @@ public class TugWorkDefinition
     public TugWorkDefinition Clone() => (TugWorkDefinition)MemberwiseClone();
 }
 
-public enum PilotOrderKind { None, Approach, Push, Hold, LetGo }
+/// <summary>
+/// Команды лоцмана: задания (Approach … LetGo, 19.4б-1) и 19.4б-3 — упор буксира (PushStep: ступень 0…4 рукоятки,
+/// StopPush), обстановка (Info: зазор и скорость к причалу), «быстро идёт, сбавь» (Slower). Новые — только в конец.
+/// </summary>
+public enum PilotOrderKind { None, Approach, Push, Hold, LetGo, PushStep, StopPush, Info, Slower }
 
 public enum TugWorkStage { None, Approach, Push, Hold, Clear }
 
@@ -78,6 +82,21 @@ public static class TugWorkText
             default: return "—";
         }
     }
+
+    /// <summary>19.4б-3: команда упором: «Толкай малым» / «Держи средним» (hold — этап «держать»), 0 — «Стоп толкать».</summary>
+    public static string Power(int step, bool hold)
+    {
+        if (step <= 0) return "Стоп толкать";
+        string[] by = { "", "самым малым", "малым", "средним", "полным" };
+        return $"{(hold ? "Держи" : "Толкай")} {by[Math.Min(4, step)]}";
+    }
+
+    /// <summary>19.4б-3: обстановка: «До причала 20 м, идёт 0,30 уз» (скорость к причалу; ≤ 0 — «стоит» / «отходит»).</summary>
+    public static string Info(double gapM, double towardKn) =>
+        $"До причала {ScenarioText.Num(gapM)} м, " + (towardKn > 0.02 ? $"идёт {ScenarioText.Num(towardKn, 2)} уз"
+                                                   : towardKn < -0.02 ? $"отходит {ScenarioText.Num(-towardKn, 2)} уз" : "стоит");
+
+    public const string SlowerText = "Быстро идёт, сбавь";
 
     /// <summary>Текст команды для борта (+1 — ПБ клиента, −1 — ЛБ).</summary>
     public static string Order(PilotOrderKind k, int side) =>
@@ -141,7 +160,7 @@ public sealed class ClientShip : ITrackedTarget
     {
         Parameters = p;
         Model = new ShipDynamicsModel(p) { MotionOverride = MotionModel.Manoeuvring3Dof, SpeedFactor = 0.0 };
-        Mooring = new MooringSystem(berth, p) { FairleadHeightM = 4.5 };
+        Mooring = new MooringSystem(berth, p) { FairleadHeightM = p.length > 100.0 ? 7.0 : 4.5 };   // 19.4б-3: у Mariner борт выше
         WindArea = ShipWindArea.Estimate(p);
     }
 
@@ -167,8 +186,18 @@ public sealed class ClientShip : ITrackedTarget
 
     public BerthReadout Readout => BerthReadout.Compute(Berth, Parameters, Model);
 
-    /// <summary>Наибольший зазор борта до кромки (нос, корма), м.</summary>
-    public double GapM { get { BerthReadout r = Readout; return r.Valid ? Math.Max(r.BowGapM, r.SternGapM) : double.NaN; } }
+    /// <summary>
+    /// Наибольший зазор борта до кранцев (нос, корма), м: до кромки минус диаметр кранца. 19.4б-3: у причала №2 (Mariner)
+    /// кранцы ⌀ 1,15 м — «у кранцев ≤ 1 м» до кромки не достигалось бы (было — до кромки; у причала №1 кранцы ⌀ 0,37 м).
+    /// </summary>
+    public double GapM
+    {
+        get
+        {
+            BerthReadout r = Readout;
+            return r.Valid ? Math.Max(r.BowGapM, r.SternGapM) - Berth.fenderOuterDiameterM : double.NaN;
+        }
+    }
 
     public double SpeedOverGroundKn => Math.Sqrt(Model.VelocityEast * Model.VelocityEast + Model.VelocityNorth * Model.VelocityNorth) / ShipParameters.KnotsToMs;
 
@@ -291,6 +320,89 @@ public sealed class TugWorkSystem
     private readonly bool[] done = new bool[StageCount + 1];
     private readonly double[] doneAt = new double[StageCount + 1];
 
+    // ─────────── 19.4б-3: лоцман командует упором ───────────
+    /// <summary>
+    /// Заданная скорость клиента к причалу, уз, по зазору (больше 20 м / 10–20 / 3–10 / меньше 3 м); на этапе «держать» — 0.
+    /// Упор: P = F_в/T_гак + K_v·(v_з − v) (+ запас «держать»), округлённо до ступени рукоятки 25 %; новая ступень —
+    /// не чаще PowerIntervalS и только если нужная отличается от заданной больше чем на 0,75 ступени (без «дребезга»).
+    /// </summary>
+    public static double TargetSpeedKn(double gapM) => gapM > 20.0 ? 0.3 : gapM > 10.0 ? 0.2 : gapM > 3.0 ? 0.15 : 0.08;
+    public const double PowerKv = 1.5, HoldMargin = 0.05, PowerIntervalS = 15.0, InfoIntervalS = 5.0, SlowerMarginKn = 0.25;
+    public static readonly double[] InfoGapsM = { 30.0, 20.0, 10.0, 5.0, 2.0 };
+
+    /// <summary>Заданная ступень упора (0 — стоп, 1…4 — 25…100 %); −1 — команд упором ещё не было.</summary>
+    public int PowerStep { get; private set; } = -1;
+    public double PowerStepTime { get; private set; } = double.NaN;
+    /// <summary>Последнее сообщение лоцмана (любое) и его время — для монитора и надписи.</summary>
+    public string LastMessage { get; private set; } = "";
+    public double LastMessageTime { get; private set; } = double.NaN;
+    /// <summary>Упор, который нужен по расчёту лоцмана (доля T_гак, до округления) — для разбора и тестов.</summary>
+    public double PowerNeeded { get; private set; }
+    private double lastInfo = -1e9, lastSlower = -1e9;
+    private int infoMark;
+
+    /// <summary>Сила ветра на клиента от причала (по нормали к кромке), Н (> 0 — сносит от причала).</summary>
+    public double WindOffBerth()
+    {
+        if (Wind.Calm) return 0.0;
+        ShipDynamicsModel cm = Client.Model;
+        WindForce f = WindLoad.Compute(Client.WindArea, Wind, cm.Psi, cm.U, cm.V);
+        return -f.Y * Client.SideToBerth;   // Y > 0 — на ПБ; причал у ЛБ (−1) — к причалу −Y
+    }
+
+    /// <summary>Нужная доля упора по зазору, скорости к причалу и ветру (этап «держать» — hold).</summary>
+    public double PowerFor(double gapM, double towardKn, bool hold)
+    {
+        double vt = hold ? 0.0 : TargetSpeedKn(gapM);
+        double p = WindOffBerth() / Math.Max(1.0, OwnSpec.BollardPull) + PowerKv * (vt - towardKn) + (hold ? HoldMargin : 0.0);
+        return Math.Max(0.0, Math.Min(1.0, p));
+    }
+
+    // Команды упором, обстановка и «сбавь» — от касания в зоне («толкайте») до «концы закреплены»
+    private void PilotPower(double time)
+    {
+        if (!done[(int)TugWorkStage.Approach] || done[(int)TugWorkStage.Hold]) return;
+        bool hold = done[(int)TugWorkStage.Push];
+        double gap = Client.GapM;
+        if (double.IsNaN(gap)) return;
+        BerthReadout r = Client.Readout;
+        double v = r.Valid ? 0.5 * (r.BowSpeedKn + r.SternSpeedKn) : 0.0;
+        PowerNeeded = PowerFor(gap, v, hold);
+        int want = (int)Math.Round(PowerNeeded * TugJoystick.StepCount);
+        bool first = PowerStep < 0;
+        if (first || want != PowerStep && time - PowerStepTime >= PowerIntervalS - 1e-9 &&
+                     Math.Abs(PowerNeeded * TugJoystick.StepCount - PowerStep) > 0.75)
+        {
+            PowerStep = want;
+            PowerStepTime = time;
+            Say(want > 0 ? PilotOrderKind.PushStep : PilotOrderKind.StopPush, time, TugWorkText.Power(want, hold), want * 25.0);
+        }
+        // Обстановка — на 30, 20, 10, 5, 2 м
+        while (infoMark < InfoGapsM.Length && gap <= InfoGapsM[infoMark])
+        {
+            infoMark++;
+            if (time - lastInfo >= InfoIntervalS - 1e-9 && !hold)
+            {
+                lastInfo = time;
+                Say(PilotOrderKind.Info, time, TugWorkText.Info(gap, v), Math.Round(gap, 1));
+            }
+        }
+        // Быстро идёт к причалу
+        if (!hold && gap < 20.0 && v > TargetSpeedKn(gap) + SlowerMarginKn && time - lastSlower >= PowerIntervalS - 1e-9)
+        {
+            lastSlower = time;
+            Say(PilotOrderKind.Slower, time, TugWorkText.SlowerText, Math.Round(v, 2));
+        }
+    }
+
+    // Сообщение лоцмана без смены этапа (Order — команда задания — не меняется)
+    private void Say(PilotOrderKind k, double time, string text, double value)
+    {
+        LastMessage = text;
+        LastMessageTime = time;
+        Events.Add(new ExerciseEvent(ExerciseEventType.PilotOrder) { Time = time, Index = (int)k, Subject = text, Value = value });
+    }
+
     public TugWorkSystem(TugWorkDefinition task, ShipParameters client, BerthArea berth, TugSpec ownSpec)
     {
         Task = task;
@@ -309,6 +421,12 @@ public sealed class TugWorkSystem
         HoldTime = HoldPushTime = 0.0;
         Contact.Reset();
         Events.Clear();
+        PowerStep = -1;
+        PowerStepTime = LastMessageTime = double.NaN;
+        LastMessage = "";
+        PowerNeeded = 0.0;
+        lastInfo = lastSlower = -1e9;
+        infoMark = 0;
     }
 
     /// <summary>
@@ -458,6 +576,7 @@ public sealed class TugWorkSystem
             double d = BowDistance(own);
             if (d >= Task.clearDistanceM) Mark(TugWorkStage.Clear, time, d);
         }
+        PilotPower(time);   // 19.4б-3
     }
 
     private void Mark(TugWorkStage s, double time, double value)
@@ -477,6 +596,8 @@ public sealed class TugWorkSystem
     {
         Order = k;
         OrderTime = time;
-        Events.Add(new ExerciseEvent(ExerciseEventType.PilotOrder) { Time = time, Index = (int)k, Subject = TugWorkText.Order(k, WorkSide == 0 ? 1 : WorkSide) });
+        LastMessage = TugWorkText.Order(k, WorkSide == 0 ? 1 : WorkSide);
+        LastMessageTime = time;
+        Events.Add(new ExerciseEvent(ExerciseEventType.PilotOrder) { Time = time, Index = (int)k, Subject = LastMessage });
     }
 }

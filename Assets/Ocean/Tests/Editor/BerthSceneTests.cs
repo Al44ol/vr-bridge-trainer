@@ -37,7 +37,7 @@ public class BerthSceneTests
     public void DemoBerth_GeometryAndFenders()
     {
         WaterArea area = DemoArea();
-        Assert.AreEqual(1, area.berths.Count);
+        Assert.AreEqual(2, area.berths.Count, "19.4б-3: причал №2 — под Mariner (19-03)");
         BerthArea b = area.berths[0];
         Assert.AreEqual(60.0, b.BearingDeg, 1e-6, "кромка — вдоль второго колена фарватера");
         Assert.AreEqual(DemoWaterArea.BerthLength, b.Length, 1e-6);

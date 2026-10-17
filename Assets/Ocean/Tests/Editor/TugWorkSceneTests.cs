@@ -31,7 +31,7 @@ public class TugWorkSceneTests
         var crit = ScriptableObject.CreateInstance<AssessmentCriteria>();
         crit.settings = DemoTugWorkScenario.Assessment();
         var s = ScriptableObject.CreateInstance<ScenarioDefinition>();
-        DemoTugWorkScenario.Fill(s, area, Tug(), LowSpeedModelTests.Model45m(), crit);
+        DemoTugWorkScenario.Fill(s, area, Tug(), LowSpeedModelTests.Mariner(), crit);   // 19.4б-3: клиент — Mariner
         return s;
     }
 
@@ -81,7 +81,7 @@ public class TugWorkSceneTests
         Assert.Greater(s.Track.Count, 100);
         Assert.AreEqual(s.Track.Count, s.Mooring.Count, "строка mooring.csv на каждую строку track.csv");
         Assert.IsTrue(s.Mooring.TrueForAll(m => m.HasBerth && m.Towing.Present && m.Towing.Station == TugStation.Midship), "клиент у причала, свой буксир у миделя");
-        Assert.IsTrue(s.Mooring.TrueForAll(m => Math.Abs(m.Towing.WindKn - 20.0) < 1e-9), "ветер в каждой строке");
+        Assert.IsTrue(s.Mooring.TrueForAll(m => Math.Abs(m.Towing.WindKn - 15.0) < 1e-9), "ветер в каждой строке");
         Assert.IsTrue(s.Mooring.Exists(m => m.Towing.Mode == TugMode.Push && m.Towing.PushKn > 10.0 && Math.Abs(m.Towing.DirectionDeg - 270.0) < 1e-9),
             "упор кранцем в правый борт — к причалу (270° от ДП клиента)");
         Assert.IsTrue(s.Mooring.Exists(m => m.Towing.PowerPct > 5.0), "доля тяги колонок");
@@ -109,7 +109,7 @@ public class TugWorkSceneTests
         Assert.AreEqual("Tug", sc.own_ship_type);
         Assert.IsTrue(sc.tug_work.enabled);
         Assert.AreEqual(ClientShip.Id, sc.tug_work.client_id);
-        Assert.AreEqual(45.0, sc.tug_work.client_length_m, 1e-6);
+        Assert.AreEqual(160.93, sc.tug_work.client_length_m, 1e-4);
         TugWorkDefinition d = sc.tug_work.ToDefinition(), src = sim.Scenario.tugWork;
         Assert.AreEqual(src.berthIndex, d.berthIndex);
         Assert.AreEqual(src.clientGapM, d.clientGapM);

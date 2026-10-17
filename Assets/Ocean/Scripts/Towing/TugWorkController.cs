@@ -28,8 +28,6 @@ public class TugWorkController : MonoBehaviour
     public ShipNavigation navigation;
     [Tooltip("Клиент по умолчанию, если в сценарии не задан (иначе — модель 45 м сцены, ShipTypeSwitcher.bridgeParameters)")]
     public ShipParameters defaultClient;
-    [Tooltip("Высота клюзов клиента над водой, м (концы клиента в сцене)")]
-    public float clientFairleadHeightM = 4.5f;
 
     [Header("Состояние (только чтение)")]
     [SerializeField] private string state = "нет упражнения";
@@ -133,7 +131,6 @@ public class TugWorkController : MonoBehaviour
             : TugSpec.For(own, drive != null ? drive.bollardPullTonnes : TugSpec.DefaultBollardPullTonnes);
         Scenario = s;
         Work = new TugWorkSystem(s.tugWork, client, berth, spec);
-        Work.Client.Mooring.FairleadHeightM = clientFairleadHeightM;
         Work.Place(navigation.Model, moveOwn: false);
         RememberClient();
         ExerciseTargets.Register(Work.Client);
@@ -197,7 +194,7 @@ public class TugWorkController : MonoBehaviour
     private void UpdateInspector()
     {
         if (Work == null) { state = "нет упражнения"; return; }
-        state = $"«{TugWorkText.Order(Work.Order, Work.WorkSide)}», заданий {Work.DoneCount}/{TugWorkSystem.StageCount}, " +
+        state = $"«{Work.LastMessage}», заданий {Work.DoneCount}/{TugWorkSystem.StageCount}, " +
                 $"зазор клиента {ScenarioText.Num(Work.Client.GapM, 1)} м, упор {ScenarioText.Num(Work.Contact.FenderForce / 1000.0)} кН";
     }
 
@@ -216,7 +213,7 @@ public class TugWorkController : MonoBehaviour
     {
         if (Work == null) return "";
         int hull = Work.HullContacts.Count;
-        return $"Работа буксира: «{TugWorkText.Order(Work.Order, Work.WorkSide)}» · заданий {Work.DoneCount}/{TugWorkSystem.StageCount} · " +
+        return $"Работа буксира: «{Work.LastMessage}» · заданий {Work.DoneCount}/{TugWorkSystem.StageCount} · " +
                $"зазор клиента {ScenarioText.Num(Work.Client.GapM, 1)} м · упор {ScenarioText.Num(Work.Contact.FenderForce / 1000.0)} кН · " +
                $"касаний {Work.Contacts.Count}" + (hull > 0 ? $", корпусом {hull}" : "");
     }

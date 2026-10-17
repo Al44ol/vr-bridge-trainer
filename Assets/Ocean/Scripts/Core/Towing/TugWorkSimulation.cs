@@ -31,6 +31,8 @@ public sealed class TugWorkPlan
     /// </summary>
     public double MaxPushKn = 0.8, WindBalance = 0.08, KPush = 0.5, PushPower = 0.5;
     public bool FixedPush;
+    /// <summary>19.4б-3: «толкать» и «держать» — ступенью упора, которую назвал лоцман (TugWorkSystem.PowerStep); выкл — свой регулятор.</summary>
+    public bool FollowPilot = true;
     /// <summary>Упор: держать, отходить — доли T_гак.</summary>
     public double HoldPower = 0.12, ClearPower = 0.4;
     /// <summary>> 0 — снять упор через … с после «держите» (не дождавшись «отходите»).</summary>
@@ -75,6 +77,7 @@ public sealed class TugWorkAutopilot
         else if (!sys.Done(TugWorkStage.Push))
         {
             if (Plan.FixedPush) surge = Plan.PushPower;
+            else if (Plan.FollowPilot && sys.PowerStep >= 0) surge = sys.PowerStep * TugJoystick.MenuStep;   // 19.4б-3: ступень лоцмана
             else
             {
                 BerthReadout br = sys.Client.Readout;
@@ -85,7 +88,8 @@ public sealed class TugWorkAutopilot
             }
         }
         else if (!sys.Done(TugWorkStage.Hold))
-            surge = Plan.ReleaseEarlyS > 0 && time - sys.DoneAt(TugWorkStage.Push) >= Plan.ReleaseEarlyS ? 0.0 : Plan.HoldPower;
+            surge = Plan.ReleaseEarlyS > 0 && time - sys.DoneAt(TugWorkStage.Push) >= Plan.ReleaseEarlyS ? 0.0
+                  : Plan.FollowPilot && sys.PowerStep >= 0 ? sys.PowerStep * TugJoystick.MenuStep : Plan.HoldPower;
         else if (!sys.Done(TugWorkStage.Clear))
         {
             surge = -Plan.ClearPower;
