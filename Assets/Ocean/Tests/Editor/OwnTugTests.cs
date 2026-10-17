@@ -42,14 +42,69 @@ public class OwnTugTests
         Assert.AreEqual(0.0, TugJoystick.Shape(-0.1));
         Assert.AreEqual(0.5, TugJoystick.Shape(0.55), 1e-12);
         Assert.AreEqual(-1.0, TugJoystick.Shape(-1.0), 1e-12);
-        JoystickState j = TugJoystick.FromHandle(25, -10, 45);
+        // 19.4а-4: полный наклон 35°, полный поворот 45° (было 20° / 30°)
+        JoystickState j = TugJoystick.FromHandle(40, -17.5, 60);
         Assert.AreEqual(1.0, j.Surge, 1e-12, "наклон больше предела — полный ход");
         Assert.AreEqual(-0.5, j.Sway, 1e-12);
         Assert.AreEqual(1.0, j.Yaw, 1e-12);
-        Assert.AreEqual(0.75, TugJoystick.Step(0.5, +1), 1e-12);
+        Assert.AreEqual(0.5, TugJoystick.FromHandle(0, 0, 22.5).Yaw, 1e-12);
+        // Меню — ступени упора: с 50 % упора на 75 %; с полного назад дальше некуда
+        Assert.AreEqual(0.75, TugJoystick.Shape(TugJoystick.Step(TugJoystick.StepPosition(2), +1)), 1e-12);
         Assert.AreEqual(-1.0, TugJoystick.Step(-1.0, -1), 1e-12);
-        Assert.AreEqual("ход вперёд 50 %, лагом на ЛБ 25 %", TugJoystick.Describe(new JoystickState(0.5, -0.25, 0)));
+        // Подписи — в процентах упора (после мёртвой зоны), ход — с названием ступени
+        Assert.AreEqual("ход вперёд малый 50 %, лагом на ЛБ 25 %",
+            TugJoystick.Describe(new JoystickState(TugJoystick.StepPosition(2), TugJoystick.StepPosition(-1), 0)));
+        Assert.AreEqual("ход вперёд 44 %", TugJoystick.Describe(new JoystickState(0.5, 0, 0)), "рукоятка на 50 % хода — 44 % упора");
         Assert.AreEqual("в нуле", TugJoystick.Describe(JoystickState.Zero));
+    }
+
+    // ─────────── 19.4а-4: ступени рукоятки ───────────
+
+    [Test]
+    public void Steps_GiveExactThrust_25_50_75_100()
+    {
+        string[] names = { "стоп", "самый малый", "малый", "средний", "полный" };
+        for (int k = -TugJoystick.StepCount; k <= TugJoystick.StepCount; k++)
+        {
+            double pos = TugJoystick.StepPosition(k);
+            Assert.AreEqual(0.25 * k, TugJoystick.Shape(pos), 1e-12, $"ступень {k}: упор ровно {25 * k} %");
+            Assert.AreEqual(k, TugJoystick.NearestStep(pos));
+            Assert.AreEqual(names[System.Math.Abs(k)], TugJoystick.StepName(k));
+        }
+        Assert.AreEqual(0.0, TugJoystick.StepPosition(0));
+        Assert.AreEqual(1.0, TugJoystick.StepPosition(4), 1e-12, "полный — рукоятка до упора");
+        Assert.AreEqual(0.325, TugJoystick.StepPosition(1), 1e-12, "самый малый — за мёртвой зоной");
+        // Наклоны ступеней хода при 35°: ≈ 11,4° / 19,3° / 27,1° / 35°
+        Assert.AreEqual(11.375, TugJoystick.StepPosition(1) * TugJoystick.MaxTiltDeg, 1e-9);
+        Assert.AreEqual(27.125, TugJoystick.StepPosition(3) * TugJoystick.MaxTiltDeg, 1e-9);
+        // Ближайшая ступень — по положению рукоятки; середина между нулём и самым малым — ещё «стоп»
+        Assert.AreEqual(0, TugJoystick.NearestStep(0.16));
+        Assert.AreEqual(1, TugJoystick.NearestStep(0.17));
+        Assert.AreEqual(-2, TugJoystick.NearestStep(-0.5));
+        JoystickState s = TugJoystick.Snap(new JoystickState(0.6, -0.05, 0.8));
+        Assert.AreEqual(0.5, TugJoystick.Shape(s.Surge), 1e-12);
+        Assert.AreEqual(0.0, s.Sway);
+        Assert.AreEqual(0.75, TugJoystick.Shape(s.Yaw), 1e-12);
+        // Автомат буксира 19.4б: Unshape — тот же, что у ступеней (обратное Shape)
+        Assert.AreEqual(TugJoystick.Unshape(0.12), TugWorkAutopilot.Unshape(0.12));
+        Assert.AreEqual(0.12, TugJoystick.Shape(TugJoystick.Unshape(0.12)), 1e-12);
+    }
+
+    [Test]
+    public void ThrustTitles_NamedStepsOnlyForSurge()
+    {
+        Assert.AreEqual("вперёд самый малый 25 %", TugJoystick.ThrustTitle(0.25, "вперёд", "назад", true));
+        Assert.AreEqual("назад полный 100 %", TugJoystick.ThrustTitle(-1.0, "вперёд", "назад", true));
+        Assert.AreEqual("вперёд 37 %", TugJoystick.ThrustTitle(0.37, "вперёд", "назад", true), "между ступенями — без названия");
+        Assert.AreEqual("на ПБ 75 %", TugJoystick.ThrustTitle(0.75, "на ПБ", "на ЛБ", false));
+        Assert.AreEqual("0", TugJoystick.ThrustTitle(0.001, "вперёд", "назад", true));
+        Assert.AreEqual("вперёд средний 75 %", TugJoystick.SurgeTitle(TugJoystick.StepPosition(3)));
+        Assert.AreEqual("нос влево 50 %", TugJoystick.YawTitle(TugJoystick.StepPosition(-2)));
+        Assert.AreEqual("ход назад самый малый 25 %, разворот нос вправо 100 %", TugJoystick.DescribeThrust(-0.25, 0, 1.0));
+        // Индикатор у рукоятки — движение буксира
+        double kn = ShipParameters.KnotsToMs;
+        Assert.AreEqual("вперёд 5,8 уз · лагом 0,3 уз на ПБ · 1,2 °/с вправо", TugJoystick.MotionTitle(5.8 * kn, 0.3 * kn, 1.2 * System.Math.PI / 180.0));
+        Assert.AreEqual("назад 2,0 уз · лагом 0 · 0,5 °/с влево", TugJoystick.MotionTitle(-2.0 * kn, 0.01, -0.5 * System.Math.PI / 180.0));
     }
 
     [Test]
@@ -143,7 +198,7 @@ public class OwnTugTests
         Assert.AreEqual(0.0, d.ThrustX);
 
         var e = new ExerciseEvent(ExerciseEventType.JoystickChanged) { Value = 50, Value2 = 0, Index = -25, Subject = "рукой" };
-        Assert.AreEqual("Джойстик: ход вперёд 50 %, разворот нос влево 25 % (рукой)", e.Describe());
+        Assert.AreEqual("Джойстик: ход вперёд малый 50 %, разворот нос влево 25 % (рукой)", e.Describe());
     }
 
     // ─────────── 19.4а-2: удержание курса ───────────

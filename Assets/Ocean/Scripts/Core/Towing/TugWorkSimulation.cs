@@ -44,12 +44,7 @@ public sealed class TugWorkAutopilot
     public double Ku = 1.5, KyPos = 0.25, Kv = 3.0, KPsi = 0.1, KR = 0.5;
 
     /// <summary>Доля оси (−1…1) → положение рукоятки с учётом мёртвой зоны (обратное TugJoystick.Shape).</summary>
-    public static double Unshape(double f)
-    {
-        if (Math.Abs(f) < 1e-9) return 0.0;
-        f = Math.Max(-1.0, Math.Min(1.0, f));
-        return Math.Sign(f) * (TugJoystick.DeadZone + (1.0 - TugJoystick.DeadZone) * Math.Abs(f));
-    }
+    public static double Unshape(double f) => TugJoystick.Unshape(f);
 
     public JoystickState Update(TugWorkSystem sys, ShipDynamicsModel own, double time)
     {

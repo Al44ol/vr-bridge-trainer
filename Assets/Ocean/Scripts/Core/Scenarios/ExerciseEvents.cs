@@ -94,7 +94,8 @@
 //   TugPushContact       буксир упёрся в борт: Value — скорость сближения, уз
 //   WindChanged          ветер: Value — скорость, уз (0 — нет); Value2 — откуда, °; Subject — «сценарий» / «меню» / «на начало»
 //   JoystickChanged      19.4а, свой буксир: установившееся положение джойстика — Value — ход, % (> 0 — вперёд),
-//                        Value2 — лагом, % (> 0 — на ПБ), Index — разворот, % (> 0 — нос вправо); Subject — «рукой» / «меню» / «сброс»
+//                        Value2 — лагом, % (> 0 — на ПБ), Index — разворот, % (> 0 — нос вправо); Subject — «рукой» / «меню» / «сброс»;
+//                        с 19.4а-4 — доли упора (после мёртвой зоны), до 19.4а-4 — ход рукоятки
 //   PilotOrder           19.4б, упражнение на буксире: команда лоцмана — Index — PilotOrderKind, Subject — текст
 //   TugWorkStage         задание выполнено: Index — TugWorkStage (1 подход … 4 отойти), Subject — название;
 //                        Value — скорость касания, уз / зазор, м / ход судна, уз / расстояние носа до борта, м
@@ -324,7 +325,7 @@ public struct ExerciseEvent
             case ExerciseEventType.JoystickHoldChanged:
                 return $"Рукоятка джойстика {(Value > 0 ? "держит положение" : "возвращается в ноль")}" + (string.IsNullOrEmpty(Subject) ? "" : $" ({Subject})");
             case ExerciseEventType.JoystickChanged:
-                return $"Джойстик: {TugJoystick.Describe(new JoystickState(Value / 100.0, Value2 / 100.0, Index / 100.0))}" +
+                return $"Джойстик: {TugJoystick.DescribeThrust(Value / 100.0, Value2 / 100.0, Index / 100.0)}" +
                        (string.IsNullOrEmpty(Subject) ? "" : $" ({Subject})");
         }
         return $"{Type} {Subject}";

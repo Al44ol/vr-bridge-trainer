@@ -11,18 +11,27 @@
 //   • луч — смещение точки попадания вперёд/вбок на rayFullOffset — полный наклон; поворот — так же кистью.
 // При отпускании рукоятка остаётся, где оставили (как телеграф, решение 19.4а); в ноль — меню B «Джойстик».
 // Положение кодом — SetState (меню, сброс): рукоятка доворачивается сама.
+// 19.4а-4: ход рукоятки 35° / 45° (TugJoystick), луч — 0,25 м на полный наклон; ступени (detents, по умолчанию):
+// рука ведёт рукоятку плавно (Raw), упор — по ближайшей ступени 25 / 50 / 75 / 100 % (TugJoystick.Snap); переход на
+// ступень — щелчок и короткая вибрация контроллера в этой руке; отпустили — рукоятка встаёт в ступень, как телеграф.
+// Без ступеней (меню B «Рукоятка: плавно») — прежнее непрерывное управление.
 // ============================================================
 using System;
 using UnityEngine;
 using UnityEngine.XR.Interaction.Toolkit;
 using UnityEngine.XR.Interaction.Toolkit.Interactables;
+using UnityEngine.XR.Interaction.Toolkit.Interactors;
 
 public class TugJoystickHandle : MonoBehaviour
 {
     [Tooltip("Если рука дальше от оси (м) — управление смещением луча")]
     public float maxTrackingDistance = 0.6f;
-    [Tooltip("Смещение точки луча на полный наклон, м")]
-    public float rayFullOffset = 0.15f;
+    [Tooltip("Смещение точки луча на полный наклон, м (19.4а-4: было 0,15)")]
+    public float rayFullOffset = 0.25f;
+    [Tooltip("19.4а-4: ступени упора 25 / 50 / 75 / 100 % (как телеграф); выкл — плавно")]
+    public bool detents = true;
+    [Tooltip("Вибрация контроллера на переходе ступени: сила 0…1, длительность, с")]
+    public float hapticAmplitude = 0.35f, hapticDuration = 0.03f;
     [Tooltip("Высота оси качания над основанием, м; длина стержня до рукоятки, м")]
     public float pivotHeight = 0.07f, stickLength = 0.16f;
 
@@ -34,8 +43,11 @@ public class TugJoystickHandle : MonoBehaviour
 
     public JoystickState State => state;
     public bool IsGrabbed => grab != null;
+    /// <summary>Положение рукоятки, куда ведёт рука (до ступени; без хвата — State).</summary>
+    public JoystickState Raw => grab != null ? raw : state;
 
-    private JoystickState state;
+    private JoystickState state, raw;
+    private XRBaseInputInteractor hapticHand;
     private Transform pivot, twistPart;
     private Transform grab, grabHand;           // точка хвата (рука / точка луча) и сам контроллер (поворот кисти)
     private bool tracking;
@@ -92,7 +104,8 @@ public class TugJoystickHandle : MonoBehaviour
         grab = args.interactorObject.GetAttachTransform(args.interactableObject);
         grabHand = args.interactorObject.transform;
         if (grab == null) grab = grabHand;
-        grabStart = state;
+        hapticHand = args.interactorObject as XRBaseInputInteractor;
+        grabStart = raw = state;
         grabStartLocal = transform.InverseTransformPoint(grab.position);
         grabStartForward = HandForward();
         tracking = Vector3.Distance(grab.position, pivot.position) <= maxTrackingDistance;
@@ -101,6 +114,7 @@ public class TugJoystickHandle : MonoBehaviour
     private void OnRelease(SelectExitEventArgs args)
     {
         grab = grabHand = null;
+        hapticHand = null;
         Released?.Invoke();
     }
 
@@ -132,21 +146,33 @@ public class TugJoystickHandle : MonoBehaviour
                 stb = (grabStart.Sway + d.x / rayFullOffset) * TugJoystick.MaxTiltDeg;
             }
             double twist = grabStart.Yaw * TugJoystick.MaxTwistDeg + Vector3.SignedAngle(grabStartForward, HandForward(), Vector3.up);
-            JoystickState s = TugJoystick.FromHandle(fwd, stb, twist);
+            raw = TugJoystick.FromHandle(fwd, stb, twist);
+            JoystickState s = detents ? TugJoystick.Snap(raw) : raw;   // 19.4а-4: упор — по ближайшей ступени
             if (s.DistanceTo(state) > 1e-4)
             {
                 state = s;
-                Click();
+                if (Click() && hapticHand != null && hapticAmplitude > 0f) hapticHand.SendHapticImpulse(hapticAmplitude, hapticDuration);
                 Changed?.Invoke(false);
             }
         }
         if (pivot != null)
         {
-            Quaternion target = Quaternion.AngleAxis((float)(state.Surge * TugJoystick.MaxTiltDeg), Vector3.right)
-                              * Quaternion.AngleAxis((float)(-state.Sway * TugJoystick.MaxTiltDeg), Vector3.forward);
-            pivot.localRotation = grab != null ? target : Quaternion.Slerp(pivot.localRotation, target, Time.deltaTime * 10f);
-            twistPart.localRotation = Quaternion.AngleAxis((float)(state.Yaw * TugJoystick.MaxTwistDeg), Vector3.up);
+            // В руке — куда ведёт рука; отпустили — доворот в ступень (state)
+            JoystickState shown = grab != null ? raw : state;
+            Quaternion target = Quaternion.AngleAxis((float)(shown.Surge * TugJoystick.MaxTiltDeg), Vector3.right)
+                              * Quaternion.AngleAxis((float)(-shown.Sway * TugJoystick.MaxTiltDeg), Vector3.forward);
+            Quaternion twistTarget = Quaternion.AngleAxis((float)(shown.Yaw * TugJoystick.MaxTwistDeg), Vector3.up);
+            float k = grab != null ? 1f : Mathf.Clamp01(Time.deltaTime * 12f);
+            pivot.localRotation = Quaternion.Slerp(pivot.localRotation, target, k);
+            twistPart.localRotation = Quaternion.Slerp(twistPart.localRotation, twistTarget, k);
         }
+    }
+
+    /// <summary>Ступени упора вкл/выкл (меню B «Рукоятка: ступени / плавно»); при включении — встать в ближайшую ступень.</summary>
+    public void SetDetents(bool on)
+    {
+        detents = on;
+        if (on) SetState(TugJoystick.Snap(state));
     }
 
     private static double Atan(float a, float b) => Math.Atan2(a, Math.Max(1e-4, b)) * 180.0 / Math.PI;
@@ -154,20 +180,22 @@ public class TugJoystickHandle : MonoBehaviour
     /// <summary>Поставить положение кодом (меню «Джойстик», сброс): рукоятка доворачивается сама, хват прерывается.</summary>
     public void SetState(JoystickState s)
     {
-        if (grab != null) { grabStart = s; grabStartLocal = transform.InverseTransformPoint(grab.position); grabStartForward = HandForward(); }
+        if (grab != null) { grabStart = raw = s; grabStartLocal = transform.InverseTransformPoint(grab.position); grabStartForward = HandForward(); }
         if (s.DistanceTo(state) < 1e-9) return;
         state = s;
         Click();
         Changed?.Invoke(true);
     }
 
-    // Щелчок на каждые 25 % по любой оси — слышно, что рукоятка сдвинулась
-    private void Click()
+    // Щелчок при переходе на другую ступень упора по любой оси (19.4а-4: ступени — 25 % упора, не хода рукоятки);
+    // true — щёлкнуло
+    private bool Click()
     {
-        int step = (int)Math.Round(state.Surge * 4) * 100 + (int)Math.Round(state.Sway * 4) * 10 + (int)Math.Round(state.Yaw * 4);
-        if (step == lastClickStep) return;
+        int step = (TugJoystick.NearestStep(state.Surge) + 8) * 100 + (TugJoystick.NearestStep(state.Sway) + 8) * 10 + TugJoystick.NearestStep(state.Yaw);
+        if (step == lastClickStep) return false;
         lastClickStep = step;
         if (audioSource != null && clickClip != null && audioSource.isActiveAndEnabled) audioSource.PlayOneShot(clickClip);
+        return true;
     }
 
     private static AudioClip MakeClick()

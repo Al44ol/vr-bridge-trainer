@@ -21,6 +21,10 @@
 // 4. Силы — в модель 3 СС своего судна (ShipDynamicsModel.AddForce/AddMoment) до шага; телеграф и руль
 //    на буксире в модель не идут (SF = 0: закон телеграфа даёт линейное сопротивление корпуса, ShipPresets.FillTug).
 // Рукоятка в сцене: наклон до MaxTiltDeg и поворот до MaxTwistDeg — полный упор по оси (FromHandle).
+// 19.4а-4 (по проверке в шлеме — «не понимаю, сколько даю»): ход рукоятки больше (35° / 45° вместо 20° / 30°);
+// ступени, как у телеграфа: упор 25 / 50 / 75 / 100 % («самый малый / малый / средний / полный») — положение
+// рукоятки ступени k: j = sign(k)·(z + (1 − z)·|k|/4) — мёртвая зона учтена, j' = |k|/4 ровно (StepPosition);
+// подписи меню и событий — в процентах упора j', а не хода рукоятки.
 // ============================================================
 using System;
 
@@ -48,10 +52,12 @@ public static class TugJoystick
 {
     /// <summary>Мёртвая зона по каждой оси (доля хода рукоятки).</summary>
     public const double DeadZone = 0.1;
-    /// <summary>Шаг меню «Джойстик» (кнопка B).</summary>
+    /// <summary>Шаг упора одной ступени (меню «Джойстик», ступени рукоятки).</summary>
     public const double MenuStep = 0.25;
-    /// <summary>Наклон рукоятки на полный упор по оси, °; поворот рукоятки на полный разворот, °.</summary>
-    public const double MaxTiltDeg = 20.0, MaxTwistDeg = 30.0;
+    /// <summary>Ступеней в каждую сторону: 25 / 50 / 75 / 100 % упора.</summary>
+    public const int StepCount = 4;
+    /// <summary>Наклон рукоятки на полный упор по оси, °; поворот рукоятки на полный разворот, ° (19.4а-4: было 20 / 30).</summary>
+    public const double MaxTiltDeg = 35.0, MaxTwistDeg = 45.0;
 
     /// <summary>Ось с мёртвой зоной: 0 внутри DeadZone, затем линейно до ±1.</summary>
     public static double Shape(double v)
@@ -59,6 +65,52 @@ public static class TugJoystick
         double a = Math.Abs(v);
         if (a <= DeadZone) return 0.0;
         return Math.Sign(v) * Math.Min(1.0, (a - DeadZone) / (1.0 - DeadZone));
+    }
+
+    /// <summary>Обратное Shape: доля упора (−1…1) → положение рукоятки (0 → 0).</summary>
+    public static double Unshape(double f)
+    {
+        if (Math.Abs(f) < 1e-9) return 0.0;
+        f = Math.Max(-1.0, Math.Min(1.0, f));
+        return Math.Sign(f) * (DeadZone + (1.0 - DeadZone) * Math.Abs(f));
+    }
+
+    /// <summary>19.4а-4: положение рукоятки ступени k (−4…4): упор ровно k·25 %.</summary>
+    public static double StepPosition(int k)
+    {
+        k = Math.Max(-StepCount, Math.Min(StepCount, k));
+        return Unshape(k * MenuStep);
+    }
+
+    /// <summary>Ближайшая ступень к положению рукоятки (по положению — как телеграф по углу рычага).</summary>
+    public static int NearestStep(double v)
+    {
+        int best = 0;
+        double bestD = double.MaxValue;
+        for (int k = -StepCount; k <= StepCount; k++)
+        {
+            double d = Math.Abs(v - StepPosition(k));
+            if (d < bestD) { bestD = d; best = k; }
+        }
+        return best;
+    }
+
+    /// <summary>Положение рукоятки, поставленное в ближайшую ступень.</summary>
+    public static double Snap(double v) => StepPosition(NearestStep(v));
+
+    public static JoystickState Snap(JoystickState j) => new JoystickState(Snap(j.Surge), Snap(j.Sway), Snap(j.Yaw));
+
+    /// <summary>Название ступени хода: 0 — «стоп», 1 — «самый малый», 2 — «малый», 3 — «средний», 4 — «полный».</summary>
+    public static string StepName(int k)
+    {
+        switch (Math.Abs(k))
+        {
+            case 0: return "стоп";
+            case 1: return "самый малый";
+            case 2: return "малый";
+            case 3: return "средний";
+            default: return "полный";
+        }
     }
 
     /// <summary>Положение по наклону рукоятки (вперёд, на ПБ) и повороту (по часовой сверху), °.</summary>
@@ -81,31 +133,45 @@ public static class TugJoystick
         n = Shape(j.Yaw) * MaxYaw(s);
     }
 
-    /// <summary>Ступень меню: следующее значение оси, кратное MenuStep.</summary>
-    public static double Step(double v, int dir)
+    /// <summary>Ступень меню: положение рукоятки следующей ступени (19.4а-4: ступени упора 25 %, не хода рукоятки).</summary>
+    public static double Step(double v, int dir) => StepPosition(NearestStep(v) + Math.Sign(dir));
+
+    // Подписи — по доле упора j' (положение рукоятки → Shape); 19.4а-4: ход — с названием ступени
+    public static string SurgeTitle(double v) => ThrustTitle(Shape(v), "вперёд", "назад", true);
+    public static string SwayTitle(double v) => ThrustTitle(Shape(v), "на ПБ", "на ЛБ", false);
+    public static string YawTitle(double v) => ThrustTitle(Shape(v), "нос вправо", "нос влево", false);
+
+    /// <summary>Доля упора словами: «вперёд малый 50 %», «на ПБ 25 %», «0» (named — название ступени хода).</summary>
+    public static string ThrustTitle(double f, string plus, string minus, bool named)
     {
-        double k = Math.Round(v / MenuStep) + Math.Sign(dir);
-        return Math.Max(-1.0, Math.Min(1.0, k * MenuStep));
+        int p = (int)Math.Round(Math.Abs(f) * 100.0);
+        if (p == 0) return "0";
+        double k = Math.Abs(f) / MenuStep;
+        string name = named && Math.Abs(k - Math.Round(k)) < 0.02 ? StepName((int)Math.Round(k)) + " " : "";
+        return $"{(f > 0 ? plus : minus)} {name}{p} %";
     }
 
-    public static string SurgeTitle(double v) => Axis(v, "вперёд", "назад");
-    public static string SwayTitle(double v) => Axis(v, "на ПБ", "на ЛБ");
-    public static string YawTitle(double v) => Axis(v, "нос вправо", "нос влево");
+    /// <summary>Положение словами по упору: «ход вперёд малый 50 %, лагом на ПБ 25 %» (нулевые оси опускаются).</summary>
+    public static string Describe(JoystickState j) => DescribeThrust(Shape(j.Surge), Shape(j.Sway), Shape(j.Yaw));
 
-    private static string Axis(double v, string plus, string minus)
+    /// <summary>19.4а-4: движение буксира словами (индикатор у рукоятки): «вперёд 5,8 уз · лагом 0,3 уз на ПБ · 1,2 °/с вправо».</summary>
+    public static string MotionTitle(double uMs, double vMs, double rRadS)
     {
-        int p = (int)Math.Round(Math.Abs(v) * 100.0);
-        return p == 0 ? "0" : $"{(v > 0 ? plus : minus)} {p} %";
+        double u = uMs / ShipParameters.KnotsToMs, v = vMs / ShipParameters.KnotsToMs, r = rRadS * 180.0 / Math.PI;
+        string su = Math.Abs(u) < 0.05 ? "ход 0" : $"{(u > 0 ? "вперёд" : "назад")} {ScenarioText.Num(Math.Abs(u), 1)} уз";
+        string sv = Math.Abs(v) < 0.05 ? "лагом 0" : $"лагом {ScenarioText.Num(Math.Abs(v), 1)} уз {(v > 0 ? "на ПБ" : "на ЛБ")}";
+        string sr = Math.Abs(r) < 0.05 ? "поворот 0" : $"{ScenarioText.Num(Math.Abs(r), 1)} °/с {(r > 0 ? "вправо" : "влево")}";
+        return $"{su} · {sv} · {sr}";
     }
 
-    /// <summary>Положение словами: «ход вперёд 50 %, лагом на ПБ 25 %» (нулевые оси опускаются).</summary>
-    public static string Describe(JoystickState j)
+    /// <summary>То же по долям упора (событие JoystickChanged с 19.4а-4 пишет упор, %).</summary>
+    public static string DescribeThrust(double surge, double sway, double yaw)
     {
-        if (Math.Abs(j.Surge) < 0.005 && Math.Abs(j.Sway) < 0.005 && Math.Abs(j.Yaw) < 0.005) return "в нуле";
+        if (Math.Abs(surge) < 0.005 && Math.Abs(sway) < 0.005 && Math.Abs(yaw) < 0.005) return "в нуле";
         var parts = new System.Collections.Generic.List<string>();
-        if (Math.Abs(j.Surge) >= 0.005) parts.Add("ход " + SurgeTitle(j.Surge));
-        if (Math.Abs(j.Sway) >= 0.005) parts.Add("лагом " + SwayTitle(j.Sway));
-        if (Math.Abs(j.Yaw) >= 0.005) parts.Add("разворот " + YawTitle(j.Yaw));
+        if (Math.Abs(surge) >= 0.005) parts.Add("ход " + ThrustTitle(surge, "вперёд", "назад", true));
+        if (Math.Abs(sway) >= 0.005) parts.Add("лагом " + ThrustTitle(sway, "на ПБ", "на ЛБ", false));
+        if (Math.Abs(yaw) >= 0.005) parts.Add("разворот " + ThrustTitle(yaw, "нос вправо", "нос влево", false));
         return string.Join(", ", parts);
     }
 }

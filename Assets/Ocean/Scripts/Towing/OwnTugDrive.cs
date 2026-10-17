@@ -13,6 +13,9 @@
 // 19.4а-2: удержание курса (AzimuthDrive.HeadingHold, по умолчанию вкл) — тумблер «УДЕРЖ. КУРС» справа от рукоятки
 // (TugHeadingSwitch) и меню B «Удержание курса»; событие HeadingHoldChanged. Сдвиг рукоятки от TelegraphHead —
 // ShipTypeSwitcher.tugJoystickOffset (Tools/VR Bridge/Tug — запомнить положение джойстика).
+// 19.4а-4: ступени рукоятки 25 % упора (меню B «Рукоятка: ступени 25 % / плавно»), меню «Ход / Лагом / Разворот» —
+// по ступеням; в событии JoystickChanged — доли упора; табличка у рукоятки (TugJoystickIndicator) — на пульте
+// по другую сторону от тумблера.
 // ============================================================
 using System.Collections.Generic;
 using UnityEngine;
@@ -45,6 +48,7 @@ public class OwnTugDrive : MonoBehaviour
     private float lastChangeTime = -1f;
     private string lastSource = "рукой";
     private TugHeadingSwitch headingSwitch;
+    private TugJoystickIndicator indicator;
 
     /// <summary>
     /// 19.4а-3: тумблер «УДЕРЖ. КУРС» (решение пользователя 17.10.2026) — рукоятка держит положение (вкл, по умолчанию)
@@ -61,6 +65,17 @@ public class OwnTugDrive : MonoBehaviour
         Debug.Log("[Буксир] " + e.Describe(), this);
         ExerciseEvents.Publish(e);
         if (!on) SetState(JoystickState.Zero, source);
+        BridgeMenu.RebuildOpen();
+    }
+
+    /// <summary>19.4а-4: ступени рукоятки (25 % упора, как телеграф) — по умолчанию вкл; выкл — плавно.</summary>
+    public bool Detents => handle == null || handle.detents;
+
+    public void SetDetents(bool on)
+    {
+        if (handle == null || handle.detents == on) return;
+        handle.SetDetents(on);
+        Debug.Log($"[Буксир] Рукоятка джойстика: {(on ? "ступени 25 % упора (самый малый / малый / средний / полный)" : "плавно")}", this);
         BridgeMenu.RebuildOpen();
     }
 
@@ -185,10 +200,11 @@ public class OwnTugDrive : MonoBehaviour
     private void Publish(string source)
     {
         JoystickState s = State;
+        // 19.4а-4: в событии — доли упора, % (после мёртвой зоны), а не ход рукоятки
         var e = new ExerciseEvent(ExerciseEventType.JoystickChanged)
         {
-            Value = System.Math.Round(s.Surge * 100.0), Value2 = System.Math.Round(s.Sway * 100.0),
-            Index = (int)System.Math.Round(s.Yaw * 100.0), Subject = source
+            Value = System.Math.Round(TugJoystick.Shape(s.Surge) * 100.0), Value2 = System.Math.Round(TugJoystick.Shape(s.Sway) * 100.0),
+            Index = (int)System.Math.Round(TugJoystick.Shape(s.Yaw) * 100.0), Subject = source
         };
         if (navigation != null && navigation.Model != null)
         {
@@ -282,8 +298,34 @@ public class OwnTugDrive : MonoBehaviour
             }
             if (!swPlaced) headingSwitch.transform.localRotation = Quaternion.FromToRotation(headingSwitch.transform.localRotation * Vector3.up, Vector3.up) * headingSwitch.transform.localRotation;
             placed += swPlaced ? ", тумблер рядом на пульте" : ", тумблер — слева в плоскости рукоятки";
+
+            // 19.4а-4: табличка (схема отклонения, ступени, движение буксира) — на пульте по другую сторону от тумблера,
+            // лёжа на панели, верхом к носу (читается из рубки)
+            indicator = TugJoystickIndicator.Build(t, this);
+            Vector3[] boards = { new Vector3(0.19f, 0f, 0f), new Vector3(-0.19f, 0f, 0f), new Vector3(0f, 0f, -0.17f), new Vector3(0.19f, 0f, -0.12f),
+                                 new Vector3(-0.19f, 0f, -0.12f), new Vector3(0f, 0f, 0.17f) };
+            Vector3 swLocal = t.InverseTransformPoint(headingSwitch.transform.position);
+            bool boardPlaced = false;
+            foreach (Vector3 b in boards)
+            {
+                if (Vector3.Distance(new Vector3(b.x, 0f, b.z), new Vector3(swLocal.x, 0f, swLocal.z)) < 0.12f) continue;   // не на тумблер
+                if (!cs.Find(t.TransformPoint(b), n, 0.3f, 0.3f, t, out Vector3 bp, out Vector3 bn)) continue;
+                if (Vector3.Dot(bn, n) < 0.9f || Mathf.Abs(Vector3.Dot(bp - t.position, n)) > 0.06f) continue;
+                PlaceBoard(bp + bn * 0.003f, bn, bowW);
+                boardPlaced = true;
+                break;
+            }
+            if (!boardPlaced) PlaceBoard(t.TransformPoint(new Vector3(swLocal.x < 0f ? 0.19f : -0.19f, 0.01f, 0f)), n, bowW);
+            placed += boardPlaced ? ", табличка рядом на пульте" : ", табличка — в плоскости рукоятки";
         }
         Debug.Log($"[Буксир] Рукоятка джойстика построена у {head.name} ({head.parent.name}): {placed}.", this);
+    }
+
+    // Табличка лёжа на панели: лицом вверх (холст смотрит «в панель»), верх — к носу
+    private void PlaceBoard(Vector3 pos, Vector3 normal, Vector3 bowW)
+    {
+        Vector3 fwd = Vector3.ProjectOnPlane(bowW, normal);
+        indicator.transform.SetPositionAndRotation(pos, Quaternion.LookRotation(-normal, fwd.sqrMagnitude > 1e-6f ? fwd.normalized : bowW));
     }
 
     // ─────────── Меню «Управление» (кнопка B) ───────────
@@ -308,6 +350,8 @@ public class OwnTugDrive : MonoBehaviour
             () => SetHeadingHold(!HeadingHold, "меню"), () => SetHeadingHold(!HeadingHold, "меню"), () => Active, hideWhenUnavailable: true).InMenu(menu));
         commands.Add(BridgeMenu.RegisterStepper(Group, () => $"Рукоятка: {(HandleHold ? "держит положение" : "в ноль при отпускании")}",
             () => SetHandleHold(!HandleHold, "меню"), () => SetHandleHold(!HandleHold, "меню"), () => Active, hideWhenUnavailable: true).InMenu(menu));
+        commands.Add(BridgeMenu.RegisterStepper(Group, () => $"Рукоятка: {(Detents ? "ступени 25 %" : "плавно")}",
+            () => SetDetents(!Detents), () => SetDetents(!Detents), () => Active && handle != null, hideWhenUnavailable: true).InMenu(menu));
         BridgeMenu.SetGroupExpanded(Group, true);
         BridgeMenu.SetGroupOrder(Group, 5);
     }
