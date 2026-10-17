@@ -609,6 +609,15 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         nextRefresh = 0f;
     }
 
+    /// <summary>21.4б: показать сценарий в выборе (после «Пройти в тренажёре» из редактора).</summary>
+    public void ShowScenario(ScenarioDefinition s)
+    {
+        int i = runner != null ? runner.scenarios.IndexOf(s) : -1;
+        if (i < 0) return;
+        scenarioIndex = i;
+        nextRefresh = 0f;
+    }
+
     private void StepScenario(int dir)
     {
         int n = runner != null ? runner.scenarios.Count : 0;

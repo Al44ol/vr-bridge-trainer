@@ -28,6 +28,10 @@ public static class TrainerScenes
     /// <summary>21.4а: своё судно сценария — модель 45 м и свой буксир (запомнены при уходе из тренажёра).</summary>
     public static ShipParameters BridgeShip { get; private set; }
     public static ShipParameters TugShip { get; private set; }
+    /// <summary>21.4б: «Пройти в тренажёре» — файл сценария, который тренажёр откроет на брифинге после загрузки (пусто — нет).</summary>
+    public static string PlayOnLoad = "";
+    /// <summary>21.4б: последний сценарий редактора — при возврате в редактор открывается сразу.</summary>
+    public static string LastScenarioFile = "";
     /// <summary>Папка сценариев (Документы\VRBridgeTrainer).</summary>
     public static string Root { get; private set; } = "";
     /// <summary>Выгрузка тренажёра идёт (редактор ждёт её, чтобы не было двух EventSystem).</summary>
@@ -42,6 +46,7 @@ public static class TrainerScenes
     {
         trainingLoads = 0;
         StartupDone = false;
+        PlayOnLoad = LastScenarioFile = "";
         Unloading = null;
         SceneManager.sceneLoaded -= OnSceneLoaded;
         SceneManager.sceneLoaded += OnSceneLoaded;

@@ -9,6 +9,7 @@
 // Reload() («Обновить файлы» в окне инструктора) — заново: прежние файловые сценарии убираются из списка
 // (загруженный сейчас упражнение не прерывается). Встроенные ассеты не меняются никогда.
 // ToFileText — копия сценария для записи упражнения (scenario.json в папке сессии).
+// 21.4б: «Пройти в тренажёре» из редактора (TrainerScenes.PlayOnLoad) — после загрузки этот сценарий открывается на брифинге.
 // ============================================================
 using System;
 using System.IO;
@@ -104,6 +105,31 @@ public class ScenarioFiles : MonoBehaviour
         if (rep.ErrorFiles > 0 || rep.WarningFiles > 0) Debug.LogWarning("[Сценарии] " + text);
         else Debug.Log($"[Сценарии] {rep.Summary()} ({Root})");
         Reloaded?.Invoke();
+        // 21.4б: «Пройти в тренажёре» из редактора — открыть этот сценарий на брифинге
+        if (!string.IsNullOrEmpty(TrainerScenes.PlayOnLoad))
+        {
+            string path = TrainerScenes.PlayOnLoad;
+            TrainerScenes.PlayOnLoad = "";
+            StartCoroutine(PlayFromEditor(path));
+        }
+    }
+
+    private System.Collections.IEnumerator PlayFromEditor(string path)
+    {
+        yield return null;   // Start остальных компонентов тренажёра (судно, погода, окно инструктора)
+        yield return null;
+        string full = Path.GetFullPath(path);
+        ScenarioDefinition s = runner.scenarios.Find(x => x != null && x.IsFromFile &&
+                                                     string.Equals(Path.GetFullPath(x.sourceFile), full, StringComparison.OrdinalIgnoreCase));
+        if (s == null)
+        {
+            Debug.LogWarning($"[Сценарии] Из редактора: сценарий {Path.GetFileName(path)} не загрузился — см. «{ScenarioFolder.ReportFile}».");
+            yield break;
+        }
+        runner.Load(s);
+        InstructorWindow w = FindAnyObjectByType<InstructorWindow>();
+        if (w != null) w.ShowScenario(s);
+        Debug.Log($"[Сценарии] Из редактора: «{s.id} {s.title}» — брифинг ({Path.GetFileName(path)}).");
     }
 
     /// <summary>Сценарий в формате файла (копия в запись упражнения); null — не получилось.</summary>

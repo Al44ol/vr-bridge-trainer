@@ -15,6 +15,7 @@
 // правка знаков — AidEditing (Core). 21.3а — мели и суша (ScenarioEditorShapes.cs, partial-класс);
 // 21.3б — фарватеры и причалы (там же); 21.4а — слой сценария: режим «Акватория / Сценарий» вверху палитры,
 // старт и маршрут с XTE (ScenarioEditorScenario.cs); кнопки верхней панели работают с документом режима.
+// 21.4б — листы «Условия», «Критерии», «Брифинг» и «Пройти в тренажёре» (ScenarioEditorSheets.cs).
 // ============================================================
 using System;
 using System.Collections;
@@ -182,6 +183,7 @@ public partial class ScenarioEditorApp : MonoBehaviour
         BuildPalette();
         BuildMap();
         BuildProps();
+        BuildSheets();   // 21.4б: условия, критерии, брифинг — листы на месте карты
 
         // Строка состояния
         RectTransform sb = MonitorUi.Panel(root, "StatusBar", MonitorUi.BarColor);
@@ -773,7 +775,7 @@ public partial class ScenarioEditorApp : MonoBehaviour
     {
         if (canvas == null) return;
         Keys();
-        if (!dialogOpen) { if (mode == Mode.Scenario) ScenarioMouse(); else MapMouse(); }
+        if (!dialogOpen && !SheetOpen) { if (mode == Mode.Scenario) ScenarioMouse(); else MapMouse(); }
         if (doc != null && doc.Dirty && Time.unscaledTime >= nextDraft) WriteDraft();
         if (sdoc != null && sdoc.Dirty && Time.unscaledTime >= nextScenarioDraft) WriteScenarioDraft();   // 21.4а
         RedrawMap();
@@ -800,6 +802,7 @@ public partial class ScenarioEditorApp : MonoBehaviour
         if (k.escapeKey.wasPressedThisFrame)
         {
             if (dialogOpen && HasDoc) CloseDialog();
+            else if (SheetOpen) CloseSheets();   // 21.4б
             else if (sc)
             {
                 // 21.4а: «Выбор» → снять выделение
@@ -809,7 +812,7 @@ public partial class ScenarioEditorApp : MonoBehaviour
             else if (tool != Tool.Select) SetTool(Tool.Select);
             else { SelectAid(-1); SelectShape(AreaShape.None); }
         }
-        if (!dialogOpen && k.deleteKey.wasPressedThisFrame) { if (sc) DeleteScenarioSelected(); else DeleteSelected(); }
+        if (!dialogOpen && !SheetOpen && k.deleteKey.wasPressedThisFrame) { if (sc) DeleteScenarioSelected(); else DeleteSelected(); }
         if (dialogOpen || !ctrl) return;
         if (k.zKey.wasPressedThisFrame) { if (shift) Redo(); else Undo(); }
         else if (k.yKey.wasPressedThisFrame) Redo();

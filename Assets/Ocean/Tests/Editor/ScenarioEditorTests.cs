@@ -229,4 +229,123 @@ public class ScenarioEditorTests
         Assert.IsTrue(doc.Undo());
         Assert.AreEqual(ScenarioShipType.Default, doc.Scenario.ownShipType);
     }
+
+    // ─────────── 21.4б ───────────
+    [Test]
+    public void CriteriaSwitches_OnlyDifferences_Effective_File_SessionMeta()
+    {
+        ScenarioDefinition b2 = BuiltInB2(out ScenarioCatalog cat);
+        string root = TempRoot();
+        ScenarioDocument doc = ScenarioDocument.BasedOn(b2, "МОЙ-01", cat, null);
+        ScenarioDefinition s = doc.Scenario;
+        Assert.AreEqual(0, s.criteriaSwitches.Count);
+
+        Assert.IsTrue(CriteriaEditing.ToggleEnabled(s, "E5"));
+        Assert.IsTrue(CriteriaEditing.Differs(s, "E5"));
+        Assert.IsFalse(CriteriaEditing.Effective(s, "E5").enabled);
+        Assert.IsTrue(CriteriaEditing.ToggleEnabled(s, "E5"));
+        Assert.IsFalse(CriteriaEditing.Differs(s, "E5"), "вернули как в наборе — отличие убрано");
+
+        Assert.IsTrue(CriteriaEditing.ToggleMandatory(s, "E2"));
+        Assert.IsTrue(CriteriaEditing.Effective(s, "E2").mandatory);
+        Assert.IsFalse(b2.EffectiveAssessment().Get("E2").mandatory, "встроенный не меняется");
+        Assert.AreEqual(CriteriaEditing.Base(s, "E2").pass, CriteriaEditing.Effective(s, "E2").pass, "пороги — набора");
+        Assert.IsTrue(CriteriaEditing.ToggleEnabled(s, "E2"));
+        CriterionSetting e2 = CriteriaEditing.Effective(s, "E2");
+        Assert.IsFalse(e2.enabled);
+        Assert.IsFalse(e2.mandatory, "выключенный не бывает обязательным");
+        Assert.IsFalse(CriteriaEditing.ToggleMandatory(s, "E2"));
+        Assert.AreEqual(1, s.criteriaSwitches.Count);
+
+        // Файл: только отличия; читается обратно; снимок session.json — с галочками
+        RouteEditing.Move(s.route, 0, s.route[0].position);
+        doc.Commit();
+        string text = ScenarioFile.Write(s, cat);
+        StringAssert.Contains("\"criteriaSwitches\"", text);
+        ScenarioLoadResult r = ScenarioFile.Read(text, cat, null, "МОЙ-01");
+        Assert.IsTrue(r.Ok, string.Join("; ", r.Errors));
+        Assert.AreEqual(1, r.Scenario.criteriaSwitches.Count);
+        Assert.IsFalse(r.Scenario.EffectiveAssessment().Get("E2").enabled);
+        SessionMeta m = SessionMeta.Create(r.Scenario, b2.shipParameters, "", new DateTime(2026, 10, 18));
+        Assert.IsFalse(m.assessment_settings.Get("E2").enabled);
+        Assert.IsTrue(SessionMeta.Create(b2, b2.shipParameters, "", new DateTime(2026, 10, 18)).assessment_settings.Get("E2").enabled);
+        Assert.AreEqual(AreaSaveStatus.Saved, doc.Save(root, false, new DateTime(2026, 10, 18, 11, 0, 0)), doc.LastMessage);
+        ScenarioLibraryReport rep = ScenarioFolder.Load(root, cat);
+        Assert.AreEqual(1, rep.Scenarios.Count, rep.Text(DateTime.Now));
+        Assert.IsFalse(rep.Scenarios[0].EffectiveAssessment().Get("E2").enabled);
+
+        // Другой набор, где E2 и так выключен, — отличие убирается; «Как в наборе»
+        var off = ScriptableObject.CreateInstance<AssessmentCriteria>();
+        off.name = "Assessment_Off";
+        off.settings = AssessmentSettings.Default();
+        off.settings.Get("E2").enabled = false;
+        CriteriaEditing.SetBase(s, off);
+        Assert.AreSame(off, s.assessment);
+        Assert.AreEqual(0, s.criteriaSwitches.Count);
+        Assert.IsFalse(CriteriaEditing.Effective(s, "E2").enabled);
+        CriteriaEditing.ToggleEnabled(s, "E9");
+        Assert.IsTrue(CriteriaEditing.Reset(s));
+        Assert.AreEqual(0, s.criteriaSwitches.Count);
+        (int en, int man) = CriteriaEditing.Count(s);
+        Assert.AreEqual(AssessmentCatalog.All.Count - 1, en);
+        Assert.Greater(man, 0);
+    }
+
+    [Test]
+    public void Checks_ErrorsBlock_WarningsDoNot()
+    {
+        ScenarioDefinition b2 = BuiltInB2(out ScenarioCatalog cat);
+        AreaDocument ad = AreaDocument.New("Бухта");
+        ScenarioDefinition s = ScenarioDocument.New(ad.Area, b2.shipParameters, "МОЙ-05", "Проверка", cat, null).Scenario;
+        AreaCheckResult c = ScenarioChecks.Check(s, cat);
+        Assert.IsTrue(c.Errors.Exists(e => e.Contains("меньше двух")), string.Join("; ", c.Errors));
+        Assert.IsTrue(c.Warnings.Exists(e => e.Contains("брифинга")), "пустой брифинг — предупреждение");
+
+        RouteEditing.Add(s.route, new WorldPosition(0, 0));
+        RouteEditing.Add(s.route, new WorldPosition(0, 2000));
+        c = ScenarioChecks.Check(s, cat);
+        Assert.AreEqual(0, c.Errors.Count, string.Join("; ", c.Errors));
+        s.windKnots = 10f;   // ветер без 3 СС — предупреждение
+        Assert.IsTrue(ScenarioChecks.Check(s, cat).Warnings.Exists(e => e.Contains("3 СС")));
+        Assert.AreEqual(0, ScenarioChecks.Check(s, cat).Errors.Count);
+
+        RouteEditing.Move(s.route, 1, new WorldPosition(0, 9000));   // вне района ± 5 км
+        Assert.IsTrue(ScenarioChecks.Check(s, cat).Errors.Exists(e => e.Contains("вне района")));
+        RouteEditing.Move(s.route, 1, new WorldPosition(0, 2000));
+        s.route[1].xteLimit = 0f;
+        Assert.IsTrue(ScenarioChecks.Check(s, cat).Errors.Exists(e => e.Contains("XTE")));
+        s.route[1].xteLimit = 150f;
+        s.id = "B2-01";
+        Assert.IsTrue(ScenarioChecks.Check(s, cat).Errors.Exists(e => e.Contains("встроенного")));
+        s.id = "МОЙ-05";
+        s.initial.position = new WorldPosition(7000, 0);
+        Assert.IsTrue(ScenarioChecks.Check(s, cat).Errors.Exists(e => e.StartsWith("Начальная позиция")));
+        Assert.IsFalse(ScenarioChecks.IsError("T1: начальная позиция вне района акватории."), "цели вне района — предупреждение");
+    }
+
+    [Test]
+    public void Briefing_Template()
+    {
+        ScenarioDefinition b2 = BuiltInB2(out ScenarioCatalog cat);
+        AreaDocument ad = AreaDocument.New("Бухта");
+        ScenarioDefinition s = ScenarioDocument.New(ad.Area, b2.shipParameters, "МОЙ-01", "Бухта", cat, null).Scenario;
+        RouteEditing.Add(s.route, new WorldPosition(0, 0));
+        RouteEditing.Add(s.route, new WorldPosition(1000, 1000));
+        s.route[1].narrowChannel = true;
+        s.windKnots = 15f;
+        s.windFromDeg = 90f;
+        s.visibilityMeters = 926f;
+        s.timeLimitSeconds = 1200f;
+        CriteriaEditing.ToggleMandatory(s, "E2");
+        string t = ScenarioChecks.Briefing(s);
+        StringAssert.Contains("курс 0°, 10,0 уз", t);
+        StringAssert.Contains("WP1 → WP2: курс 45°", t);
+        StringAssert.Contains("правило 9", t);
+        StringAssert.Contains("видимость 0,5 мили", t);
+        StringAssert.Contains("ветер 15 уз с 90°", t);
+        StringAssert.Contains("Лимит времени — 20 мин", t);
+        StringAssert.Contains("E2 — ", t);
+        s.timeLimitSeconds = 0f;
+        StringAssert.Contains("Лимита времени нет", ScenarioChecks.Briefing(s));
+    }
 }

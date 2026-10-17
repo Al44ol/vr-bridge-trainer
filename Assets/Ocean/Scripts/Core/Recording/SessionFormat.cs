@@ -232,7 +232,7 @@ public class SessionMeta
         };
         m.session_id = SessionFormat.FolderName(localStart, s != null ? s.id : "", traineeId);
         if (s != null) m.scenario = SessionScenario.From(s);
-        m.assessment_settings = AssessmentSettings.From(s != null ? s.assessment : null);
+        m.assessment_settings = s != null ? s.EffectiveAssessment() : AssessmentSettings.Default();   // 21.4б: с галочками сценария
         if (p != null) m.ship = SessionShip.From(p);
         return m;
     }

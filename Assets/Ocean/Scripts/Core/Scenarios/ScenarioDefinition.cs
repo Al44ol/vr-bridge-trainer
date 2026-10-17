@@ -125,6 +125,15 @@ public class RouteWaypoint
     }
 }
 
+/// <summary>21.4б: галочка критерия в сценарии — отличие от набора оценки (пороги и веса не меняются).</summary>
+[Serializable]
+public class CriterionSwitch
+{
+    public string code = "";
+    public bool enabled = true;
+    public bool mandatory;
+}
+
 // Другое судно — TrafficShipDefinition (Core/Traffic/TrafficDefinition.cs, B3).
 
 [CreateAssetMenu(menuName = "VR Bridge/Scenario", fileName = "Scenario", order = 10)]
@@ -197,6 +206,32 @@ public class ScenarioDefinition : ScriptableObject
     public ShipParameters tugWorkClient;
     [Tooltip("19.4б-2: тип своего судна — при загрузке переключается сам (буксир — упражнение на буксире)")]
     public ScenarioShipType ownShipType = ScenarioShipType.Default;
+
+    [Header("Критерии сценария (21.4б)")]
+    [Tooltip("Отличия от набора «Оценка»: критерий включён / обязательный; пусто — как в наборе. Пороги и веса — всегда набора (методика)")]
+    public List<CriterionSwitch> criteriaSwitches = new List<CriterionSwitch>();
+
+    /// <summary>21.4б: настройки оценки упражнения — копия набора assessment с галочками criteriaSwitches.</summary>
+    public AssessmentSettings EffectiveAssessment()
+    {
+        AssessmentSettings a = AssessmentSettings.From(assessment);
+        if (criteriaSwitches == null) return a;
+        foreach (CriterionSwitch w in criteriaSwitches)
+        {
+            if (w == null || string.IsNullOrEmpty(w.code)) continue;
+            CriterionSetting c = a.criteria.Find(x => x != null && x.code == w.code);
+            if (c == null)
+            {
+                CriterionInfo info = AssessmentCatalog.Find(w.code);
+                if (info == null) continue;   // неизвестный код (файл новее методики) — без изменений
+                c = AssessmentCatalog.DefaultSetting(info);
+                a.criteria.Add(c);
+            }
+            c.enabled = w.enabled;
+            c.mandatory = w.enabled && w.mandatory;
+        }
+        return a;
+    }
 
     /// <summary>21.1: сценарий загружен из файла (путь); пусто — встроенный ассет. В ассет и в файл не пишется.</summary>
     [NonSerialized] public string sourceFile;

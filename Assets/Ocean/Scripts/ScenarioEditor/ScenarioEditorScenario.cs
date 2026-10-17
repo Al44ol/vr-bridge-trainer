@@ -13,7 +13,7 @@
 //   • Справа: свойства сценария (id, название, акватория, судно — модель 45 м / свой буксир, модель движения,
 //     блоки из основы), старта (место, курс, скорость, телеграф, руль) или точки (имя, место, XTE, узкость, участки).
 //   • «Проверка» — ScenarioDefinition.Validate + замечания редактора (RouteEditing.Check).
-// Условия, критерии, брифинг, «Пройти в тренажёре» — 21.4б; суда, швартовка, буксир — 21.5 (из основы — как есть).
+// Условия, критерии, брифинг, «Пройти в тренажёре» — ScenarioEditorSheets.cs (21.4б); суда, швартовка, буксир — 21.5 (из основы — как есть).
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -76,6 +76,10 @@ public partial class ScenarioEditorApp
             y -= MonitorUi.RowHeight + MonitorUi.Gap;
         }
         y -= 2f * MonitorUi.Gap;
+        // 21.4б: проверить, сохранить и открыть сценарий в тренажёре на брифинге
+        float xp = Pad;
+        ui.Button(p, ref xp, y, w, "Пройти в тренажёре", MonitorUi.StartColor, PlayInTrainer, null, null, () => sdoc != null);
+        y -= MonitorUi.RowHeight + 3f * MonitorUi.Gap;
         TextMeshProUGUI help = MonitorUi.Text(p,
             "Колесо — масштаб; правая кнопка — сдвиг\n" +
             "Старт: щелчок — поставить судно\n" +
@@ -89,7 +93,7 @@ public partial class ScenarioEditorApp
         MonitorUi.TopLeft(help.rectTransform, Pad, y, w, 260f);
         y -= 268f;
         TextMeshProUGUI later = MonitorUi.Text(p,
-            "Условия, критерии, брифинг и «Пройти в тренажёре» — 21.4б; суда, швартовка, буксир — 21.5 (из основы переносятся как есть).",
+            "Условия, критерии, брифинг — кнопки в свойствах сценария. Суда, швартовка, буксир — 21.5 (из основы переносятся как есть).",
             13f, MonitorUi.MutedColor, TextAlignmentOptions.TopLeft);
         MonitorUi.TopLeft(later.rectTransform, Pad, y, w, 80f);
     }
@@ -119,6 +123,14 @@ public partial class ScenarioEditorApp
         x = Pad;
         ui.Button(g, ref x, y, w, "", MonitorUi.ButtonColor, () => SelectStart(true),
                   () => S == null ? "" : $"Старт: {MonitorUi.Num(S.initial.headingDeg, 0)}°, {MonitorUi.Num(S.initial.speedKnots, 1)} уз — свойства");
+        y -= MonitorUi.RowHeight + MonitorUi.Gap;
+        // 21.4б: листы поверх карты
+        float third = (w - 2f * MonitorUi.Gap) / 3f;
+        x = Pad;
+        ui.Button(g, ref x, y, third, "Условия…", MonitorUi.ButtonColor, () => OpenSheet(condSheet), null, null, null, MonitorUi.RowHeight, 15f);
+        ui.Button(g, ref x, y, third, "Критерии…", MonitorUi.ButtonColor, () => OpenSheet(critSheet), null, null, null, MonitorUi.RowHeight, 15f);
+        ui.Button(g, ref x, y, third, "", MonitorUi.ButtonColor, () => OpenSheet(briefSheet),
+                  () => S != null && string.IsNullOrWhiteSpace(S.briefing) ? "Брифинг… (пусто)" : "Брифинг…", null, null, MonitorUi.RowHeight, 15f);
         y -= MonitorUi.RowHeight + MonitorUi.Gap;
         sInfo = MonitorUi.Text(g, "", 15f, Color.white, TextAlignmentOptions.TopLeft);
         MonitorUi.TopLeft(sInfo.rectTransform, Pad, y, w, 110f);
@@ -217,6 +229,7 @@ public partial class ScenarioEditorApp
     {
         ScenarioDefinition s = S;
         if (s == null) return;
+        FillSheets();   // 21.4б: открытый лист — тоже
         Set(sIdField, s.id);
         Set(sTitleField, s.title);
         Set(stEField, MonitorUi.Num(s.initial.position.East, 0));
@@ -259,7 +272,7 @@ public partial class ScenarioEditorApp
         if (s.IsTugWork) blocks.Add("работа буксира");
         if (s.windKnots > 0f) blocks.Add($"ветер {MonitorUi.Num(s.windKnots, 0)} уз");
         b.AppendLine(blocks.Count > 0 ? "Из основы: " + string.Join(", ", blocks) + " (правка — 21.5)" : "Блоков задания нет (суда, швартовка, буксир — 21.5).");
-        b.Append($"<color=#9AA6B2>{ScenarioText.Conditions(s.weather, s.timeOfDay)}; лимит {MonitorUi.Num(s.timeLimitSeconds / 60.0, 0)} мин (правка — 21.4б)</color>");
+        b.Append($"<color=#9AA6B2>{ScenarioText.Conditions(s.weather, s.timeOfDay)}; лимит {MonitorUi.Num(s.timeLimitSeconds / 60.0, 0)} мин · критериев: {CriteriaEditing.Count(s).enabled}, обязательных {CriteriaEditing.Count(s).mandatory}</color>");
         return b.ToString();
     }
 
@@ -408,6 +421,7 @@ public partial class ScenarioEditorApp
     private void SetMode(Mode m)
     {
         if (m == mode) return;
+        CloseSheets();   // 21.4б: листы — только сценария
         EndFieldEdit();
         mode = m;
         SetTool(Tool.Select);
@@ -600,6 +614,14 @@ public partial class ScenarioEditorApp
                    null, false,
                    ("Восстановить", MonitorUi.StartColor, () => { CloseDialog(); SetScenarioDocument(d); }),
                    ("Удалить черновик", MonitorUi.StopColor, () => { ScenarioDocument.DeleteDraft(Root); CloseDialog(); if (openIfNone) OpenDialog(true); }));
+        else if (openIfNone && File.Exists(TrainerScenes.LastScenarioFile ?? ""))
+        {
+            // 21.4б: из тренажёра обратно — к последнему сценарию («Пройти в тренажёре», «Редактор сценариев»)
+            var errors = new List<string>();
+            ScenarioDocument last = ScenarioDocument.Open(TrainerScenes.LastScenarioFile, Catalog, folderAreas, errors);
+            if (last != null) SetScenarioDocument(last);
+            else OpenDialog(true);
+        }
         else if (openIfNone) OpenDialog(true);
     }
 
@@ -859,8 +881,10 @@ public partial class ScenarioEditorApp
         string file = sdoc.FilePath.Length > 0 ? Path.GetFileName(sdoc.FilePath) : "не сохранён";
         titleText.text = $"Сценарий «<b>{s.id} {s.title}</b>»{(sdoc.Dirty ? " <color=#FFC85A>*</color>" : "")}  <size=80%><color=#9AA6B2>{file} · {sdoc.Origin}</color></size>";
         var b = new System.Text.StringBuilder();
-        foreach (string p in s.Validate()) b.AppendLine($"<color=#FFC85A>! {p}</color>");
-        foreach (string p in RouteEditing.Check(s)) b.AppendLine($"<color=#FFC85A>! {p}</color>");
+        // 21.4б: ошибки (×) — «Пройти в тренажёре» не запустит; предупреждения (!) — можно
+        AreaCheckResult c = ScenarioChecks.Check(s, Catalog);
+        foreach (string p in c.Errors) b.AppendLine($"<color=#FF7A7A>× {p}</color>");
+        foreach (string p in c.Warnings) b.AppendLine($"<color=#FFC85A>! {p}</color>");
         if (b.Length == 0) b.Append("<color=#6FE08A>Замечаний нет.</color>");
         if (!string.IsNullOrEmpty(sdoc.LastMessage)) b.Append($"\n\n<color=#9AA6B2>{sdoc.LastMessage}</color>");
         checkText.text = b.ToString();
