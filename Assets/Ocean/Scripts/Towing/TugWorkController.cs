@@ -128,7 +128,7 @@ public class TugWorkController : MonoBehaviour
         }
         OwnTugDrive drive = OwnTugDrive.Instance;
         TugSpec spec = drive != null && drive.Drive != null ? drive.Drive.Spec
-            : TugSpec.For(own, drive != null ? drive.bollardPullTonnes : TugSpec.DefaultBollardPullTonnes);
+            : TugSpec.ForOwnTug(own, drive != null ? drive.bollardPullTonnes : TugSpec.DefaultBollardPullTonnes);
         Scenario = s;
         Work = new TugWorkSystem(s.tugWork, client, berth, spec);
         Work.Place(navigation.Model, moveOwn: false);

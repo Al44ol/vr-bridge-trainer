@@ -145,6 +145,8 @@ public static class ExerciseTasks
         if (w == null) return;
         if (w.Order != PilotOrderKind.None)
             b.Append($"\nЛоцман: «{w.LastMessage}» ({ScenarioText.Clock(w.LastMessageTime)})");   // 19.4б-3: и команды упором
+        if (w.LastInfo.Length > 0 && w.LastInfo != w.LastMessage)
+            b.Append($"\n  {w.LastInfo} ({ScenarioText.Clock(w.LastInfoTime)})");             // и последний доклад дистанции
         b.Append($"\nЗаданий выполнено: {w.DoneCount} из {TugWorkSystem.StageCount}");
         for (int i = 1; i <= TugWorkSystem.StageCount; i++)
         {

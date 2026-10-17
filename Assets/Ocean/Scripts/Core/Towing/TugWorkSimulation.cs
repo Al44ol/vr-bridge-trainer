@@ -137,7 +137,7 @@ public sealed class TugWorkSimulation
         ShipParameters tug = s.shipParameters, client = s.tugWorkClient;
         BerthArea berth = s.tugWork.BerthIn(s.waterArea);
         if (berth == null || tug == null || client == null) throw new InvalidOperationException("19-03: нет причала, буксира или клиента");
-        TugSpec spec = TugSpec.For(tug, BollardPullTonnes);
+        TugSpec spec = TugSpec.ForOwnTug(tug, BollardPullTonnes);
         System = new TugWorkSystem(s.tugWork, client, berth, spec)
         {
             Wind = s.windKnots > 0f ? Wind.Knots(s.windKnots, s.windFromDeg) : new Wind(0.0, 0.0),

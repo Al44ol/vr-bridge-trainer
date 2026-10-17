@@ -379,4 +379,24 @@ MonoBehaviour:
     bollardEndMarginM: 3
     bollardSetbackM: 1
     structureWidthM: 14
-  revision: 2
+  - name: "\u041F\u0440\u0438\u0447\u0430\u043B \u21162"
+    a:
+      East: 3733.1912685758407
+      North: 5493.923048454133
+    b:
+      East: 3956.1824177454882
+      North: 5622.667048454134
+    quayHeightM: 3
+    depthM: 11
+    fenderOuterDiameterM: 1.1482549
+    fenderRatedDeflectionM: 0.57412744
+    fenderRatedReactionKn: 1582.187
+    fenderLengthM: 5.63255
+    fenderSpacingM: 24
+    fenderEndMarginM: 4
+    fenderFriction: 0.3
+    bollardSpacingM: 32
+    bollardEndMarginM: 3
+    bollardSetbackM: 1
+    structureWidthM: 14
+  revision: 3

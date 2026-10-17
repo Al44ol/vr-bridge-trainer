@@ -106,6 +106,20 @@ public sealed class TugSpec
         BollardPull = bollardPullTonnes * 9.80665e3,
         ThrusterX = -0.4 * tug.length, ThrusterY = 0.25 * tug.beam, BowX = 0.5 * tug.length
     };
+
+    /// <summary>
+    /// 19.4б-3 (по проверке в шлеме — «судно заходит в буксир»): у своего буксира кранец-«колбаса» на форштевне (TugMeshes:
+    /// радиус 0,45 м, центр в 0,7·r впереди штевня) выступает на 1,7·0,45 ≈ 0,77 м — точка упора по его наружной кромке.
+    /// </summary>
+    public const double OwnTugBowFenderM = 0.765;
+
+    /// <summary>Свой буксир (19.4): как For, кранец — по наружной кромке носового кранца.</summary>
+    public static TugSpec ForOwnTug(ShipParameters tug, double bollardPullTonnes = DefaultBollardPullTonnes)
+    {
+        TugSpec s = For(tug, bollardPullTonnes);
+        s.BowX = 0.5 * tug.length + OwnTugBowFenderM;
+        return s;
+    }
 }
 
 /// <summary>Распределение обобщённых сил (X, Y, N) на две азимутальные колонки (формулы — в шапке файла).</summary>

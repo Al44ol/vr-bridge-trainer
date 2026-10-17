@@ -19,8 +19,9 @@ public static class DemoTugWorkScenario
 {
     public const string Id = "19-03";
     public const string Title = "Буксир прижимает судно к причалу";
-    /// <summary>Версия сценария: 1 — 19.4б-2 (Model45m, причал №1, 20 уз); 2 — 19.4б-3 (Mariner, причал №2, 15 уз, команды упором).</summary>
-    public const int Version = 2;
+    /// <summary>Версия сценария: 1 — 19.4б-2 (Model45m, причал №1, 20 уз); 2 — 19.4б-3 (Mariner, причал №2, 15 уз, команды упором);
+    /// 3 — 19.4б-3 по проверке: упор буксира — по наружной кромке носового кранца (TugSpec.ForOwnTug), старт буксира на 0,77 м дальше.</summary>
+    public const int Version = 3;
     public const float TimeLimitSeconds = 1200f;   // 20 мин
     public const float TargetTimeSeconds = 720f;   // контрольное время, 12 мин
     public const float WindKnots = 15f;
@@ -53,7 +54,7 @@ public static class DemoTugWorkScenario
         var task = new TugWorkDefinition { enabled = true, berthIndex = berthIndex, targetTimeS = TargetTimeSeconds, contactZoneM = ContactZoneM };
 
         // Начальные условия — как TugWorkSystem.Place
-        var sys = new TugWorkSystem(task, client, b, TugSpec.For(tug));
+        var sys = new TugWorkSystem(task, client, b, TugSpec.ForOwnTug(tug));
         var own = new ShipDynamicsModel(tug) { MotionOverride = MotionModel.Manoeuvring3Dof };
         sys.Place(own);
         WorldPosition start = new WorldPosition(own.East, own.North);

@@ -33,7 +33,7 @@ public class TugWorkTests
 
     private static TugWorkSystem System(ScenarioDefinition s, out ShipDynamicsModel own)
     {
-        var sys = new TugWorkSystem(s.tugWork, s.tugWorkClient, s.tugWork.BerthIn(s.waterArea), TugSpec.For(s.shipParameters));
+        var sys = new TugWorkSystem(s.tugWork, s.tugWorkClient, s.tugWork.BerthIn(s.waterArea), TugSpec.ForOwnTug(s.shipParameters));
         own = new ShipDynamicsModel(s.shipParameters) { MotionOverride = MotionModel.Manoeuvring3Dof, SpeedFactor = 0.0 };
         sys.Place(own);
         return sys;

@@ -327,7 +327,10 @@ public sealed class TugWorkSystem
     /// не чаще PowerIntervalS и только если нужная отличается от заданной больше чем на 0,75 ступени (без «дребезга»).
     /// </summary>
     public static double TargetSpeedKn(double gapM) => gapM > 20.0 ? 0.3 : gapM > 10.0 ? 0.2 : gapM > 3.0 ? 0.15 : 0.08;
-    public const double PowerKv = 1.5, HoldMargin = 0.05, PowerIntervalS = 15.0, InfoIntervalS = 5.0, SlowerMarginKn = 0.25;
+    public const double PowerKv = 1.5, HoldMargin = 0.05, PowerIntervalS = 15.0, InfoIntervalS = 5.0, InfoPeriodS = 30.0, SlowerMarginKn = 0.25;
+    /// <summary>Последний доклад обстановки («До причала N м, идёт N уз») и его время — строка монитора пульта.</summary>
+    public string LastInfo { get; private set; } = "";
+    public double LastInfoTime { get; private set; } = double.NaN;
     public static readonly double[] InfoGapsM = { 30.0, 20.0, 10.0, 5.0, 2.0 };
 
     /// <summary>Заданная ступень упора (0 — стоп, 1…4 — 25…100 %); −1 — команд упором ещё не было.</summary>
@@ -377,14 +380,19 @@ public sealed class TugWorkSystem
             PowerStepTime = time;
             Say(want > 0 ? PilotOrderKind.PushStep : PilotOrderKind.StopPush, time, TugWorkText.Power(want, hold), want * 25.0);
         }
-        // Обстановка — на 30, 20, 10, 5, 2 м
-        while (infoMark < InfoGapsM.Length && gap <= InfoGapsM[infoMark])
+        // Обстановка — сразу с первой командой упором, на 30, 20, 10, 5, 2 м и (19.4б-3 по проверке: «толкаю, а как будто
+        // безрезультатно — думал, уже у причала») не реже раза в InfoPeriodS
+        if (!hold)
         {
-            infoMark++;
-            if (time - lastInfo >= InfoIntervalS - 1e-9 && !hold)
+            bool mark = false;
+            while (infoMark < InfoGapsM.Length && gap <= InfoGapsM[infoMark]) { infoMark++; mark = true; }
+            bool due = first || mark && time - lastInfo >= InfoIntervalS - 1e-9 || time - lastInfo >= InfoPeriodS - 1e-9;
+            if (due)
             {
                 lastInfo = time;
-                Say(PilotOrderKind.Info, time, TugWorkText.Info(gap, v), Math.Round(gap, 1));
+                LastInfo = TugWorkText.Info(gap, v);
+                LastInfoTime = time;
+                Say(PilotOrderKind.Info, time, LastInfo, Math.Round(gap, 1));
             }
         }
         // Быстро идёт к причалу
@@ -425,6 +433,8 @@ public sealed class TugWorkSystem
         PowerStepTime = LastMessageTime = double.NaN;
         LastMessage = "";
         PowerNeeded = 0.0;
+        LastInfo = "";
+        LastInfoTime = double.NaN;
         lastInfo = lastSlower = -1e9;
         infoMark = 0;
     }

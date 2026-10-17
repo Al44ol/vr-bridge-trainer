@@ -92,7 +92,7 @@ public class PilotPowerTests
         Assert.AreEqual(0.08, TugWorkSystem.TargetSpeedKn(1.0));
 
         ScenarioDefinition s = Scenario();
-        var sys = new TugWorkSystem(s.tugWork, s.tugWorkClient, s.tugWork.BerthIn(s.waterArea), TugSpec.For(s.shipParameters));
+        var sys = new TugWorkSystem(s.tugWork, s.tugWorkClient, s.tugWork.BerthIn(s.waterArea), TugSpec.ForOwnTug(s.shipParameters));
         var own = new ShipDynamicsModel(s.shipParameters) { MotionOverride = MotionModel.Manoeuvring3Dof };
         sys.Place(own);
         Assert.AreEqual(0.0, sys.WindOffBerth(), "без ветра — 0");
@@ -136,9 +136,15 @@ public class PilotPowerTests
         Assert.IsTrue(power.Exists(e => e.Subject.StartsWith("Держи", StringComparison.Ordinal)), "на этапе «держать» — «Держи …»");
 
         List<ExerciseEvent> info = sim.Events.FindAll(e => e.Type == ExerciseEventType.PilotOrder && e.Index == (int)PilotOrderKind.Info);
-        Assert.GreaterOrEqual(info.Count, 3, "обстановка на 30 / 20 / 10 / 5 / 2 м");
-        for (int i = 1; i < info.Count; i++) Assert.Less(info[i].Value, info[i - 1].Value, "зазор убывает");
+        Assert.AreEqual(sim.System.DoneAt(TugWorkStage.Approach), info[0].Time, 1e-9, "первый доклад дистанции — вместе с «толкайте»");
+        Assert.Greater(info[0].Value, 30.0, "клиента отнесло дальше 30 м, пока шёл буксир");
+        for (int i = 1; i < info.Count; i++)
+            Assert.LessOrEqual(info[i].Time - info[i - 1].Time, TugWorkSystem.InfoPeriodS + 0.05, "доклад не реже раза в 30 с");
+        foreach (double mark in new[] { 30.0, 20.0, 10.0 })
+            Assert.IsTrue(info.Exists(e => e.Value <= mark && e.Value > mark - 3.0), $"доклад у рубежа {mark} м");
+        Assert.Less(info[info.Count - 1].Value, 3.0, "последний доклад — у кранцев");
         Assert.IsTrue(info.TrueForAll(e => e.Subject.StartsWith("До причала", StringComparison.Ordinal)));
+        Assert.AreEqual(info[info.Count - 1].Subject, sim.System.LastInfo, "последний доклад — строка монитора");
 
         // Автомат держит названную ступень: после «Держи …» заданный упор — та же ступень
         Assert.GreaterOrEqual(sim.System.PowerStep, 1);

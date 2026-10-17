@@ -477,7 +477,9 @@ public class TugConsole : MonoBehaviour
         // Упражнение на буксире (19-03): команда лоцмана и задания
         TugWorkController tw = TugWorkController.Instance;
         if (tw != null && tw.Work != null && tw.Work.Order != PilotOrderKind.None)
-            x.Pilot = $"Лоцман: «{tw.Work.LastMessage}» · заданий {tw.Work.DoneCount}/{TugWorkSystem.StageCount}";
+            x.Pilot = $"Лоцман: «{tw.Work.LastMessage}» · заданий {tw.Work.DoneCount}/{TugWorkSystem.StageCount}" +
+                      (tw.Work.LastInfo.Length > 0 && tw.Work.LastInfo != tw.Work.LastMessage
+                          ? "\n" + $"{tw.Work.LastInfo} ({ScenarioText.Clock(tw.Work.LastInfoTime)})" : "");   // 19.4б-3: последний доклад дистанции
         if (InstructorInputs.Instance != null) x.Failure = InstructorInputs.Instance.FailureLine ?? "";
         return x;
     }

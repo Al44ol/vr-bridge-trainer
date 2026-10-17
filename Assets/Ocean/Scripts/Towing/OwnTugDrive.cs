@@ -144,7 +144,7 @@ public class OwnTugDrive : MonoBehaviour
     {
         if (on && tug != null && (drive == null || driveFor != tug))
         {
-            drive = new AzimuthDrive(TugSpec.For(tug, bollardPullTonnes));
+            drive = new AzimuthDrive(TugSpec.ForOwnTug(tug, bollardPullTonnes));
             driveFor = tug;
             Debug.Log($"[Буксир] Свой буксир {tug.name}: колонки x {drive.Spec.ThrusterX:F1} м, y ±{drive.Spec.ThrusterY:F1} м, " +
                       $"тяга на гаке {bollardPullTonnes:0} т; пределы джойстика: ход {TugJoystick.MaxSurge(drive.Spec) / 1000:F0} кН, " +

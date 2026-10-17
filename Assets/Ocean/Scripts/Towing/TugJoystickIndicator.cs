@@ -21,7 +21,7 @@ public class TugJoystickIndicator : MonoBehaviour
     public float rateHz = 10f;
 
     private const float W = 700f, H = 500f, Scale = 0.0002f;   // 14 × 10 см
-    private const float CrossSize = 300f, YawBarW = 300f;
+    private const float CrossSize = 260f, YawBarW = 260f, CrossLeft = 60f;   // 19.4б-3: «ЛБ» выходила за край экрана (было 300, отступ 20)
     private static readonly Color Bg = new Color(0.03f, 0.06f, 0.09f, 0.95f), Line = new Color(0.45f, 0.55f, 0.62f, 1f),
                                   Tick = new Color(0.65f, 0.75f, 0.8f, 1f), HandColor = new Color(1f, 1f, 1f, 0.9f),
                                   StepColor = new Color(1f, 0.8f, 0.2f, 1f), TextColor = new Color(0.85f, 0.95f, 1f, 1f);
@@ -52,7 +52,7 @@ public class TugJoystickIndicator : MonoBehaviour
         Img("Background", transform, Vector2.zero, new Vector2(W, H), Bg);
 
         // Крест хода и лагом: слева, с рисками ступеней
-        crossArea = Img("Cross", transform, new Vector2(-W / 2f + 20f + CrossSize / 2f, 40f), new Vector2(CrossSize, CrossSize), new Color(0f, 0f, 0f, 0.25f));
+        crossArea = Img("Cross", transform, new Vector2(-W / 2f + CrossLeft + CrossSize / 2f, 40f), new Vector2(CrossSize, CrossSize), new Color(0f, 0f, 0f, 0.25f));
         Img("AxisV", crossArea, Vector2.zero, new Vector2(3f, CrossSize), Line);
         Img("AxisH", crossArea, Vector2.zero, new Vector2(CrossSize, 3f), Line);
         for (int k = -TugJoystick.StepCount; k <= TugJoystick.StepCount; k++)
@@ -71,7 +71,7 @@ public class TugJoystickIndicator : MonoBehaviour
         rawDot = Img("Hand", crossArea, Vector2.zero, new Vector2(12f, 12f), HandColor);
 
         // Шкала разворота под крестом
-        var yaw = Img("Yaw", transform, new Vector2(-W / 2f + 20f + CrossSize / 2f, -H / 2f + 40f), new Vector2(YawBarW, 6f), Line);
+        var yaw = Img("Yaw", transform, new Vector2(-W / 2f + CrossLeft + CrossSize / 2f, -H / 2f + 40f), new Vector2(YawBarW, 6f), Line);
         for (int k = -TugJoystick.StepCount; k <= TugJoystick.StepCount; k++)
             Img("YawTick" + k, yaw, new Vector2(Pos(TugJoystick.StepPosition(k), YawBarW), 0f), new Vector2(3f, k == 0 ? 30f : 18f), Tick);
         Label(yaw, "нос влево", new Vector2(-YawBarW / 2f + 50f, -24f), 18f);
@@ -80,7 +80,7 @@ public class TugJoystickIndicator : MonoBehaviour
         yawRaw = Img("YawHand", yaw, Vector2.zero, new Vector2(5f, 22f), HandColor);
 
         // Строки справа
-        float textX = -W / 2f + 40f + CrossSize + 30f, textW = W / 2f - textX - 16f;
+        float textX = -W / 2f + CrossLeft + CrossSize + 50f, textW = W / 2f - textX - 16f;   // правее подписи «ПБ»
         axes = Text("Axes", new Vector2(textX + textW / 2f, 80f), new Vector2(textW, 300f), 30f);
         motion = Text("Motion", new Vector2(textX + textW / 2f, -150f), new Vector2(textW, 160f), 25f);
     }
