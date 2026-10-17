@@ -520,6 +520,28 @@ public static class DemoAssessmentRuns
         }
     }
 
+    /// <summary>
+    /// 19.4г, 19-03 со «случайным событием» (нос отходит до 6° при зазоре 5 м, корма ложится и её крепят): правильно (к носу,
+    /// толкать по командам); не перешёл (толкает у миделя 50 %, не слушая «стоп»); не к тому концу (к корме, там самый малый);
+    /// поздно (перешёл через 90 с после команды).
+    /// </summary>
+    public static readonly string[] TugEventVariants = { "tugevent_correct", "tugevent_stay", "tugevent_wrong", "tugevent_late" };
+
+    public static void ConfigureTugEvent(TugWorkSimulation sim, string variant)
+    {
+        sim.AngleEvent = true;
+        sim.EventOffEnd = 1;
+        sim.EventAngleDeg = 6.0;
+        sim.EventGapM = 5.0;
+        sim.Plan.Name = Title(variant);
+        switch (variant)
+        {
+            case "tugevent_stay": sim.Plan.IgnoreEvent = true; sim.Plan.PushPower = 0.5; break;
+            case "tugevent_wrong": sim.Plan.WrongEnd = true; break;
+            case "tugevent_late": sim.Plan.RelocateDelayS = 90.0; break;
+        }
+    }
+
     public static string Title(string variant)
     {
         switch (variant)
@@ -554,6 +576,10 @@ public static class DemoAssessmentRuns
             case "tugwork_fast": return "буксир: быстрый подход 0,8 уз";
             case "tugwork_angle": return "буксир: подход под углом 45°";
             case "tugwork_release": return "буксир: отпустил упор через 10 с после «держите»";
+            case "tugevent_correct": return "событие: правильно, к носу";
+            case "tugevent_stay": return "событие: не перешёл, толкает у миделя";
+            case "tugevent_wrong": return "событие: пошёл не к тому концу (к корме)";
+            case "tugevent_late": return "событие: перешёл к носу через 90 с";
             default: return variant;
         }
     }

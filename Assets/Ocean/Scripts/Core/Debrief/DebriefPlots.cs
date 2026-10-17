@@ -251,6 +251,9 @@ public static class DebriefPlots
             if (e.Type == ExerciseEventType.TugWorkStage)
                 p.AddMark((float)(e.Time / 60.0), e.Index == (int)TugWorkStage.Approach ? "касание" : e.Index == (int)TugWorkStage.Push ? "у кранцев"
                                                   : e.Index == (int)TugWorkStage.Hold ? "концы" : "отошёл", PlotMarkKind.Berthing);
+            else if (e.Type == ExerciseEventType.TugWorkEvent && e.Index <= (int)TugEventPhase.Pinned)   // 19.4г: событие
+                p.AddMark((float)(e.Time / 60.0), e.Index == (int)TugEventPhase.ToEnd ? $"{e.Subject} отходит"
+                                                  : e.Index == (int)TugEventPhase.AtEnd ? "у конца" : "стопор", PlotMarkKind.Failure);
         plots.Add(p);
     }
 

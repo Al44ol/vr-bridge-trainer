@@ -54,6 +54,13 @@ public class TugWorkDefinition
     public float clearDistanceM = 20f;
     /// <summary>Контрольное время задания, с.</summary>
     public float targetTimeS = 480f;
+    /// <summary>
+    /// 19.4г: «случайное событие» у причала — при зазоре клиента в [eventGapMinM; eventGapMaxM] м (случайно) один конец
+    /// (нос или корма — случайно) отходит на N ∈ [eventAngleMinDeg; eventAngleMaxDeg]°, ближний ложится и его крепят (стопор);
+    /// буксир переходит к отошедшему концу (зона ± contactZoneM около ± endZoneX·L от миделя) и дожимает его.
+    /// </summary>
+    public bool angleEvent;
+    public float eventGapMinM = 4f, eventGapMaxM = 7f, eventAngleMinDeg = 4f, eventAngleMaxDeg = 8f, endZoneX = 0.3f;
 
     public BerthArea BerthIn(WaterArea area) =>
         area != null && area.berths != null && berthIndex >= 0 && berthIndex < area.berths.Count ? area.berths[berthIndex] : null;
@@ -65,7 +72,10 @@ public class TugWorkDefinition
 /// Команды лоцмана: задания (Approach … LetGo, 19.4б-1) и 19.4б-3 — упор буксира (PushStep: ступень 0…4 рукоятки,
 /// StopPush), обстановка (Info: зазор и скорость к причалу), «быстро идёт, сбавь» (Slower). Новые — только в конец.
 /// </summary>
-public enum PilotOrderKind { None, Approach, Push, Hold, LetGo, PushStep, StopPush, Info, Slower }
+public enum PilotOrderKind { None, Approach, Push, Hold, LetGo, PushStep, StopPush, Info, Slower, ToEnd }
+
+/// <summary>19.4г: ход «случайного события» (событие TugWorkEvent, Index): 1 — конец отходит, буксиру «к носу/корме»; 2 — буксир упёрся в зоне конца; 3 — ближний конец у кранцев на стопоре; 4 — судно всё у кранцев (событие закончено).</summary>
+public enum TugEventPhase { None, ToEnd, AtEnd, Pinned, Done }
 
 public enum TugWorkStage { None, Approach, Push, Hold, Clear }
 
@@ -97,6 +107,22 @@ public static class TugWorkText
                                                    : towardKn < -0.02 ? $"отходит {ScenarioText.Num(-towardKn, 2)} уз" : "стоит");
 
     public const string SlowerText = "Быстро идёт, сбавь";
+
+    /// <summary>19.4г: конец судна: +1 — нос, −1 — корма.</summary>
+    public static string End(int end, bool genitive = false) => end > 0 ? (genitive ? "носу" : "нос") : (genitive ? "корме" : "корма");
+
+    /// <summary>19.4г: команда «к концу»: «Нос отходит, до 6°. Корма ложится. Буксир — к носу».</summary>
+    public static string ToEnd(int offEnd, double angleDeg) =>
+        $"{(offEnd > 0 ? "Нос" : "Корма")} отходит, до {ScenarioText.Num(angleDeg)}°. {(offEnd > 0 ? "Корма" : "Нос")} ложится. Буксир — к {End(offEnd, true)}";
+
+    /// <summary>19.4г: ближний конец у кранцев на стопоре.</summary>
+    public static string Pinned(int pinnedEnd) =>
+        pinnedEnd > 0 ? "Нос у кранцев, носовые на стопоре" : "Корма у кранцев, кормовые на стопоре";
+
+    /// <summary>19.4г: обстановка по отошедшему концу: «Нос: 12 м, угол 5°, идёт 0,10 уз».</summary>
+    public static string EndInfo(int offEnd, double gapM, double angleDeg, double towardKn) =>
+        $"{(offEnd > 0 ? "Нос" : "Корма")}: {ScenarioText.Num(gapM)} м, угол {ScenarioText.Num(angleDeg, 1)}°, " +
+        (towardKn > 0.02 ? $"идёт {ScenarioText.Num(towardKn, 2)} уз" : towardKn < -0.02 ? $"отходит {ScenarioText.Num(-towardKn, 2)} уз" : "стоит");
 
     /// <summary>Текст команды для борта (+1 — ПБ клиента, −1 — ЛБ).</summary>
     public static string Order(PilotOrderKind k, int side) =>
@@ -150,6 +176,20 @@ public sealed class ClientShip : ITrackedTarget
     /// <summary>Сколько секунд подряд выполнено условие «концы закреплены».</summary>
     public double SecuredHold { get; private set; }
 
+    // ─────────── 19.4г: случайное событие ───────────
+    /// <summary>Курс по кромке (до события), °.</summary>
+    public double BaseCourseDeg { get; private set; }
+    /// <summary>Лоцман доворачивает судно на заданный угол (событие); после — курс свободен: руль прямо, подруливающее стоп.</summary>
+    public bool Swinging { get; private set; }
+    public bool HeadingFree { get; private set; }
+    /// <summary>Скорость доворота при событии, °/с (ближний конец идёт к кранцам не быстрее ≈ 0,1–0,2 уз).</summary>
+    public double SwingRateDegS = 0.05;
+    /// <summary>Ближний конец, который крепят (стопор): +1 — нос, −1 — корма, 0 — нет; PinFast — у кранцев, концы на тормозе.</summary>
+    public int PinEnd { get; private set; }
+    public bool PinFast { get; private set; }
+    private double swingTarget, swingSign = 1.0, pinCheck;
+    private bool pinGiven, pinHaul;
+
     private static readonly int[] Lines = { (int)MooringLineKind.HeadLine, (int)MooringLineKind.ForwardBreast, (int)MooringLineKind.AftBreast, (int)MooringLineKind.SternLine };
     private static readonly int[] BowLines = { (int)MooringLineKind.HeadLine, (int)MooringLineKind.ForwardBreast };
     private static readonly int[] SternLines = { (int)MooringLineKind.AftBreast, (int)MooringLineKind.SternLine };
@@ -179,6 +219,11 @@ public sealed class ClientShip : ITrackedTarget
         SecuredHold = 0.0;
         haulEnd[0] = haulEnd[1] = false;
         lastLineTry = -1e9;
+        BaseCourseDeg = hdg;
+        Swinging = HeadingFree = PinFast = pinGiven = pinHaul = false;
+        PinEnd = 0;
+        pinCheck = 0.0;
+        swingSign = 1.0;
     }
 
     /// <summary>Борт к причалу: +1 — ПБ, −1 — ЛБ.</summary>
@@ -201,22 +246,115 @@ public sealed class ClientShip : ITrackedTarget
 
     public double SpeedOverGroundKn => Math.Sqrt(Model.VelocityEast * Model.VelocityEast + Model.VelocityNorth * Model.VelocityNorth) / ShipParameters.KnotsToMs;
 
+    /// <summary>19.4г: зазор конца до кранцев (+1 — нос, −1 — корма), м; скорость конца к причалу, уз.</summary>
+    public double EndGapM(int end)
+    {
+        BerthReadout r = Readout;
+        return r.Valid ? (end > 0 ? r.BowGapM : r.SternGapM) - Berth.fenderOuterDiameterM : double.NaN;
+    }
+
+    public double EndSpeedKn(int end)
+    {
+        BerthReadout r = Readout;
+        return r.Valid ? (end > 0 ? r.BowSpeedKn : r.SternSpeedKn) : 0.0;
+    }
+
+    /// <summary>19.4г: угол отхода от курса по кромке, ° (> 0 — в сторону доворота события).</summary>
+    public double OffAngleDeg => swingSign * Math.IEEERemainder(Model.Psi * 180.0 / Math.PI - BaseCourseDeg, 360.0);
+
+    /// <summary>
+    /// 19.4г: событие — лоцман доворачивает судно на deltaDeg (SwingRateDegS) и отпускает курс; ближний конец pinEnd
+    /// крепят сразу: концы этого конца подают и выбирают «понемногу», у кранцев — на тормоз (стопор).
+    /// </summary>
+    public void StartSwing(double deltaDeg, int pinEnd)
+    {
+        swingTarget = CourseDeg + deltaDeg;
+        swingSign = deltaDeg >= 0.0 ? 1.0 : -1.0;
+        Swinging = true;
+        HeadingFree = false;
+        PinEnd = pinEnd;
+        pinGiven = pinHaul = PinFast = false;
+        pinCheck = 0.0;
+    }
+
+    /// <summary>19.4г: курс свободен — руль прямо, подруливающее стоп (конец доворота или буксир упёрся у отошедшего конца).</summary>
+    public void FreeHeading()
+    {
+        if (!Swinging && !HeadingFree) return;
+        Swinging = false;
+        HeadingFree = true;
+    }
+
     /// <summary>Лоцман на шаг (до Mooring.Apply и Model.Step): подруливающее, руль, машина, концы.</summary>
     public void Pilot(TugWorkDefinition d, double dt, double time)
     {
-        // Курс — подруливающим и рулём
+        // Курс — подруливающим и рулём (19.4г: при событии — доворот на заданный угол, затем курс свободен)
         double e = Math.IEEERemainder(Model.Psi * 180.0 / Math.PI - CourseDeg, 360.0);
         double r = Model.R * 180.0 / Math.PI;
-        Mooring.Thruster.Command = Clamp(-(e / EpsiFullDeg + r / RFullDegS), 1.0);
-        Model.RudderCommandDeg = autopilot.Rudder(Model, CourseDeg);
+        if (Swinging)
+        {
+            double step = SwingRateDegS * dt, dc = swingTarget - CourseDeg;
+            CourseDeg += Clamp(dc, step);
+            if (Math.Abs(swingTarget - CourseDeg) < 1e-9) FreeHeading();   // разворот задан — курс свободен
+        }
+        if (HeadingFree)
+        {
+            Mooring.Thruster.Command = 0.0;
+            Model.RudderCommandDeg = 0.0;
+        }
+        else
+        {
+            Mooring.Thruster.Command = Clamp(-(e / EpsiFullDeg + r / RFullDegS), 1.0);
+            Model.RudderCommandDeg = autopilot.Rudder(Model, CourseDeg);
+        }
         // Место вдоль причала — машиной
         Berth.ToLocal(new WorldPosition(Model.East, Model.North), out double along, out _);
         double sign = Math.Cos(Model.Psi - Berth.BearingDeg * Math.PI / 180.0) >= 0.0 ? 1.0 : -1.0;   // нос к концу B — «вперёд» = +t
         Model.SpeedFactor = Clamp(-sign * KAlong * (along - HoldAlongM) - KSpeed * Model.U, SfMax);
 
+        // 19.4г: стопор — концы ближнего конца подают сразу, выбирают «понемногу», у кранцев — на тормоз
+        if (PinEnd != 0 && !LinesGiven)
+        {
+            int[] pl = PinEnd > 0 ? BowLines : SternLines;
+            if (!pinGiven && time - lastLineTry >= 1.0)
+            {
+                lastLineTry = time;
+                bool all = true;
+                foreach (int i in pl)
+                    if (Mooring.Lines[i].State != MooringLineState.Fast) all &= Mooring.Order(i, LineOrder.Give, Model, time, out _);
+                pinGiven = all;
+            }
+            if (pinGiven && !PinFast)
+            {
+                pinCheck += dt;
+                if (pinCheck >= 0.2 - 1e-9)
+                {
+                    pinCheck = 0.0;
+                    double eg = EndGapM(PinEnd);
+                    if (!double.IsNaN(eg) && eg <= d.atFendersGapM)
+                    {
+                        PinFast = true;
+                        foreach (int i in pl) Mooring.Order(i, LineOrder.Hold, Model, time, out _);
+                    }
+                    else
+                    {
+                        double v = EndSpeedKn(PinEnd);
+                        bool want = pinHaul ? v < HoldAboveKn : v < ResumeBelowKn;
+                        if (want != pinHaul)
+                        {
+                            foreach (int i in pl) Mooring.Order(i, want ? LineOrder.HaulIn : LineOrder.Hold, Model, time, out _);
+                            pinHaul = want;
+                        }
+                    }
+                }
+            }
+        }
+
         // Концы
         double gap = GapM;
-        if (!LinesGiven && !double.IsNaN(gap) && gap <= d.linesGapM && time - lastLineTry >= 1.0)
+        // 19.4г: ближний конец на стопоре, отошедший дожат к кранцам — подают все концы (корму, вытянувшую концы на тормозе, выбирают)
+        bool endIn = PinEnd != 0 && PinFast && EndGapM(-PinEnd) <= d.linesGapM;
+        if (!LinesGiven && !double.IsNaN(gap) && (gap <= d.linesGapM || endIn) && time - lastLineTry >= 1.0)
         {
             lastLineTry = time;
             bool all = true;
@@ -344,6 +482,105 @@ public sealed class TugWorkSystem
     private double lastInfo = -1e9, lastSlower = -1e9;
     private int infoMark;
 
+    // ─────────── 19.4г: «случайное событие» у причала ───────────
+    /// <summary>Событие взведено (ArmEvent после Place): отходит конец EventOffEnd (+1 — нос, −1 — корма) на EventAngleDeg при зазоре EventGapM.</summary>
+    public bool EventArmed { get; private set; }
+    public int EventOffEnd { get; private set; }
+    public double EventAngleDeg { get; private set; }
+    public double EventGapM { get; private set; }
+    /// <summary>Событие произошло (EventTime); буксир упёрся в зоне отошедшего конца; ближний конец на стопоре; судно всё у кранцев.</summary>
+    public bool EventFired { get; private set; }
+    public double EventTime { get; private set; } = double.NaN;
+    public bool TugAtEnd { get; private set; }
+    public bool EventPinned { get; private set; }
+    public bool EventDone { get; private set; }
+    /// <summary>Середина зоны отошедшего конца, м от миделя клиента (> 0 — к носу).</summary>
+    public double EndTargetX => EventOffEnd * Task.endZoneX * Client.Parameters.length;
+    /// <summary>Идёт событие: буксир должен быть у отошедшего конца (до «всё у кранцев»).</summary>
+    public bool EventActive => EventFired && !EventDone;
+
+    /// <summary>Взвести событие (после Place): конец, угол, зазор срабатывания.</summary>
+    public void ArmEvent(int offEnd, double angleDeg, double gapM)
+    {
+        EventArmed = true;
+        EventOffEnd = offEnd >= 0 ? 1 : -1;
+        EventAngleDeg = angleDeg;
+        EventGapM = gapM;
+    }
+
+    /// <summary>Взвести событие со случайными концом, углом (шаг 0,5°) и зазором (шаг 0,1 м) в пределах задания.</summary>
+    public void ArmEventRandom(Random rnd)
+    {
+        int end = rnd.Next(2) == 0 ? 1 : -1;
+        double a = Math.Round(2.0 * (Task.eventAngleMinDeg + (Task.eventAngleMaxDeg - Task.eventAngleMinDeg) * rnd.NextDouble())) / 2.0;
+        double g = Math.Round(10.0 * (Task.eventGapMinM + (Task.eventGapMaxM - Task.eventGapMinM) * rnd.NextDouble())) / 10.0;
+        ArmEvent(end, a, g);
+    }
+
+    // Срабатывание: лоцман «стоп толкать», доворот клиента (отходящий конец — от причала), ближний конец — на стопор
+    private void FireEvent(double time)
+    {
+        EventFired = true;
+        EventTime = time;
+        int s = Client.SideToBerth;
+        Client.StartSwing(-s * EventOffEnd * EventAngleDeg, -EventOffEnd);
+        PowerStep = 0;
+        PowerStepTime = time;
+        Say(PilotOrderKind.StopPush, time, "Стоп толкать!", 0.0);
+        Say(PilotOrderKind.ToEnd, time, TugWorkText.ToEnd(EventOffEnd, EventAngleDeg), EventAngleDeg);
+        EventMark(TugEventPhase.ToEnd, time, EventAngleDeg, EventGapM);
+    }
+
+    private void EventMark(TugEventPhase p, double time, double value, double value2) =>
+        Events.Add(new ExerciseEvent(ExerciseEventType.TugWorkEvent)
+        {
+            Time = time, Index = (int)p, Value = Math.Round(value, 2), Value2 = Math.Round(value2, 2), Subject = TugWorkText.End(EventOffEnd)
+        });
+
+    // Ход события на шаге (после контакта буксир — клиент и шага клиента)
+    private void EventStep(double time)
+    {
+        if (!EventArmed) return;
+        if (!EventFired)
+        {
+            double g = Client.GapM;
+            if (done[(int)TugWorkStage.Approach] && !done[(int)TugWorkStage.Push] && !double.IsNaN(g) && g <= EventGapM) FireEvent(time);
+            return;
+        }
+        if (EventDone) return;
+        if (!TugAtEnd && Contact.FenderForce > 0.0 && Contact.TouchSide == WorkSide && Math.Abs(Contact.TouchX - EndTargetX) <= Task.contactZoneM)
+        {
+            TugAtEnd = true;
+            Client.FreeHeading();   // лоцман стопорит подруливающее — дальше конец ведёт буксир
+            PowerStep = -1;   // команда упором — сразу (как первая после «толкайте»)
+            lastInfo = -1e9;
+            EventMark(TugEventPhase.AtEnd, time, time - EventTime, Contact.TouchX);
+        }
+        if (!EventPinned && Client.PinFast)
+        {
+            EventPinned = true;
+            Say(PilotOrderKind.Info, time, TugWorkText.Pinned(-EventOffEnd), 0.0);
+            EventMark(TugEventPhase.Pinned, time, Client.OffAngleDeg, Client.EndGapM(-EventOffEnd));
+        }
+        if (done[(int)TugWorkStage.Push])
+        {
+            EventDone = true;
+            EventMark(TugEventPhase.Done, time, Client.OffAngleDeg, Client.GapM);
+        }
+    }
+
+    /// <summary>
+    /// 19.4г: нужный упор у отошедшего конца — ближний конец закреплён (или вот-вот), судно поворачивается вокруг него:
+    /// ветер берёт буксир с плечом |x_ст| / |x_б − x_ст| (x_ст — ближний конец, x_б — буксир, от миделя; ветер — у миделя).
+    /// </summary>
+    public double EndPowerFor(double gapM, double towardKn)
+    {
+        double xp = EventOffEnd > 0 ? BerthReadout.SternX : BerthReadout.BowX, xb = EventOffEnd * Task.endZoneX;
+        double lever = Math.Abs(xp) / Math.Max(0.05, Math.Abs(xb - xp));
+        double p = lever * WindOffBerth() / Math.Max(1.0, OwnSpec.BollardPull) + PowerKv * (TargetSpeedKn(gapM) - towardKn);
+        return Math.Max(0.0, Math.Min(1.0, p));
+    }
+
     /// <summary>Сила ветра на клиента от причала (по нормали к кромке), Н (> 0 — сносит от причала).</summary>
     public double WindOffBerth()
     {
@@ -366,11 +603,13 @@ public sealed class TugWorkSystem
     {
         if (!done[(int)TugWorkStage.Approach] || done[(int)TugWorkStage.Hold]) return;
         bool hold = done[(int)TugWorkStage.Push];
-        double gap = Client.GapM;
+        if (EventActive && !TugAtEnd) return;   // 19.4г: буксир переходит к отошедшему концу — команд упором нет
+        bool atEnd = EventActive && !hold;      // 19.4г: у отошедшего конца — по его зазору и скорости
+        double gap = atEnd ? Client.EndGapM(EventOffEnd) : Client.GapM;
         if (double.IsNaN(gap)) return;
         BerthReadout r = Client.Readout;
-        double v = r.Valid ? 0.5 * (r.BowSpeedKn + r.SternSpeedKn) : 0.0;
-        PowerNeeded = PowerFor(gap, v, hold);
+        double v = atEnd ? Client.EndSpeedKn(EventOffEnd) : r.Valid ? 0.5 * (r.BowSpeedKn + r.SternSpeedKn) : 0.0;
+        PowerNeeded = atEnd ? EndPowerFor(gap, v) : PowerFor(gap, v, hold);
         int want = (int)Math.Round(PowerNeeded * TugJoystick.StepCount);
         bool first = PowerStep < 0;
         if (first || want != PowerStep && time - PowerStepTime >= PowerIntervalS - 1e-9 &&
@@ -390,7 +629,7 @@ public sealed class TugWorkSystem
             if (due)
             {
                 lastInfo = time;
-                LastInfo = TugWorkText.Info(gap, v);
+                LastInfo = atEnd ? TugWorkText.EndInfo(EventOffEnd, gap, Math.Abs(Client.OffAngleDeg), v) : TugWorkText.Info(gap, v);
                 LastInfoTime = time;
                 Say(PilotOrderKind.Info, time, LastInfo, Math.Round(gap, 1));
             }
@@ -437,6 +676,8 @@ public sealed class TugWorkSystem
         LastInfoTime = double.NaN;
         lastInfo = lastSlower = -1e9;
         infoMark = 0;
+        EventArmed = EventFired = TugAtEnd = EventPinned = EventDone = false;   // 19.4г: событие взводят после Place
+        EventTime = double.NaN;
     }
 
     /// <summary>
@@ -586,6 +827,7 @@ public sealed class TugWorkSystem
             double d = BowDistance(own);
             if (d >= Task.clearDistanceM) Mark(TugWorkStage.Clear, time, d);
         }
+        EventStep(time);    // 19.4г
         PilotPower(time);   // 19.4б-3
     }
 

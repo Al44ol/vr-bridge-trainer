@@ -371,6 +371,17 @@ public static class SessionReport
             h.Append($"<p>Держать (от «держите» до «концы закреплены»{(double.IsNaN(tHold) ? " — концы не закреплены" : "")}): {ScenarioText.Num(to - tPush)} с, " +
                      $"с упором в борт — {ScenarioText.Num(held)} с ({ScenarioText.Num(to > tPush ? 100.0 * held / (to - tPush) : 0.0)} %).</p>\n");
         }
+        // 19.4г: «случайное событие» — что случилось и как буксир отработал (G12, G13 — в таблице критериев)
+        var ev = s.Events.FindAll(e => e.Type == ExerciseEventType.TugWorkEvent);
+        if (ev.Count > 0)
+        {
+            h.Append("<h3>Случайное событие</h3>\n<table>\n<thead><tr><th>Время</th><th>Событие</th></tr></thead><tbody>\n");
+            foreach (ExerciseEvent e in ev)
+                h.Append($"<tr><td class=\"num\">{ScenarioText.Clock(e.Time)}</td><td>{H(e.Describe())}</td></tr>\n");
+            h.Append("</tbody></table>\n");
+        }
+        else if (task.angleEvent) h.Append("<p>Случайное событие было взведено, но не произошло (судно не подошло к причалу).</p>\n");
+
         var joystick = s.Events.FindAll(e => e.Type == ExerciseEventType.JoystickChanged);
         List<PilotPowerReaction> reactions = TugWorkReaction.Compute(orders, joystick, double.IsNaN(tHold) ? end : tHold);
         if (reactions.Count > 0)

@@ -62,6 +62,8 @@
 // G6 наибольшая скорость касания кранцем (TugWorkContact), G7 угол при касании «подход», G8 доля времени «держать»
 // с упором в борт (mooring.csv, PushKn > 0), G9 касание корпусом (TugWorkHullContact), G10 навал клиента на кранцы
 // (BerthingImpact), G11 реакция на команды лоцмана упором (PilotOrder → JoystickChanged, TugWorkReaction).
+// 19.4г — «случайное событие» (TugWorkEvent): G12 переход к отошедшему концу (ToEnd → AtEnd), G13 рост угла судна
+// к кромке сверх названного N (mooring.csv, от команды до «судно у кранцев»).
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -224,7 +226,7 @@ public sealed class ExerciseAssessor
     // 19.4в: работа своего буксира — задания, касания, команды лоцмана, положения рукоятки
     private readonly Dictionary<int, double> tugWorkStages = new Dictionary<int, double>();
     private readonly List<ExerciseEvent> workContacts = new List<ExerciseEvent>(), workHullContacts = new List<ExerciseEvent>(),
-                                         pilotOrders = new List<ExerciseEvent>(), joystick = new List<ExerciseEvent>();
+                                         pilotOrders = new List<ExerciseEvent>(), joystick = new List<ExerciseEvent>(), tugEvents = new List<ExerciseEvent>();
 
     /// <summary>19.2б-3в: строки mooring.csv в порядке времени (для раздела отчёта и графика).</summary>
     public IReadOnlyList<MooringSample> Mooring => mooring;
@@ -376,6 +378,7 @@ public sealed class ExerciseAssessor
             case ExerciseEventType.TugWorkHullContact: workHullContacts.Add(e); break;
             case ExerciseEventType.PilotOrder: pilotOrders.Add(e); break;
             case ExerciseEventType.JoystickChanged: joystick.Add(e); break;
+            case ExerciseEventType.TugWorkEvent: tugEvents.Add(e); break;   // 19.4г
             case ExerciseEventType.EngineFailure:
             case ExerciseEventType.SteeringFailure:
                 failures.Add(new FailureRecord { Engine = e.Type == ExerciseEventType.EngineFailure, Start = e.Time });
@@ -1138,9 +1141,49 @@ public sealed class ExerciseAssessor
             Add(r, AssessmentCatalog.G11, "", worstReaction,
                 $"наибольшая {AssessmentResult.Num(worstReaction, 1)} с — {worstText}; выполнено {executed} из {resolved}" +
                 (executed > 0 ? $", в среднем {AssessmentResult.Num(sum / executed, 1)} с" : "") + missed);
+        EvaluateTugEvent(r, final);   // 19.4г
     }
 
     private double StageTime(TugWorkStage s) => tugWorkStages.TryGetValue((int)s, out double t) ? t : double.NaN;
+
+    // 19.4г: G12, G13 — только если было «случайное событие» (TugWorkEvent ToEnd); окно — до «судно у кранцев» (Done)
+    private void EvaluateTugEvent(AssessmentResult r, bool final)
+    {
+        double end = final && !double.IsNaN(EndTime) ? EndTime : Time;
+        ExerciseEvent start = tugEvents.Find(e => e.Index == (int)TugEventPhase.ToEnd);
+        if (start.Type != ExerciseEventType.TugWorkEvent)
+        {
+            SkipMooring(r, AssessmentCatalog.G12, final, "события не было");
+            SkipMooring(r, AssessmentCatalog.G13, final, "события не было");
+            return;
+        }
+        ExerciseEvent at = tugEvents.Find(e => e.Index == (int)TugEventPhase.AtEnd), done = tugEvents.Find(e => e.Index == (int)TugEventPhase.Done);
+        bool hasAt = at.Type == ExerciseEventType.TugWorkEvent, hasDone = done.Type == ExerciseEventType.TugWorkEvent;
+        double windowEnd = hasDone ? done.Time : end;
+        string endName = start.Subject ?? "";
+
+        // G12 — переход к отошедшему концу
+        if (hasAt && (!hasDone || at.Time <= done.Time + 1e-9))
+            Add(r, AssessmentCatalog.G12, "", at.Time - start.Time, $"к концу ({endName}) за {AssessmentResult.Num(at.Time - start.Time)} с: команда в {ScenarioText.Clock(start.Time)}, упёрся в {ScenarioText.Clock(at.Time)}");
+        else if (hasDone || final)
+        {
+            double zero = S.Get(AssessmentCatalog.G12).zero;
+            Add(r, AssessmentCatalog.G12, "", Math.Max(windowEnd - start.Time, zero),
+                $"к концу ({endName}) не перешёл за {AssessmentResult.Num(windowEnd - start.Time)} с ({(hasDone ? "судно у кранцев" : "до конца упражнения")})");
+        }
+
+        // G13 — рост угла сверх названного N
+        if (!hasDone && !final) return;
+        double maxAngle = 0.0, maxAt = start.Time;
+        foreach (MooringSample m in mooring)
+        {
+            if (m.Time < start.Time - 1e-9 || m.Time > windowEnd + 1e-9 || !m.HasBerth || double.IsNaN(m.AngleDeg)) continue;
+            if (Math.Abs(m.AngleDeg) > maxAngle) { maxAngle = Math.Abs(m.AngleDeg); maxAt = m.Time; }
+        }
+        double growth = Math.Max(0.0, maxAngle - start.Value);
+        Add(r, AssessmentCatalog.G13, "", growth,
+            $"наибольший угол {AssessmentResult.Num(maxAngle, 1)}° в {ScenarioText.Clock(maxAt)} при названном {AssessmentResult.Num(start.Value, 1)}°");
+    }
 
     // «Не оценивался» — только в итоге (во время упражнения строки нет, пока событие не случилось)
     private void SkipMooring(AssessmentResult r, string code, bool final, string why)

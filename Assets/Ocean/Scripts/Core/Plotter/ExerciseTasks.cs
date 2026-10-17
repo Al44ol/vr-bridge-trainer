@@ -154,6 +154,13 @@ public static class ExerciseTasks
             b.Append($"\n  {i}. {TugWorkText.Stage(st)} — ");
             b.Append(w.Done(st) ? $"<color=#6FD08C>выполнено {ScenarioText.Clock(w.DoneAt(st))}</color>" : "нет");
         }
+        // 19.4г: «случайное событие» — только после того, как случилось (заранее не подсказываем)
+        if (w.EventFired)
+        {
+            string end = TugWorkText.End(w.EventOffEnd);
+            b.Append($"\nСобытие ({ScenarioText.Clock(w.EventTime)}): {end} отходит до {ScenarioText.Num(w.EventAngleDeg, 1)}°, угол сейчас {ScenarioText.Num(Math.Abs(w.Client.OffAngleDeg), 1)}°");
+            b.Append($"\n  буксир у конца — {(w.TugAtEnd ? "да" : "нет")}; ближний конец на стопоре — {(w.EventPinned ? "да" : "нет")}{(w.EventDone ? "; судно у кранцев" : "")}");
+        }
     }
 
     /// <summary>Отметки заданий: «1. Подойти лагом — выполнено 03:12».</summary>

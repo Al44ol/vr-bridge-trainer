@@ -32,6 +32,9 @@ public sealed class HullToHull
     public double ContactAngleDeg { get; private set; }
     /// <summary>Место касания от миделя судна, м (> 0 — к носу).</summary>
     public double ContactX { get; private set; }
+    /// <summary>19.4г: место и борт упора кранцем на последнем шаге (пока FenderForce > 0), м от миделя (> 0 — к носу).</summary>
+    public double TouchX { get; private set; }
+    public int TouchSide { get; private set; }
     /// <summary>Борт касания: +1 — ПБ, −1 — ЛБ.</summary>
     public int ContactSide { get; private set; }
 
@@ -71,6 +74,8 @@ public sealed class HullToHull
         prevPen = pen;
         double force = Math.Max(0.0, spec.FenderStiffness * pen + spec.FenderDamping * Math.Max(0.0, rate));
         FenderForce = force;
+        TouchX = x;   // 19.4г: где упирается кранец сейчас (зона конца)
+        TouchSide = y >= 0.0 ? 1 : -1;
         int side = y >= 0.0 ? 1 : -1;
         // Нормаль борта наружу в мировых осях: ŝ = (cos ψ, −sin ψ) — на ПБ
         double nE = side * c, nN = -side * s;

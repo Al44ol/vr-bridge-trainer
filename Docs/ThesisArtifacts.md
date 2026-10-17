@@ -203,6 +203,13 @@ Unity Test Runner → EditMode (сейчас **250**): `TestResults.xml` — п�
   - **ассеты** — G5–G11 дописываются сами в `Assessment_TugWork`, `Assessment_Default`, `Assessment_Berthing` при входе в Play Mode (лог `[Setup 19.4б] … добавлено критериев 7 (19.4в — работа буксира G5–G11)` и `[Setup 19.2б-3] Новые критерии каталога …`); в прочих сценариях G5–G11 не оцениваются (нет упражнения на буксире);
   - таблицы ThesisNotes 19.31 (критерии и пороги), 19.32 (прогоны); тесты `TugWorkAssessmentTests` (10).
 
+### 2.6ч. «Случайное событие» в 19-03 (запрос 19.4г)
+- 👓 В шлеме видно: у причала команды лоцмана «Стоп толкать!», «Нос отходит, до N°. Корма ложится. Буксир — к носу», «Корма у кранцев, кормовые на стопоре», доклады «Нос: … м, угол …°»; концы лёгшего конца; вкладка «Задание» — строка события. Закадровое:
+  - **events.csv** — `TugWorkEvent` (новый тип в конце перечня; Index — фаза 1–4, Value — угол или время, Value2 — зазор или место, Subject — «нос» / «корма»), `PilotOrder` вида `ToEnd` (9);
+  - **консоль** — `[Работа буксира] Событие взведено: нос отойдёт до N° при зазоре g м` (при «Начать»; обучающемуся не видно);
+  - **session.json** → `scenario.tug_work.angle_event`, `event_gap_min_m` … `end_zone_x`;
+  - **прогоны** — `Tools/VR Bridge/Assessment Report` → `ThesisData/Assessment/<дата>/tugevent_runs.csv` (G5–G13), `tugevent/<вариант>/` (запись, report.html с таблицей «Случайное событие»), раздел summary.md (ThesisNotes, табл. 19.34);
+  - **ассет** `Scenario_19-03_TugWork.asset` — версия 4, обновляется сам при входе в Play Mode; G12, G13 дописываются в наборы сами (AddMissing).
 ### 2.7. Источники значений параметров
 `Assets/Ocean/Settings/ShipParameters_Sources.md` — откуда взято каждое значение ShipParameters (Mariner, KCS, Model45m, допущения).
 

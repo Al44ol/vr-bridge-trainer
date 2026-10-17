@@ -399,6 +399,9 @@ public class SessionTugWork
     /// <summary>Судно-клиент (цель «CLIENT» в targets.csv): параметры, длина, ширина, м.</summary>
     public string client_id = ClientShip.Id, client_parameters = "";
     public double client_length_m, client_beam_m;
+    /// <summary>19.4г: «случайное событие» у причала и его пределы (что именно случилось — событие TugWorkEvent в events.csv).</summary>
+    public bool angle_event;
+    public double event_gap_min_m, event_gap_max_m, event_angle_min_deg, event_angle_max_deg, end_zone_x;
 
     public static SessionTugWork From(ScenarioDefinition s)
     {
@@ -414,6 +417,10 @@ public class SessionTugWork
         r.at_fenders_gap_m = SessionMeta.R(t.atFendersGapM); r.lines_gap_m = SessionMeta.R(t.linesGapM);
         r.secured_speed_kn = SessionMeta.R(t.securedSpeedKnots); r.secured_hold_s = SessionMeta.R(t.securedHoldS);
         r.clear_distance_m = SessionMeta.R(t.clearDistanceM); r.target_time_s = SessionMeta.R(t.targetTimeS);
+        r.angle_event = t.angleEvent;
+        r.event_gap_min_m = SessionMeta.R(t.eventGapMinM); r.event_gap_max_m = SessionMeta.R(t.eventGapMaxM);
+        r.event_angle_min_deg = SessionMeta.R(t.eventAngleMinDeg); r.event_angle_max_deg = SessionMeta.R(t.eventAngleMaxDeg);
+        r.end_zone_x = SessionMeta.R(t.endZoneX);
         if (s.tugWorkClient != null)
         {
             r.client_parameters = s.tugWorkClient.name;
@@ -430,7 +437,10 @@ public class SessionTugWork
         clientGapM = (float)client_gap_m, clientAlongM = (float)client_along_m, tugDistanceM = (float)tug_distance_m,
         contactZoneM = (float)contact_zone_m, atFendersGapM = (float)at_fenders_gap_m, linesGapM = (float)lines_gap_m,
         securedSpeedKnots = (float)secured_speed_kn, securedHoldS = (float)secured_hold_s,
-        clearDistanceM = (float)clear_distance_m, targetTimeS = (float)target_time_s
+        clearDistanceM = (float)clear_distance_m, targetTimeS = (float)target_time_s,
+        angleEvent = angle_event, endZoneX = end_zone_x > 0 ? (float)end_zone_x : 0.3f,
+        eventGapMinM = (float)event_gap_min_m, eventGapMaxM = (float)event_gap_max_m,
+        eventAngleMinDeg = (float)event_angle_min_deg, eventAngleMaxDeg = (float)event_angle_max_deg
     };
 }
 

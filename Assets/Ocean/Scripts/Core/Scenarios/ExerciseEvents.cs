@@ -104,6 +104,9 @@
 //   TugWorkHullContact   касание корпусом (не кранцем): Value — скорость сближения, уз
 //   HeadingHoldChanged   19.4а-2, свой буксир: автомат курса — Value 1 вкл / 0 выкл; Subject — «меню»
 //   JoystickHoldChanged  19.4а-3: рукоятка (тумблер «УДЕРЖ. КУРС») — Value 1 держит положение / 0 в ноль при отпускании; Subject — «тумблер» / «меню»
+//   TugWorkEvent         19.4г, «случайное событие» в 19-03: Index — TugEventPhase (1 конец отходит — Value N, °, Value2 зазор
+//                        срабатывания, м; 2 буксир у конца — Value через сколько, с, Value2 место, м; 3 ближний конец на стопоре —
+//                        Value угол, °; 4 судно всё у кранцев — Value угол, °); Subject — отошедший конец («нос» / «корма»)
 // XTE > 0 — судно правее линии пути.
 // ============================================================
 using System;
@@ -183,7 +186,8 @@ public enum ExerciseEventType
     TugWorkContact,
     TugWorkHullContact,
     HeadingHoldChanged,
-    JoystickHoldChanged
+    JoystickHoldChanged,
+    TugWorkEvent
 }
 
 public enum ScenarioEndReason
@@ -320,6 +324,14 @@ public struct ExerciseEvent
             case ExerciseEventType.TugWorkContact:
                 return $"Буксир упёрся в {Subject}: {ScenarioText.Num(Value, 2)} уз, {ScenarioText.Num(Value2)}° от перпендикуляра, {Index:+0;−0;0} м от миделя";
             case ExerciseEventType.TugWorkHullContact: return $"Касание корпусом буксира о судно: {ScenarioText.Num(Value, 2)} уз";
+            case ExerciseEventType.TugWorkEvent:
+                switch ((TugEventPhase)Index)
+                {
+                    case TugEventPhase.ToEnd: return $"Событие: {Subject} отходит до {ScenarioText.Num(Value, 1)}° (зазор {ScenarioText.Num(Value2, 1)} м) — буксиру к нему";
+                    case TugEventPhase.AtEnd: return $"Буксир упёрся у конца ({Subject}) через {ScenarioText.Num(Value)} с";
+                    case TugEventPhase.Pinned: return $"Ближний конец у кранцев, на стопоре; угол {ScenarioText.Num(Value, 1)}°";
+                    default: return $"Судно у кранцев, событие закончено; угол {ScenarioText.Num(Value, 1)}°";
+                }
             case ExerciseEventType.HeadingHoldChanged:
                 return $"Автомат курса {(Value > 0 ? "включён" : "выключен")}" + (string.IsNullOrEmpty(Subject) ? "" : $" ({Subject})");
             case ExerciseEventType.JoystickHoldChanged:

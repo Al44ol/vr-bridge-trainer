@@ -11,6 +11,8 @@
 // Буксир — в 150 м от правого борта клиента напротив миделя, носом к нему, без хода. Касание — в ± 15 м от миделя.
 // Линия «старт → точка касания» — только для карты (маршрутные критерии выключены).
 // Лимит 20 мин, контрольное время 12 мин. Значения — предварительные.
+// 19.4г: «случайное событие» у причала (angleEvent): при зазоре 4–7 м нос или корма отходит на 4–8° (случайно), ближний конец
+// ложится и его крепят (стопор), буксир переходит к отошедшему концу и дожимает его (TugWork.cs, критерии G12, G13).
 // Version — номер версии: ассет с меньшей версией заполняется заново при входе в Play Mode (SetupTugWork).
 // ============================================================
 using System.Collections.Generic;
@@ -20,8 +22,9 @@ public static class DemoTugWorkScenario
     public const string Id = "19-03";
     public const string Title = "Буксир прижимает судно к причалу";
     /// <summary>Версия сценария: 1 — 19.4б-2 (Model45m, причал №1, 20 уз); 2 — 19.4б-3 (Mariner, причал №2, 15 уз, команды упором);
-    /// 3 — 19.4б-3 по проверке: упор буксира — по наружной кромке носового кранца (TugSpec.ForOwnTug), старт буксира на 0,77 м дальше.</summary>
-    public const int Version = 3;
+    /// 3 — 19.4б-3 по проверке: упор буксира — по наружной кромке носового кранца (TugSpec.ForOwnTug), старт буксира на 0,77 м дальше;
+    /// 4 — 19.4г: «случайное событие» у причала (TugWorkDefinition.angleEvent), брифинг.</summary>
+    public const int Version = 4;
     public const float TimeLimitSeconds = 1200f;   // 20 мин
     public const float TargetTimeSeconds = 720f;   // контрольное время, 12 мин
     public const float WindKnots = 15f;
@@ -38,6 +41,8 @@ public static class DemoTugWorkScenario
         "(ступени рукоятки 25 / 50 / 75 / 100 %), «стоп толкать»;\n" +
         "  3. держать упор, пока судно заводит концы;\n" +
         "  4. по команде «отходите» отойти от борта, не задев его корпусом.\n\n" +
+        "У причала может случиться событие: лоцман скомандует «стоп», нос или корма судна отходит, а другой конец ложится на кранцы " +
+        "и его крепят. Перейдите вдоль борта к отошедшему концу, упритесь там и дожимайте его по командам лоцмана, не давая углу расти.\n\n" +
         "Управление — джойстик на пульте: наклон вперёд-назад — ход, вбок — лагом, поворот рукоятки — разворот; " +
         "ступени упора — со щелчком. Монитор пульта — ход, лагом, команда лоцмана; колонки — на левом экране.\n\n" +
         "Лимит времени — 20 минут.";
@@ -51,7 +56,7 @@ public static class DemoTugWorkScenario
     {
         const int berthIndex = BerthIndex;
         BerthArea b = area != null && area.berths != null && area.berths.Count > berthIndex ? area.berths[berthIndex] : DemoWaterArea.Berth2();
-        var task = new TugWorkDefinition { enabled = true, berthIndex = berthIndex, targetTimeS = TargetTimeSeconds, contactZoneM = ContactZoneM };
+        var task = new TugWorkDefinition { enabled = true, berthIndex = berthIndex, targetTimeS = TargetTimeSeconds, contactZoneM = ContactZoneM, angleEvent = true };
 
         // Начальные условия — как TugWorkSystem.Place
         var sys = new TugWorkSystem(task, client, b, TugSpec.ForOwnTug(tug));

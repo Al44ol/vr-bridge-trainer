@@ -16,6 +16,8 @@
 //     навалы и концы клиента) и консоль. Финиш (TugWorkDone) отмечает ScenarioRunner по Finished.
 //   • Запись: mooring.csv в 19-03 — по клиенту + столбцы своего буксира (TugWorkSystem.Sample, ExerciseRecorder).
 //   • Сценарий без задания буксира или свободное плавание — клиент и вид убираются.
+//   • 19.4г: «случайное событие» (Task.angleEvent) — при «Начать» TugWorkSystem.ArmEventRandom (конец, угол, зазор — случайно;
+//     в консоли), дальше — Core (лоцман, стопор, команды); в шлеме — надписи лоцмана (PilotOrderNotice).
 // ============================================================
 using UnityEngine;
 
@@ -100,6 +102,13 @@ public class TugWorkController : MonoBehaviour
         else if (e.Type == ExerciseEventType.ExerciseStarted && Work != null)
         {
             Work.Place(navigation != null ? navigation.Model : null, moveOwn: false);
+            // 19.4г: «случайное событие» у причала — конец, угол и зазор случайно (что случилось — событие TugWorkEvent)
+            if (Work.Task.angleEvent)
+            {
+                Work.ArmEventRandom(new System.Random());
+                Debug.Log($"[Работа буксира] Событие взведено: {TugWorkText.End(Work.EventOffEnd)} отойдёт до {ScenarioText.Num(Work.EventAngleDeg, 1)}° " +
+                          $"при зазоре {ScenarioText.Num(Work.EventGapM, 1)} м (видно только в консоли).", this);
+            }
             RememberClient();
             warned = false;
             Debug.Log($"[Работа буксира] Начало: судно-клиент лагом в {ScenarioText.Num(Work.Task.clientGapM)} м от причала, " +

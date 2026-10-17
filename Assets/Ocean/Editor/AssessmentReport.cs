@@ -249,7 +249,15 @@ public static class AssessmentReport
 
     // 19.4в: прогоны 19-03 (TugWorkSimulation, свой буксир, клиент Mariner у причала №2, ветер 15 уз — середина сектора) —
     // tugwork/<вариант>/ (сессия + report.html: «Работа буксира», реакция на команды, график упора); tugwork_runs.csv — G5–G11.
+    // 19.4г: те же прогоны со «случайным событием» (нос отходит до 6° на 5 м) — tugevent/<вариант>/, tugevent_runs.csv — G5–G13.
     private static void TugWorkRuns(string dir, StringBuilder md, WaterArea area, ShipParameters mariner)
+    {
+        RunTugWorkSet(dir, md, area, mariner, "tugwork", "без события", DemoAssessmentRuns.TugWorkVariants, (sim, v) => DemoAssessmentRuns.ConfigureTugWork(sim.Plan, v));
+        RunTugWorkSet(dir, md, area, mariner, "tugevent", "со случайным событием: нос отходит до 6° при зазоре 5 м", DemoAssessmentRuns.TugEventVariants, DemoAssessmentRuns.ConfigureTugEvent);
+    }
+
+    private static void RunTugWorkSet(string dir, StringBuilder md, WaterArea area, ShipParameters mariner, string name, string what,
+                                      string[] variants, System.Action<TugWorkSimulation, string> configure)
     {
         ShipParameters tug = AssetDatabase.LoadAssetAtPath<ShipParameters>(SetupTowing.TugPath);
         if (tug == null) { tug = ScriptableObject.CreateInstance<ShipParameters>(); tug.name = "ShipParameters_Tug"; ShipPresets.FillTug(tug); }
@@ -258,7 +266,9 @@ public static class AssessmentReport
         WaterArea a = area.berths != null && area.berths.Count > DemoWaterArea.Berth2Index ? area : probe;   // причал №2 дописывается при входе в Play Mode
         AssessmentCriteria crit = AssetDatabase.LoadAssetAtPath<AssessmentCriteria>(SetupTugWork.CriteriaPath);
         if (crit == null) { crit = ScriptableObject.CreateInstance<AssessmentCriteria>(); crit.settings = DemoTugWorkScenario.Assessment(); }
-        string[] codes = { AssessmentCatalog.G5, AssessmentCatalog.G6, AssessmentCatalog.G7, AssessmentCatalog.G8, AssessmentCatalog.G9, AssessmentCatalog.G10, AssessmentCatalog.G11 };
+        var codeList = new List<string> { AssessmentCatalog.G5, AssessmentCatalog.G6, AssessmentCatalog.G7, AssessmentCatalog.G8, AssessmentCatalog.G9, AssessmentCatalog.G10, AssessmentCatalog.G11 };
+        if (name == "tugevent") codeList.AddRange(new[] { AssessmentCatalog.G12, AssessmentCatalog.G13 });
+        string[] codes = codeList.ToArray();
         var csv = new StringBuilder("variant;title;end_reason;duration_s;stages_done;max_client_gap_m;score;passed;mandatory_failed;live_equals_offline");
         foreach (string c in codes) csv.Append(';').Append(c.ToLowerInvariant());
         csv.Append('\n');
@@ -266,8 +276,8 @@ public static class AssessmentReport
         md.AppendLine("| Вариант | Завершение | Время | Заданий | Балл | Итог | Не выполнены обязательные | Прочие не выполнены |");
         md.AppendLine("|---|---|---|---|---|---|---|---|");
         var log = new StringBuilder();
-        string root = Path.Combine(dir, "tugwork");
-        foreach (string v in DemoAssessmentRuns.TugWorkVariants)
+        string root = Path.Combine(dir, name);
+        foreach (string v in variants)
         {
             EditorUtility.DisplayProgressBar("Отчёт C2", $"{DemoTugWorkScenario.Id}: {DemoAssessmentRuns.Title(v)}", 0.95f);
             var s = ScriptableObject.CreateInstance<ScenarioDefinition>();
@@ -275,7 +285,7 @@ public static class AssessmentReport
             string folder = Path.Combine(root, v);
             Directory.CreateDirectory(folder);
             var sim = new TugWorkSimulation { Scenario = s, RecordFolder = folder };
-            DemoAssessmentRuns.ConfigureTugWork(sim.Plan, v);
+            configure(sim, v);
             sim.Run();
             AssessmentResult r = sim.LiveResult;
             bool same = SessionAssessment.Assess(SessionReader.Load(folder)).ToCsv() == r.ToCsv();
@@ -299,7 +309,7 @@ public static class AssessmentReport
                     log.AppendLine($"- {c.Code} {c.Info.Title}: {AssessmentResult.ValueText(c)} — {(c.Evaluated ? c.Passed ? "да" : "нет" : "не оценивался")}; {Md(c.Note)}");
             log.AppendLine();
         }
-        File.WriteAllText(Path.Combine(dir, "tugwork_runs.csv"), csv.ToString(), Utf8Bom);
+        File.WriteAllText(Path.Combine(dir, name + "_runs.csv"), csv.ToString(), Utf8Bom);
         md.AppendLine();
         md.Append(log);
     }

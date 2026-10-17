@@ -90,6 +90,8 @@ public static class DebriefText
         { AssessmentCatalog.G9, "Касание судна корпусом буксира" },
         { AssessmentCatalog.G10, "Судно навалилось на кранцы слишком быстро" },
         { AssessmentCatalog.G11, "Команда лоцмана выполнена поздно или не выполнена" },
+        { AssessmentCatalog.G12, "Буксир поздно перешёл к отошедшему концу или не перешёл" },
+        { AssessmentCatalog.G13, "Угол судна вырос, пока буксир не дожимал отошедший конец" },
         { AssessmentCatalog.A1, "Посадка на мель" },
         { AssessmentCatalog.A2, "Столкновение" }
     };

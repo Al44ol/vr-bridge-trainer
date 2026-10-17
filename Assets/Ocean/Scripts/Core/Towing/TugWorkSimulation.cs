@@ -45,6 +45,13 @@ public sealed class TugWorkPlan
     public bool IgnorePilot;
     /// <summary>19.4в, «опаздывает»: ступень лоцмана ставить через … с после команды (до первой — самый малый 25 %).</summary>
     public double PilotDelayS;
+    /// <summary>
+    /// 19.4г, «случайное событие»: переход вдоль борта к отошедшему концу — держаться в RelocateStandoffM м от борта, лагом
+    /// не быстрее RelocateSwayMs м/с, у точки — подход как к миделю. Варианты: IgnoreEvent — «не перешёл» (толкает у миделя
+    /// PushPower, не слушая «стоп»); WrongEnd — пошёл к ближнему концу и толкает там самым малым; RelocateDelayS — «поздно».
+    /// </summary>
+    public double RelocateStandoffM = 4.0, RelocateSwayMs = 1.0, RelocateDelayS;
+    public bool IgnoreEvent, WrongEnd;
 }
 
 /// <summary>Автомат буксира: положение джойстика по состоянию упражнения.</summary>
@@ -67,7 +74,12 @@ public sealed class TugWorkAutopilot
         double rDeg = own.R * 180.0 / Math.PI;
         double yaw = Clamp(KPsi * ePsi - KR * rDeg);
 
-        WorldPosition c = sys.ContactPoint(), b = sys.Bow(own);
+        // 19.4г: при событии — точка касания у названного конца (WrongEnd — у другого)
+        bool toEnd = sys.EventActive && !Plan.IgnoreEvent;
+        double tx = toEnd ? (Plan.WrongEnd ? -1.0 : 1.0) * sys.EndTargetX : 0.0;
+        bool atTarget = toEnd && sys.Contact.FenderForce > 0.0 && sys.Contact.TouchSide == side && Math.Abs(sys.Contact.TouchX - tx) <= sys.Task.contactZoneM;
+        bool relocating = toEnd && !sys.TugAtEnd && !(Plan.WrongEnd && atTarget);
+        WorldPosition c = sys.ContactPoint(tx), b = sys.Bow(own);
         double dE = c.East - b.East, dN = c.North - b.North;
         double s = Math.Sin(own.Psi), co = Math.Cos(own.Psi);
         double ex = dE * s + dN * co, ey = dE * co - dN * s;   // до точки касания в осях буксира
@@ -94,10 +106,27 @@ public sealed class TugWorkAutopilot
                 sway = Clamp(Kv * (vD * uy - rv));
             }
         }
+        else if (relocating)
+        {
+            if (time - sys.EventTime < Plan.RelocateDelayS) { surge = 0.0; sway = 0.0; }   // «поздно»: стоит у миделя
+            else if (Math.Abs(ey) > 4.0)
+            {
+                // вдоль борта: держаться в RelocateStandoffM м, лагом к точке
+                surge = Clamp(Ku * (Clamp(0.25 * (ex - Plan.RelocateStandoffM), 0.6) - ru));
+                sway = Clamp(Kv * (Clamp(KyPos * ey, Plan.RelocateSwayMs) - rv));
+            }
+            else
+            {
+                double k = Math.Max(0.0, Math.Min(1.0, (ex - 2.0) / Math.Max(1.0, Plan.SlowDownM)));
+                double uD = (Plan.ApproachKn + (Plan.TransitKn - Plan.ApproachKn) * Math.Sqrt(k)) * ShipParameters.KnotsToMs;
+                surge = Clamp(Ku * (uD - ru));
+            }
+        }
+        else if (toEnd && Plan.WrongEnd && !sys.TugAtEnd) surge = TugJoystick.MenuStep;   // у ближнего конца — самый малый
         else if (!sys.Done(TugWorkStage.Push))
         {
             int step = PilotStep(sys, time);
-            if (Plan.FixedPush || Plan.IgnorePilot) surge = Plan.PushPower;
+            if (Plan.FixedPush || Plan.IgnorePilot || Plan.IgnoreEvent && sys.EventActive) surge = Plan.PushPower;
             else if (Plan.FollowPilot && step >= 0) surge = step * TugJoystick.MenuStep;   // 19.4б-3: ступень лоцмана
             else
             {
@@ -121,7 +150,7 @@ public sealed class TugWorkAutopilot
             sway = 0.0;
         }
         else return JoystickState.Zero;
-        if (sys.Done(TugWorkStage.Approach)) sway = 0.0;   // у борта лагом не ходить: кранец с трением о борт разворачивает буксир, корпус касается борта
+        if (sys.Done(TugWorkStage.Approach) && !relocating) sway = 0.0;   // у борта лагом не ходить: кранец с трением о борт разворачивает буксир, корпус касается борта
         return new JoystickState(Unshape(surge), Unshape(sway), Unshape(yaw));
     }
 
@@ -156,6 +185,10 @@ public sealed class TugWorkSimulation
     /// <summary>19.4б-2: папка записи сессии (пусто — без записи); частота строк track/targets/mooring, Гц.</summary>
     public string RecordFolder = "";
     public double RateHz = 5.0;
+    /// <summary>19.4г: «случайное событие» — в прогоне только по заказу и с заданными концом (+1 нос / −1 корма), углом, зазором (прогоны 19.4б–в — без события).</summary>
+    public bool AngleEvent;
+    public int EventOffEnd = 1;
+    public double EventAngleDeg = 6.0, EventGapM = 5.0;
 
     public TugWorkSystem System { get; private set; }
     public ShipDynamicsModel Own { get; private set; }
@@ -188,6 +221,7 @@ public sealed class TugWorkSimulation
         };
         Own = new ShipDynamicsModel(tug) { MotionOverride = MotionModel.Manoeuvring3Dof, SpeedFactor = 0.0 };
         System.Place(Own);
+        if (AngleEvent) System.ArmEvent(EventOffEnd, EventAngleDeg, EventGapM);   // 19.4г
         Drive = new AzimuthDrive(spec);
         var pilot = new TugWorkAutopilot { Plan = Plan };
         Events.Clear();
