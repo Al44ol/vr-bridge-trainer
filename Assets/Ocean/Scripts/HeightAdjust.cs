@@ -6,6 +6,7 @@
 // До D1 — кнопкой X (левый контроллер: primaryButton) или H на клавиатуре; теперь только
 // при controllerButton (по умолчанию выкл — кнопка X свободна).
 // Повесить на XR Origin Hands (XR Rig).
+// 17.10.2026: стандартный рост standardOffset = +0,45 м — при запуске и по «Сброс» (в сцене heightOffset = 0 не меняем).
 // ============================================================
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -17,6 +18,9 @@ public class HeightAdjust : MonoBehaviour
     [Header("Настройки высоты")]
     [Tooltip("Текущее смещение по Y (метры). Отрицательное = опустить вниз.")]
     public float heightOffset = 0f;
+
+    [Tooltip("Стандартный рост: смещение при запуске и по кнопке «Сброс», м (17.10.2026 — +0,45 по проверке пользователя)")]
+    public float standardOffset = 0.45f;
 
     [Tooltip("Диапазон смещения")]
     public float minOffset = -2f;
@@ -41,6 +45,7 @@ public class HeightAdjust : MonoBehaviour
 
     void Start()
     {
+        heightOffset = Mathf.Clamp(standardOffset, minOffset, maxOffset);   // в сцене сохранено 0 — при запуске стандартный рост
         BuildPanel();
         ApplyHeight();
 
@@ -153,6 +158,7 @@ public class HeightAdjust : MonoBehaviour
         heightSlider.maxValue = maxOffset;
         heightSlider.value = heightOffset;
         heightSlider.onValueChanged.AddListener(OnSliderChanged);
+        valueLabel.text = heightOffset.ToString("+0.00;-0.00;0.00") + " м";
 
         // Подписи диапазона
         CreateLabel(bg.transform, minOffset.ToString("0") + " м",
@@ -161,7 +167,7 @@ public class HeightAdjust : MonoBehaviour
                     new Vector2(120, -40), 14, new Color(0.7f, 0.7f, 0.7f));
 
         // Кнопки «Сброс» и «« Назад» (D1: закрыть панель и вернуться в меню «Параметры»)
-        CreateButton(bg.transform, "Сброс", new Vector2(-65, -65), ResetHeight);
+        CreateButton(bg.transform, "Сброс " + standardOffset.ToString("+0.00;-0.00;0.00").Replace('.', ','), new Vector2(-65, -65), ResetHeight);
         CreateButton(bg.transform, "« Назад", new Vector2(65, -65), Back);
 
         panelCanvas.enabled = false;
@@ -177,8 +183,8 @@ public class HeightAdjust : MonoBehaviour
 
     void ResetHeight()
     {
-        heightOffset = 0f;
-        heightSlider.value = 0f;
+        heightOffset = Mathf.Clamp(standardOffset, minOffset, maxOffset);
+        heightSlider.value = heightOffset;   // OnSliderChanged обновит надпись
         ApplyHeight();
     }
 

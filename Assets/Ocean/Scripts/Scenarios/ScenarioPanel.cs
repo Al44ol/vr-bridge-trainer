@@ -35,6 +35,9 @@
 // Команды меню: «Выбор сценария…», «Начать упражнение», «Брифинг»/«Результаты»,
 // «Перезапустить сценарий» (инстр.), «Завершить досрочно» (инстр.); недоступные
 // по фазе — скрыты. Отладочные команды B1 остаются в группе «Отладка» (внизу).
+// 17.10.2026 (по проверке 19-03): над панелью — ручка «переместить» (PanelDragHandle: взять лучом или рукой,
+// панель идёт за контроллером, отпустили — остаётся); повторный вызов разбора из меню (A «Результаты»,
+// Y «Оценка (итог)») открывает ту же вкладку и страницу (ReopenResults).
 // ============================================================
 using System;
 using System.Collections;
@@ -104,6 +107,9 @@ public class ScenarioPanel : MonoBehaviour
     private DebriefTab tab;
     private int criteriaPage, mapView, plotView;
     private bool waitingDebrief;
+    // 17.10.2026: ручка «переместить» над панелью; разбор, для которого запомнены вкладка и страницы (повторный вызов)
+    private PanelDragHandle dragHandle;
+    private ExerciseSummary debriefFor;
 
     public bool IsOpen => canvas != null && canvas.enabled;
 
@@ -120,7 +126,7 @@ public class ScenarioPanel : MonoBehaviour
             () => Phase == ScenarioRunner.Phase.Briefing, hideWhenUnavailable: true));
         menuCommands.Add(BridgeMenu.Register(MenuGroup,
             () => Phase == ScenarioRunner.Phase.Finished ? "Результаты" : "Брифинг",
-            () => { if (Phase == ScenarioRunner.Phase.Finished) ShowResults(); else ShowBriefing(); },
+            () => { if (Phase == ScenarioRunner.Phase.Finished) ReopenResults(); else ShowBriefing(); },
             () => runner != null && runner.Current != null && Phase != ScenarioRunner.Phase.Idle, hideWhenUnavailable: true).OpensWindow());
         menuCommands.Add(BridgeMenu.Register(MenuGroup, "Перезапустить сценарий", () => runner.Restart(),
             () => runner != null && runner.Current != null && Phase != ScenarioRunner.Phase.Idle,
@@ -128,7 +134,7 @@ public class ScenarioPanel : MonoBehaviour
         menuCommands.Add(BridgeMenu.Register(MenuGroup, "Завершить досрочно", () => runner.Abort(),
             () => Phase == ScenarioRunner.Phase.Running, instructorOnly: true, hideWhenUnavailable: true).OpensWindow());   // разбор
         menuCommands.Add(BridgeMenu.Register(MenuGroup, () => Phase == ScenarioRunner.Phase.Finished ? "Оценка (итог)" : "Текущий балл",
-            () => { if (Phase == ScenarioRunner.Phase.Finished) ShowResults(); else ShowCurrentScore(); },
+            () => { if (Phase == ScenarioRunner.Phase.Finished) ReopenResults(); else ShowCurrentScore(); },
             () => assessment != null && assessment.assess && (Phase == ScenarioRunner.Phase.Running || Phase == ScenarioRunner.Phase.Finished),
             hideWhenUnavailable: true).OpensWindow().InMenu(BridgeMenu.SettingsMenuId));
         Subscribe();
@@ -243,7 +249,15 @@ public class ScenarioPanel : MonoBehaviour
         criteriaPage = 0;
         mapView = 0;
         plotView = 0;
+        debriefFor = runner != null ? runner.LastSummary : null;
         ShowDebrief();
+    }
+
+    /// <summary>17.10.2026: повторный вызов разбора из меню — та же вкладка и страницы, что при закрытии (для нового упражнения — «Итог»).</summary>
+    public void ReopenResults()
+    {
+        if (runner == null || runner.LastSummary == null || runner.LastSummary != debriefFor) ShowResults();
+        else ShowDebrief();
     }
 
     private void ShowDebrief()
@@ -634,6 +648,7 @@ public class ScenarioPanel : MonoBehaviour
     {
         mode = Mode.Hidden;
         if (canvas != null) canvas.enabled = false;
+        if (dragHandle != null) dragHandle.gameObject.SetActive(false);
     }
 
     // ─────────── Построение панели ───────────
@@ -659,6 +674,8 @@ public class ScenarioPanel : MonoBehaviour
         bg.AddComponent<Image>().color = PanelColor;
         background = bg.GetComponent<RectTransform>();
         background.pivot = new Vector2(0.5f, 1f);   // элементы — сверху вниз от y = 0
+        dragHandle = PanelDragHandle.Create(panel.transform, Width * 0.6f);
+        dragHandle.gameObject.SetActive(false);
         canvas.enabled = false;
     }
 
@@ -682,6 +699,8 @@ public class ScenarioPanel : MonoBehaviour
         background.sizeDelta = new Vector2(Width, height);
         background.anchoredPosition = new Vector2(0f, height * 0.5f);   // центр панели — в точке объекта
         canvas.enabled = true;
+        dragHandle.PlaceAbove(height * 0.5f);
+        dragHandle.gameObject.SetActive(true);
     }
 
     private void Title(string text, ref float y)
