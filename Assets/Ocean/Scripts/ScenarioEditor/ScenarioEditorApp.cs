@@ -222,8 +222,8 @@ public class ScenarioEditorApp : MonoBehaviour
         }
         y -= 2f * MonitorUi.Gap;
         TextMeshProUGUI soon = MonitorUi.Text(p, "Скоро: мели и суша, фарватеры, причалы — 21.3; сценарий — 21.4.", 14f, MonitorUi.MutedColor, TextAlignmentOptions.TopLeft);
-        MonitorUi.TopLeft(soon.rectTransform, Pad, y, w, 40f);
-        y -= 44f;
+        MonitorUi.TopLeft(soon.rectTransform, Pad, y, w, 56f);
+        y -= 64f;   // три строки при ширине палитры
         TextMeshProUGUI help = MonitorUi.Text(p,
             "Колесо — масштаб\nПравая кнопка (в «Выборе» и левая на пустом месте) — сдвиг\n" +
             "Знак: щелчок по пустому месту — поставить, по знаку — выделить и тянуть; Delete — удалить\n" +
