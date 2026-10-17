@@ -7,12 +7,17 @@
 // при controllerButton (по умолчанию выкл — кнопка X свободна).
 // Повесить на XR Origin Hands (XR Rig).
 // 17.10.2026: стандартный рост standardOffset = +0,45 м — при запуске и по «Сброс» (в сцене heightOffset = 0 не меняем).
+// 17.10.2026 (по проверке): XR Origin после запуска XR-сессии сам ставит Camera Offset в 0 (режим «пол»,
+// RepeatInitializeCamera / trackingOriginUpdated) — уже после Start, и рост сбрасывался до первого касания
+// ползунка. Теперь LateUpdate возвращает смещение, если его сбросили извне (порог 5 см — больше тряски на мели).
+// Порядок −1: раньше GroundingCameraShake (0), тряска добавляется к уже выставленному росту.
 // ============================================================
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 using TMPro;
 
+[DefaultExecutionOrder(-1)]
 public class HeightAdjust : MonoBehaviour
 {
     [Header("Настройки высоты")]
@@ -83,11 +88,24 @@ public class HeightAdjust : MonoBehaviour
         yButtonAction?.Dispose();
     }
 
+    /// <summary>Отклонение от заданного роста, после которого считаем, что смещение сбросили извне, м.</summary>
+    const float ExternalResetThreshold = 0.05f;
+
+    private Transform cameraOffset;
+
+    // XR Origin сбрасывает Camera Offset после запуска сессии и при смене начала трекинга — возвращаем рост
+    void LateUpdate()
+    {
+        Transform tr = cameraOffset != null ? cameraOffset : transform;
+        if (Mathf.Abs(tr.localPosition.y - heightOffset) > ExternalResetThreshold)
+            ApplyHeight();
+    }
+
     // ─── Применяем смещение к Camera Offset ───
     void ApplyHeight()
     {
         // Camera Offset — дочерний объект XR Origin
-        Transform cameraOffset = transform.Find("Camera Offset");
+        if (cameraOffset == null) cameraOffset = transform.Find("Camera Offset");
         if (cameraOffset == null)
         {
             // Попробуем первый дочерний объект
