@@ -8,6 +8,7 @@
 // 21.3а — мель/суша: выделенная — жёлтый контур, квадратные ручки вершин и круглые — середин сторон;
 // под курсором — голубой контур; рисуемая — голубая ломаная, линия к курсору и замыкание.
 // 21.3б — кромки фарватеров (ось ± ширина/2), стрелка «вода» у причалов; фарватер и причал — без замыкания.
+// 21.4а — слой сценария: коридор XTE, линия маршрута с ручками точек, середин участков и кромки XTE, судно на старте.
 // Координаты: пиксель окна MapViewport = локальная точка от левого нижнего угла этой графики.
 // ============================================================
 using System.Collections.Generic;
@@ -52,6 +53,17 @@ public class EditorMapOverlay : MaskableGraphic
     public readonly List<(WorldPosition a, WorldPosition b)> Berths = new List<(WorldPosition, WorldPosition)>();
     public static readonly Color FairwayEdge = new Color(0.55f, 0.65f, 0.75f, 0.45f);
     public static readonly Color WaterArrow = new Color(0.45f, 0.75f, 1f, 0.9f);
+    /// <summary>21.4а: слой сценария — маршрут с коридором XTE (ручки точек, середин участков, кромки), судно на старте.</summary>
+    public bool ScenarioLayer;
+    public List<RouteWaypoint> Route;
+    public int SelectedPoint = -1, HotPoint = -1, HotLegMid = -1, HotXte = -1;
+    public WorldPosition StartPos, HeadingHandle;
+    public float StartHeading, ShipLength = 45f, ShipBeam = 10f;
+    public bool StartSelected, StartHot, HeadingHot;
+    public static readonly Color RouteColor = new Color(1f, 0.6f, 0.25f, 1f);
+    public static readonly Color CorridorFill = new Color(1f, 0.6f, 0.25f, 0.08f);
+    public static readonly Color CorridorEdge = new Color(1f, 0.6f, 0.25f, 0.4f);
+    public static readonly Color OwnShipColor = new Color(0.35f, 0.9f, 0.45f, 1f);
 
     /// <summary>Ручки рамки: 0–3 — углы (ЮЗ, ЮВ, СВ, СЗ), 4–7 — середины сторон (Ю, В, С, З).</summary>
     public static List<WorldPosition> BoundsHandles(WorldPosition min, WorldPosition max)
@@ -131,6 +143,8 @@ public class EditorMapOverlay : MaskableGraphic
             Tri(vh, tip + n * 5f, tip - t * 5f, tip + t * 5f, WaterArrow);
         }
 
+        if (ScenarioLayer) DrawScenario(vh, r);   // 21.4а
+
         // 21.3а: фигуры
         if (HoverShape.Count >= 2) Outline(vh, HoverShape, r, 1.5f, new Color(CursorColor.r, CursorColor.g, CursorColor.b, 0.6f), HoverClosed);
         if (Shape.Count >= 2)
@@ -176,6 +190,70 @@ public class EditorMapOverlay : MaskableGraphic
             Quad(vh, new Vector2(c.x - 9f, c.y - 0.75f), new Vector2(c.x + 9f, c.y + 0.75f), CursorColor);
             Quad(vh, new Vector2(c.x - 0.75f, c.y - 9f), new Vector2(c.x + 0.75f, c.y + 9f), CursorColor);
         }
+    }
+
+    // 21.4а: коридор XTE (полоса ± XTE участка), линия маршрута, ручки; судно на старте по курсу, в масштабе
+    // (не меньше 18 × 7 пикс.), у выделенного — линия и ручка курса
+    private void DrawScenario(VertexHelper vh, Rect r)
+    {
+        float mpp = (float)Viewport.MetersPerPixel;
+        List<RouteWaypoint> rt = Route;
+        int n = rt != null ? rt.Count : 0;
+        for (int i = 0; i + 1 < n; i++)
+        {
+            if (rt[i] == null || rt[i + 1] == null) continue;
+            Vector2 p0 = Px(rt[i].position, r), p1 = Px(rt[i + 1].position, r), d = p1 - p0;
+            if (d.sqrMagnitude < 1e-6f) continue;
+            float half = rt[i + 1].xteLimit / mpp;
+            Vector2 nn = new Vector2(d.y, -d.x).normalized;   // вправо от участка
+            if (half >= 1f)
+            {
+                Seg(vh, p0, p1, 2f * half, CorridorFill);
+                Seg(vh, p0 + nn * half, p1 + nn * half, 1f, CorridorEdge);
+                Seg(vh, p0 - nn * half, p1 - nn * half, 1f, CorridorEdge);
+            }
+            Seg(vh, p0, p1, 2.5f, RouteColor);
+        }
+        for (int i = 0; i + 1 < n; i++)
+        {
+            if (rt[i] == null || rt[i + 1] == null) continue;
+            Vector2 m = Px(RouteEditing.LegMid(rt, i), r);
+            Disc(vh, m, i == HotLegMid ? 6f : 4f, i == HotLegMid ? HandleHot : new Color(RouteColor.r, RouteColor.g, RouteColor.b, 0.7f));
+            if (RouteEditing.XteHandleVisible(rt, i, Viewport))
+            {
+                Vector2 h = Px(RouteEditing.XteHandle(rt, i), r);
+                Diamond(vh, h, i == HotXte ? 8f : 6f, new Color(0.05f, 0.05f, 0.06f, 1f));
+                Diamond(vh, h, i == HotXte ? 6f : 4.5f, i == HotXte ? HandleHot : RouteColor);
+            }
+        }
+        for (int i = 0; i < n; i++)
+        {
+            if (rt[i] == null) continue;
+            Vector2 c = Px(rt[i].position, r);
+            bool sel = i == SelectedPoint, hot = i == HotPoint;
+            float h = sel || hot ? 7f : 5f;
+            Quad(vh, c - new Vector2(h + 1f, h + 1f), c + new Vector2(h + 1f, h + 1f), new Color(0.05f, 0.05f, 0.06f, 1f));
+            Quad(vh, c - new Vector2(h, h), c + new Vector2(h, h), sel ? HandleHot : hot ? CursorColor : (i == 0 ? Color.white : RouteColor));
+        }
+
+        // Судно на старте
+        float a = StartHeading * Mathf.Deg2Rad;
+        Vector2 f = new Vector2(Mathf.Sin(a), Mathf.Cos(a)), s = new Vector2(f.y, -f.x);
+        float L = Mathf.Max(18f, ShipLength / mpp), B = Mathf.Max(7f, ShipBeam / mpp);
+        Vector2 c0 = Px(StartPos, r);
+        Vector2 bow = c0 + f * (0.5f * L), sb = c0 + f * (0.2f * L) + s * (0.5f * B), pb = c0 + f * (0.2f * L) - s * (0.5f * B);
+        Vector2 ss = c0 - f * (0.5f * L) + s * (0.5f * B), ps = c0 - f * (0.5f * L) - s * (0.5f * B);
+        Color hull = StartSelected ? HandleHot : StartHot ? CursorColor : OwnShipColor;
+        if (StartSelected)
+        {
+            Vector2 hh = Px(HeadingHandle, r);
+            Seg(vh, bow, hh, 1.5f, new Color(hull.r, hull.g, hull.b, 0.7f));
+            Disc(vh, hh, HeadingHot ? 7f : 5f, HeadingHot ? CursorColor : HandleHot);
+        }
+        Tri(vh, bow, pb, sb, hull);
+        Tri(vh, pb, ps, ss, hull);
+        Tri(vh, pb, ss, sb, hull);
+        Seg(vh, c0 - f * (0.3f * L), c0 + f * (0.35f * L), 1.5f, new Color(0.05f, 0.05f, 0.06f, 0.8f));   // диаметральная — где нос
     }
 
     private static bool Major(double v, double s) => System.Math.Abs(System.Math.IEEERemainder(v, 5.0 * s)) < 0.5 * s;

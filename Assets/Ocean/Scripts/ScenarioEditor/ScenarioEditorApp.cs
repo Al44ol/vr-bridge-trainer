@@ -13,7 +13,8 @@
 // 21.2б — знаки МАМС: палитра 8 типов, щелчок по пустому месту — поставить в узел сетки, щелчок по
 // знаку — выделить и тянуть, Delete — удалить, справа — свойства знака (имя, тип, положение, огонь);
 // правка знаков — AidEditing (Core). 21.3а — мели и суша (ScenarioEditorShapes.cs, partial-класс);
-// 21.3б — фарватеры и причалы (там же); 21.4 — слой сценария.
+// 21.3б — фарватеры и причалы (там же); 21.4а — слой сценария: режим «Акватория / Сценарий» вверху палитры,
+// старт и маршрут с XTE (ScenarioEditorScenario.cs); кнопки верхней панели работают с документом режима.
 // ============================================================
 using System;
 using System.Collections;
@@ -87,9 +88,9 @@ public partial class ScenarioEditorApp : MonoBehaviour
             Dialog("Несохранённый черновик",
                    $"После прошлого сеанса остался черновик акватории «{draft.Area.name}» от {when:dd.MM HH:mm} ({draft.Origin}).",
                    null, false,
-                   ("Восстановить", MonitorUi.StartColor, () => { CloseDialog(); SetDocument(draft); }),
-                   ("Удалить черновик", MonitorUi.StopColor, () => { AreaDocument.DeleteDraft(Root); CloseDialog(); OpenDialog(true); }));
-        else OpenDialog(true);
+                   ("Восстановить", MonitorUi.StartColor, () => { CloseDialog(); SetDocument(draft); ScenarioDraftOrOpen(false); }),
+                   ("Удалить черновик", MonitorUi.StopColor, () => { AreaDocument.DeleteDraft(Root); CloseDialog(); ScenarioDraftOrOpen(true); }));
+        else ScenarioDraftOrOpen(true);   // 21.4а: черновик сценария — следом
     }
 
     private void SetupCameras()
@@ -152,27 +153,31 @@ public partial class ScenarioEditorApp : MonoBehaviour
         RectTransform bar = MonitorUi.Panel(root, "TopBar", MonitorUi.BarColor);
         MonitorUi.Place(bar, new Vector2(0f, 1f), new Vector2(1f, 1f), Vector2.zero, new Vector2(0f, TopBar), new Vector2(0.5f, 1f));
         float x = Pad, y = -(TopBar - MonitorUi.RowHeight) * 0.5f;
-        ui.Button(bar, ref x, y, 100f, "Новая", MonitorUi.NeutralColor, () => Guarded(NewDialog));
-        ui.Button(bar, ref x, y, 120f, "Открыть…", MonitorUi.NeutralColor, () => Guarded(() => OpenDialog(false)));
-        ui.Button(bar, ref x, y, 120f, "Сохранить", MonitorUi.ButtonColor, () => Save(false), null,
-                  () => doc != null && doc.Dirty ? MonitorUi.WarnColor : MonitorUi.ButtonColor, () => doc != null);
-        ui.Button(bar, ref x, y, 160f, "Сохранить как…", MonitorUi.NeutralColor, SaveAsDialog, null, null, () => doc != null);
+        // 21.4а: кнопки — для документа текущего режима (акватория или сценарий)
+        ui.Button(bar, ref x, y, 100f, "", MonitorUi.NeutralColor,
+                  () => Guarded(() => { if (mode == Mode.Scenario) OpenScenarioDialog(false); else NewDialog(); }),
+                  () => mode == Mode.Scenario ? "Новый" : "Новая");
+        ui.Button(bar, ref x, y, 120f, "Открыть…", MonitorUi.NeutralColor, () => Guarded(() => { if (mode == Mode.Scenario) OpenScenarioDialog(false); else OpenDialog(false); }));
+        ui.Button(bar, ref x, y, 120f, "Сохранить", MonitorUi.ButtonColor, () => { if (mode == Mode.Scenario) SaveScenario(false); else Save(false); }, null,
+                  () => ActiveDirty ? MonitorUi.WarnColor : MonitorUi.ButtonColor, () => HasDoc);
+        ui.Button(bar, ref x, y, 160f, "Сохранить как…", MonitorUi.NeutralColor, () => { if (mode == Mode.Scenario) SaveScenarioAsDialog(); else SaveAsDialog(); },
+                  null, null, () => HasDoc);
         x += 12f;
-        ui.Button(bar, ref x, y, 120f, "Отменить", MonitorUi.NeutralColor, Undo, null, null, () => doc != null && doc.History.CanUndo);
-        ui.Button(bar, ref x, y, 120f, "Повторить", MonitorUi.NeutralColor, Redo, null, null, () => doc != null && doc.History.CanRedo);
+        ui.Button(bar, ref x, y, 120f, "Отменить", MonitorUi.NeutralColor, Undo, null, null, () => ActiveHistory != null && ActiveHistory.CanUndo);
+        ui.Button(bar, ref x, y, 120f, "Повторить", MonitorUi.NeutralColor, Redo, null, null, () => ActiveHistory != null && ActiveHistory.CanRedo);
         x += 12f;
         ui.Button(bar, ref x, y, 150f, "", MonitorUi.NeutralColor, () => { gridIndex = (gridIndex + 1) % MapGrid.Steps.Length; mapDirty = true; },
                   () => "Сетка: " + MapGrid.StepTitle(GridStep));
         ui.Button(bar, ref x, y, 160f, "", MonitorUi.NeutralColor, () => snap = !snap,
                   () => snap ? "Привязка: вкл" : "Привязка: выкл", () => snap ? MonitorUi.ActiveColor : MonitorUi.NeutralColor);
-        ui.Button(bar, ref x, y, 150f, "Весь район", MonitorUi.NeutralColor, FitArea, null, null, () => doc != null);
+        ui.Button(bar, ref x, y, 150f, "Весь район", MonitorUi.NeutralColor, FitArea, null, null, () => ActiveArea != null);
         titleText = MonitorUi.Text(bar, "", 18f, Color.white, TextAlignmentOptions.Left);
         titleText.textWrappingMode = TextWrappingModes.NoWrap;
         titleText.overflowMode = TextOverflowModes.Ellipsis;
         MonitorUi.TopLeft(titleText.rectTransform, x + 10f, y, 1920f - x - 10f - 2f * 170f - 3f * Pad, MonitorUi.RowHeight);
         float rx = 1920f - Pad - 2f * 170f - MonitorUi.Gap;
-        ui.Button(bar, ref rx, y, 170f, "В тренажёр", MonitorUi.StartColor, () => Guarded(TrainerScenes.OpenTraining));
-        ui.Button(bar, ref rx, y, 170f, "Выход", MonitorUi.NeutralColor, () => Guarded(TrainerScenes.Quit));
+        ui.Button(bar, ref rx, y, 170f, "В тренажёр", MonitorUi.StartColor, () => GuardedAll(TrainerScenes.OpenTraining));
+        ui.Button(bar, ref rx, y, 170f, "Выход", MonitorUi.NeutralColor, () => GuardedAll(TrainerScenes.Quit));
 
         BuildPalette();
         BuildMap();
@@ -188,9 +193,13 @@ public partial class ScenarioEditorApp : MonoBehaviour
 
     private void BuildPalette()
     {
-        RectTransform p = MonitorUi.Panel(root, "Palette", MonitorUi.PanelColor);
-        MonitorUi.Place(p, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, StatusBar), new Vector2(PaletteWidth, -(TopBar + StatusBar)), new Vector2(0f, 0f));
+        RectTransform panel = MonitorUi.Panel(root, "Palette", MonitorUi.PanelColor);
+        MonitorUi.Place(panel, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, StatusBar), new Vector2(PaletteWidth, -(TopBar + StatusBar)), new Vector2(0f, 0f));
         float y = -Pad;
+        BuildModeSwitch(panel, ref y);   // 21.4а: «Акватория / Сценарий»
+        BuildScenarioPalette(panel, y);
+        scenarioPalette.gameObject.SetActive(false);
+        RectTransform p = areaPalette = Group(panel, "AreaPalette");
         Header(p, "Инструменты", ref y);
         float w = PaletteWidth - 2f * Pad;
         float x = Pad;
@@ -337,9 +346,10 @@ public partial class ScenarioEditorApp : MonoBehaviour
         ya -= MonitorUi.RowHeight + 3f * MonitorUi.Gap;
         float ys = BuildShapeProps(p, w);   // 21.3а, 21.3б: свойства мели / суши / фарватера
         float yb = BuildBerthProps(p, w);   // 21.3б: свойства причала
+        float yr = BuildScenarioProps(p, w);   // 21.4а: сценарий, старт, точка маршрута
         ShowPropsGroup();
 
-        float yc = Mathf.Min(Mathf.Min(y, ya), Mathf.Min(ys, yb));
+        float yc = Mathf.Min(Mathf.Min(Mathf.Min(y, ya), Mathf.Min(ys, yb)), yr);
         Header(p, "Проверка", ref yc);
         checkText = MonitorUi.Text(p, "", 15f, Color.white, TextAlignmentOptions.TopLeft);
         MonitorUi.TopLeft(checkText.rectTransform, Pad, yc, w, 1080f - TopBar - StatusBar + yc - Pad);
@@ -380,6 +390,7 @@ public partial class ScenarioEditorApp : MonoBehaviour
     // ─────────── Документ ───────────
     private void SetDocument(AreaDocument d)
     {
+        if (mode != Mode.Area) { doc = d; SetMode(Mode.Area); }   // 21.4а: акватория — в режиме «Акватория»
         doc = d;
         lastDraftText = "";
         mapDirty = true;
@@ -398,10 +409,11 @@ public partial class ScenarioEditorApp : MonoBehaviour
 
     private void FitArea()
     {
-        if (doc == null) return;
+        WaterArea a = ActiveArea;
+        if (a == null) return;
         Canvas.ForceUpdateCanvases();   // размер карты — до первой раскладки кадра
         viewport.SetSize(Mathf.Max(1f, mapRect.rect.width), Mathf.Max(1f, mapRect.rect.height));
-        var r = new MapRect(doc.Area.boundsMin.East, doc.Area.boundsMin.North, doc.Area.boundsMax.East, doc.Area.boundsMax.North);
+        var r = new MapRect(a.boundsMin.East, a.boundsMin.North, a.boundsMax.East, a.boundsMax.North);
         if (r.Width > 0 && r.Height > 0) viewport.Fit(r, 0.06);
         mapDirty = true;
     }
@@ -486,8 +498,10 @@ public partial class ScenarioEditorApp : MonoBehaviour
 
     private void ShowPropsGroup()
     {
-        bool aid = SelAid != null, berth = !aid && SelBerth != null, shape = !aid && !berth && SelPoints != null;
-        if (areaGroup != null) areaGroup.gameObject.SetActive(!aid && !shape && !berth);
+        ShowScenarioGroups();   // 21.4а
+        bool area = mode == Mode.Area;
+        bool aid = area && SelAid != null, berth = area && !aid && SelBerth != null, shape = area && !aid && !berth && SelPoints != null;
+        if (areaGroup != null) areaGroup.gameObject.SetActive(area && !aid && !shape && !berth);
         if (aidGroup != null) aidGroup.gameObject.SetActive(aid);
         if (shapeGroup != null) shapeGroup.gameObject.SetActive(shape);
         if (berthGroup != null) berthGroup.gameObject.SetActive(berth);
@@ -544,12 +558,14 @@ public partial class ScenarioEditorApp : MonoBehaviour
 
     private void Undo()
     {
+        if (mode == Mode.Scenario) { UndoScenario(); return; }   // 21.4а
         var sel = SelectionKey();
         if (doc != null && doc.Undo()) { Reselect(sel); mapDirty = true; FillFields(); Refresh(); }
     }
 
     private void Redo()
     {
+        if (mode == Mode.Scenario) { RedoScenario(); return; }
         var sel = SelectionKey();
         if (doc != null && doc.Redo()) { Reselect(sel); mapDirty = true; FillFields(); Refresh(); }
     }
@@ -575,6 +591,7 @@ public partial class ScenarioEditorApp : MonoBehaviour
             case AreaSaveStatus.Saved:
                 lastDraftText = "";
                 Debug.Log("[Редактор] " + doc.LastMessage);
+                LoadFolder();   // 21.4а: своя акватория — сразу в выборе акватории сценария
                 break;
             case AreaSaveStatus.NameTaken:
                 Dialog("Имя занято", doc.LastMessage + " Заменить его этой акваторией? Прежний вариант уйдёт в «История».", null, true,
@@ -659,6 +676,7 @@ public partial class ScenarioEditorApp : MonoBehaviour
             }));
         }
         buttons.Add(("Открыть папку в Проводнике", MonitorUi.NeutralColor, () => Application.OpenURL("file:///" + Root.Replace('\\', '/'))));
+        buttons.Add(("К сценариям", MonitorUi.NeutralColor, () => { CloseDialog(); SetMode(Mode.Scenario); }));   // 21.4а
         if (!startup || doc != null) buttons.Add(("Отмена", MonitorUi.NeutralColor, CloseDialog));
         else buttons.Add(("В тренажёр", MonitorUi.NeutralColor, TrainerScenes.OpenTraining));
         string more = files.Count > 10 ? $"\nСвоих акваторий {files.Count} — показаны первые 10 (по имени)." : "";
@@ -667,6 +685,29 @@ public partial class ScenarioEditorApp : MonoBehaviour
 
     // Несохранённые правки — спросить перед действием
     private void Guarded(Action then)
+    {
+        if (mode == Mode.Scenario) { GuardedScenario(then); return; }   // 21.4а
+        GuardedArea(then);
+    }
+
+    /// <summary>Выход из редактора: несохранённые и акватория, и сценарий.</summary>
+    private void GuardedAll(Action then) => GuardedArea(() => GuardedScenario(then));
+
+    private void GuardedScenario(Action then)
+    {
+        if (sdoc == null || !sdoc.Dirty) { then(); return; }
+        Dialog("Есть несохранённые правки", $"Сценарий «{sdoc.Scenario.id} {sdoc.Scenario.title}» изменён. Сохранить?", null, true,
+               ("Сохранить", MonitorUi.ButtonColor, () =>
+               {
+                   CloseDialog();
+                   SaveScenario(false);
+                   if (!sdoc.Dirty) then();
+               }),
+               ("Не сохранять", MonitorUi.StopColor, () => { CloseDialog(); ScenarioDocument.DeleteDraft(Root); sdoc = null; ShowPropsGroup(); then(); }),
+               ("Отмена", MonitorUi.NeutralColor, CloseDialog));
+    }
+
+    private void GuardedArea(Action then)
     {
         if (doc == null || !doc.Dirty) { then(); return; }
         Dialog("Есть несохранённые правки", $"Акватория «{doc.Area.name}» изменена. Сохранить?", null, true,
@@ -732,8 +773,9 @@ public partial class ScenarioEditorApp : MonoBehaviour
     {
         if (canvas == null) return;
         Keys();
-        if (!dialogOpen) MapMouse();
+        if (!dialogOpen) { if (mode == Mode.Scenario) ScenarioMouse(); else MapMouse(); }
         if (doc != null && doc.Dirty && Time.unscaledTime >= nextDraft) WriteDraft();
+        if (sdoc != null && sdoc.Dirty && Time.unscaledTime >= nextScenarioDraft) WriteScenarioDraft();   // 21.4а
         RedrawMap();
         ui.Refresh();
         Status();
@@ -753,18 +795,25 @@ public partial class ScenarioEditorApp : MonoBehaviour
         }
         bool ctrl = k.leftCtrlKey.isPressed || k.rightCtrlKey.isPressed;
         bool shift = k.leftShiftKey.isPressed || k.rightShiftKey.isPressed;
-        if (!dialogOpen && DraftKeys(k)) return;   // 21.3а: Enter, Backspace, Esc при рисовании
+        bool sc = mode == Mode.Scenario;
+        if (!dialogOpen && !sc && DraftKeys(k)) return;   // 21.3а: Enter, Backspace, Esc при рисовании
         if (k.escapeKey.wasPressedThisFrame)
         {
-            if (dialogOpen && doc != null) CloseDialog();
+            if (dialogOpen && HasDoc) CloseDialog();
+            else if (sc)
+            {
+                // 21.4а: «Выбор» → снять выделение
+                if (stool != STool.Select) SetSTool(STool.Select);
+                else { SelectStart(false); SelectPoint(-1); }
+            }
             else if (tool != Tool.Select) SetTool(Tool.Select);
             else { SelectAid(-1); SelectShape(AreaShape.None); }
         }
-        if (!dialogOpen && k.deleteKey.wasPressedThisFrame) DeleteSelected();
+        if (!dialogOpen && k.deleteKey.wasPressedThisFrame) { if (sc) DeleteScenarioSelected(); else DeleteSelected(); }
         if (dialogOpen || !ctrl) return;
         if (k.zKey.wasPressedThisFrame) { if (shift) Redo(); else Undo(); }
         else if (k.yKey.wasPressedThisFrame) Redo();
-        else if (k.sKey.wasPressedThisFrame) Save(false);
+        else if (k.sKey.wasPressedThisFrame) { if (sc) SaveScenario(false); else Save(false); }
     }
 
     private void MapMouse()
@@ -901,6 +950,9 @@ public partial class ScenarioEditorApp : MonoBehaviour
 
     private void RedrawMap()
     {
+        if (mode == Mode.Scenario) { ScenarioRedraw(); return; }   // 21.4а
+        overlay.ScenarioLayer = false;
+        overlay.ShowBounds = true;
         if (doc == null) return;
         viewport.SetSize(Mathf.Max(1f, mapRect.rect.width), Mathf.Max(1f, mapRect.rect.height));
         if (mapDirty || mapData == null)
@@ -977,6 +1029,7 @@ public partial class ScenarioEditorApp : MonoBehaviour
     // Заголовок, проверка — после правки
     private void Refresh()
     {
+        if (mode == Mode.Scenario) { ScenarioRefresh(); return; }   // 21.4а
         if (doc == null) { titleText.text = "<color=#9AA6B2>акватория не открыта</color>"; checkText.text = ""; return; }
         string file = doc.FilePath.Length > 0 ? Path.GetFileName(doc.FilePath) : "не сохранена";
         titleText.text = $"Акватория «<b>{doc.Area.name}</b>»{(doc.Dirty ? " <color=#FFC85A>*</color>" : "")}  <size=80%><color=#9AA6B2>{file} · {doc.Origin}</color></size>";
@@ -993,6 +1046,7 @@ public partial class ScenarioEditorApp : MonoBehaviour
 
     private void Status()
     {
+        if (mode == Mode.Scenario) { ScenarioStatus(); return; }   // 21.4а
         if (doc == null) { statusText.text = $"Папка: {Root}"; return; }
         string pos = cursorInside
             ? $"E {MonitorUi.Num(cursorWorld.East, 0)} м · N {MonitorUi.Num(cursorWorld.North, 0)} м · глубина {MonitorUi.Num(doc.Area.DepthAt(cursorWorld), 1)} м"

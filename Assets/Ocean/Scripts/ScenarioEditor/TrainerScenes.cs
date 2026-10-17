@@ -25,6 +25,9 @@ public static class TrainerScenes
 
     /// <summary>Встроенные суда, акватории, наборы оценки и сценарии (запомнены при уходе из тренажёра).</summary>
     public static ScenarioCatalog Catalog { get; private set; }
+    /// <summary>21.4а: своё судно сценария — модель 45 м и свой буксир (запомнены при уходе из тренажёра).</summary>
+    public static ShipParameters BridgeShip { get; private set; }
+    public static ShipParameters TugShip { get; private set; }
     /// <summary>Папка сценариев (Документы\VRBridgeTrainer).</summary>
     public static string Root { get; private set; } = "";
     /// <summary>Выгрузка тренажёра идёт (редактор ждёт её, чтобы не было двух EventSystem).</summary>
@@ -86,6 +89,11 @@ public static class TrainerScenes
         }
         if (string.IsNullOrEmpty(Root)) Root = ScenarioFolder.DefaultRoot();
         if (Catalog == null) Catalog = new ScenarioCatalog();
+        ShipTypeSwitcher sw = ShipTypeSwitcher.Instance;
+        ShipNavigation nav = UnityEngine.Object.FindAnyObjectByType<ShipNavigation>();
+        if (sw != null && sw.bridgeParameters != null) BridgeShip = sw.bridgeParameters;
+        else if (BridgeShip == null && nav != null) BridgeShip = nav.parameters;
+        if (sw != null) TugShip = sw.TugParameters;
         StartupDone = true;
 
         Scene from = SceneManager.GetActiveScene();

@@ -156,9 +156,12 @@ public sealed class AreaDocument
     }
 
     /// <summary>Копия файла в «История\Акватории\&lt;имя&gt;\&lt;дата_время&gt;.json», последних HistoryKeep.</summary>
-    public static string KeepHistory(string root, string file, DateTime now)
+    public static string KeepHistory(string root, string file, DateTime now) => KeepHistoryIn(root, "Акватории", file, now);
+
+    /// <summary>21.4а: то же для любого раздела истории («Акватории», «Сценарии»).</summary>
+    public static string KeepHistoryIn(string root, string section, string file, DateTime now)
     {
-        string dir = Path.Combine(root, HistoryDir, "Акватории", Path.GetFileNameWithoutExtension(file));
+        string dir = Path.Combine(root, HistoryDir, section, Path.GetFileNameWithoutExtension(file));
         Directory.CreateDirectory(dir);
         string copy = Path.Combine(dir, now.ToString("yyyyMMdd_HHmmss") + ScenarioFile.Extension);
         for (int i = 2; File.Exists(copy); i++) copy = Path.Combine(dir, $"{now:yyyyMMdd_HHmmss}_{i}{ScenarioFile.Extension}");
