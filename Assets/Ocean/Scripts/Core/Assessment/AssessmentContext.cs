@@ -43,6 +43,8 @@ public sealed class AssessmentContext
     public MooringTaskDefinition Mooring;
     /// <summary>19.2б-3в: причал задания из снимка акватории (борт швартовки для M9; null — нет в записи).</summary>
     public BerthArea MooringBerth;
+    /// <summary>19.4в: упражнение на своём буксире (null — нет): критерии G5–G11.</summary>
+    public TugWorkDefinition TugWork;
 
     public AssessmentTargetInfo Target(string id)
     {
@@ -78,6 +80,7 @@ public sealed class AssessmentContext
             }
         c.Mooring = s.mooring != null ? s.mooring.ToDefinition() : null;
         c.MooringBerth = c.Mooring != null && s.area != null ? s.area.Berth(s.mooring.berth_index) : null;
+        c.TugWork = s.tug_work != null ? s.tug_work.ToDefinition() : null;
         c.Own = ShipFrom(m.ship);
         return c;
     }

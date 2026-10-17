@@ -47,6 +47,7 @@ MonoBehaviour:
     safeSpeedGraceS: 120
     minimumSteerageSf: 0.2
     weightMooring: 1
+    weightTowing: 0.5
     criteria:
     - code: E1
       enabled: 1
@@ -307,3 +308,31 @@ MonoBehaviour:
       pass: 1
       zero: 0
       weight: 2
+    - code: G1
+      enabled: 1
+      mandatory: 1
+      full: 0
+      pass: 0
+      zero: 1
+      weight: 8
+    - code: G2
+      enabled: 1
+      mandatory: 0
+      full: 0
+      pass: 10
+      zero: 30
+      weight: 4
+    - code: G3
+      enabled: 1
+      mandatory: 0
+      full: 25
+      pass: 50
+      zero: 100
+      weight: 4
+    - code: G4
+      enabled: 1
+      mandatory: 0
+      full: 0.3
+      pass: 0.6
+      zero: 1.2
+      weight: 3

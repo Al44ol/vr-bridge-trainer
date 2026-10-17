@@ -83,6 +83,13 @@ public static class DebriefText
         { AssessmentCatalog.G2, "Перегрузка буксирного троса" },
         { AssessmentCatalog.G3, "Тяга буксира дана резко, а не ступенями" },
         { AssessmentCatalog.G4, "Жёсткое касание буксира о борт" },
+        { AssessmentCatalog.G5, "Задание буксира не выполнено" },
+        { AssessmentCatalog.G6, "Жёсткое касание борта кранцем буксира" },
+        { AssessmentCatalog.G7, "Подход к борту под углом, а не поперёк" },
+        { AssessmentCatalog.G8, "Упор снят, пока заводили концы" },
+        { AssessmentCatalog.G9, "Касание судна корпусом буксира" },
+        { AssessmentCatalog.G10, "Судно навалилось на кранцы слишком быстро" },
+        { AssessmentCatalog.G11, "Команда лоцмана выполнена поздно или не выполнена" },
         { AssessmentCatalog.A1, "Посадка на мель" },
         { AssessmentCatalog.A2, "Столкновение" }
     };
@@ -187,8 +194,8 @@ public static class DebriefText
         return b.ToString();
     }
 
-    /// <summary>Вердикт: «ЗАЧЁТ», «НЕЗАЧЁТ», «ПРОВАЛ».</summary>
-    public static string Verdict(AssessmentResult r) => r == null ? "—" : r.Failed ? "ПРОВАЛ" : r.Passed ? "ЗАЧЁТ" : "НЕЗАЧЁТ";
+    /// <summary>Вердикт: «ЗАЧЁТ», «НЕЗАЧЁТ», «ПРОВАЛ», «БЕЗ ОЦЕНКИ» (19.4в).</summary>
+    public static string Verdict(AssessmentResult r) => r == null ? "—" : r.VerdictText;
 
     /// <summary>Почему незачёт / провал (пусто — зачёт).</summary>
     public static string VerdictReason(AssessmentResult r)
@@ -197,7 +204,7 @@ public static class DebriefText
         if (r.Failed) return "провал: " + r.FailureText;
         if (r.MandatoryFailed.Count > 0) return "не выполнены обязательные критерии: " + string.Join(", ", r.MandatoryFailed);
         if (!double.IsNaN(r.Score)) return $"балл ниже проходного ({ScenarioText.Num(r.PassScore)})";
-        return "нечего оценивать";
+        return "нечего оценивать: ни один критерий сценария не оценён";
     }
 
     /// <summary>Баллы групп одной строкой: «расхождение с судами 96 · время реакции 100 · маршрут 89».</summary>

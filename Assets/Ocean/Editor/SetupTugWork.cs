@@ -5,7 +5,7 @@
 // буксира Resources/ShipParameters_Tug) создаёт, если их нет:
 //   • Assets/Ocean/Scenarios/Assessment_TugWork.asset — набор критериев 19-03 (DemoTugWorkScenario.Assessment:
 //     маршрутные и «Швартовка» выключены; группа «Буксир» G1–G4 не оценивается — буксир не вызывается;
-//     критерии работы буксира G5–G11 — запрос 19.4в);
+//     критерии работы буксира G5–G11 (19.4в) в прежний набор дописываются сами — AddMissing);
 //   • Assets/Ocean/Scenarios/Scenario_19-03_TugWork.asset «Буксир прижимает судно к причалу» (DemoTugWorkScenario:
 //     своё судно — буксир, клиент — Model45m) — появляется в выборе без ручного Setup.
 //   • 19.4б-3: причал №2 (под Mariner) дописывается в WaterArea_Demo.asset, если его нет; сценарий с demoVersion меньше
@@ -78,7 +78,7 @@ public static class SetupTugWork
         if (added == 0) return;
         EditorUtility.SetDirty(c);
         AssetDatabase.SaveAssets();
-        Debug.Log($"[Setup 19.4б] {CriteriaPath}: добавлено критериев {added}");
+        Debug.Log($"[Setup 19.4б] {CriteriaPath}: добавлено критериев {added} (19.4в — работа буксира G5–G11)");
     }
 
     private static void CreateScenario(StringBuilder log, bool refill)
@@ -97,7 +97,7 @@ public static class SetupTugWork
             crit = ScriptableObject.CreateInstance<AssessmentCriteria>();
             crit.settings = DemoTugWorkScenario.Assessment();
             AssetDatabase.CreateAsset(crit, CriteriaPath);
-            log.AppendLine($"  + {CriteriaPath}: маршрутные и «Швартовка» выключены (критерии работы буксира — 19.4в)");
+            log.AppendLine($"  + {CriteriaPath}: маршрутные и «Швартовка» выключены, работа буксира — G5–G11");
         }
         else if (refill)
         {

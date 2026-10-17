@@ -353,7 +353,50 @@ public static class SessionReport
             if (m.Towing.PushKn > 0 && k + 1 < s.Mooring.Count) pushTime += s.Mooring[k + 1].Time - m.Time;
         }
         h.Append($"<p>Упор кранцем в борт: наибольший {ScenarioText.Num(maxPush)} кН, всего {ScenarioText.Clock(pushTime)} (по mooring.csv, 5 Гц). " +
-                 "Оценка работы буксира — критерии G5–G11 (запрос 19.4в).</p>\n");
+                 "Оценка работы буксира — критерии G5–G11 (группа «Буксир» в таблице критериев).</p>\n");
+
+        // 19.4в: этап «держать» (G8) и реакция на команды лоцмана упором (G11) — по тем же событиям, что оценка
+        double tPush = doneAt.TryGetValue((int)TugWorkStage.Push, out double tp) ? tp : double.NaN;
+        double tHold = doneAt.TryGetValue((int)TugWorkStage.Hold, out double th) ? th : double.NaN;
+        double end = SessionEnd(s);
+        if (!double.IsNaN(tPush))
+        {
+            double to = double.IsNaN(tHold) ? end : tHold, held = 0.0;
+            for (int k = 0; k < s.Mooring.Count; k++)
+            {
+                MooringSample m = s.Mooring[k];
+                double a = Math.Max(m.Time, tPush), b = Math.Min(k + 1 < s.Mooring.Count ? s.Mooring[k + 1].Time : end, to);
+                if (b > a && m.Towing.Present && m.Towing.PushKn > 0.0) held += b - a;
+            }
+            h.Append($"<p>Держать (от «держите» до «концы закреплены»{(double.IsNaN(tHold) ? " — концы не закреплены" : "")}): {ScenarioText.Num(to - tPush)} с, " +
+                     $"с упором в борт — {ScenarioText.Num(held)} с ({ScenarioText.Num(to > tPush ? 100.0 * held / (to - tPush) : 0.0)} %).</p>\n");
+        }
+        var joystick = s.Events.FindAll(e => e.Type == ExerciseEventType.JoystickChanged);
+        List<PilotPowerReaction> reactions = TugWorkReaction.Compute(orders, joystick, double.IsNaN(tHold) ? end : tHold);
+        if (reactions.Count > 0)
+        {
+            h.Append("<h3>Команды лоцмана упором и реакция</h3>\n<table>\n<thead><tr><th>Время</th><th>Команда</th><th>Ступень</th>" +
+                     "<th>Рукоятка была</th><th>Рукоятка на ступени</th></tr></thead><tbody>\n");
+            foreach (PilotPowerReaction x in reactions)
+            {
+                string result = x.Executed ? (x.ReactionS <= 0.0 ? "уже стояла" : $"через {ScenarioText.Num(x.ReactionS, 1)} с")
+                              : $"не выполнена ({ScenarioText.Num(TugWorkReaction.InForce(x))} с до следующей)";
+                h.Append($"<tr{(x.Executed ? "" : " class=\"fail\"")}><td class=\"num\">{ScenarioText.Clock(x.OrderTime)}</td><td>«{H(x.Text)}»</td>" +
+                         $"<td class=\"num\">{x.Step * 25} %</td><td class=\"num\">{x.StepBefore * 25} %</td><td>{H(result)}</td></tr>\n");
+            }
+            h.Append("</tbody></table>\n<p class=\"muted\">Ступень рукоятки — по установившемуся положению (событие JoystickChanged, 0,5 с), " +
+                     "ход вперёд, округлённо до 25 %; назад — «не толкает». График «Упор буксира» — в разделе «Графики».</p>\n");
+        }
+    }
+
+    // Конец записи, с: событие ExerciseEnded, иначе последняя строка траектории
+    private static double SessionEnd(RecordedSession s)
+    {
+        foreach (ExerciseEvent e in s.Events) if (e.Type == ExerciseEventType.ExerciseEnded) return e.Time;
+        double t = 0.0;
+        if (s.Track.Count > 0) t = s.Track[s.Track.Count - 1].Time;
+        if (s.Mooring.Count > 0) t = Math.Max(t, s.Mooring[s.Mooring.Count - 1].Time);
+        return t;
     }
 
     // 19.3в: буксир и ветер — только если ветер был или буксир вызывался (прочие отчёты не меняются)

@@ -70,7 +70,7 @@ public static class SetupBerthScenario
         }
         if (log.Length == 0) return;
         AssetDatabase.SaveAssets();
-        Debug.Log("[Setup 19.2б-3] Новые критерии каталога (19.2б-3в — «Швартовка» M2–M9, 19.3в — «Буксир» G1–G4) добавлены в наборы (при входе в Play Mode):\n" + log.ToString().TrimEnd());
+        Debug.Log("[Setup 19.2б-3] Новые критерии каталога (19.2б-3в — «Швартовка» M2–M9, 19.3в — «Буксир» G1–G4, 19.4в — работа буксира G5–G11) добавлены в наборы (при входе в Play Mode):\n" + log.ToString().TrimEnd());
     }
 
     private static void Create(StringBuilder log)

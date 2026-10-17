@@ -97,7 +97,7 @@ public static class DemoTugWorkScenario
         s.assessment = assessment;
     }
 
-    /// <summary>Набор критериев 19-03: маршрутные и «Швартовка» выключены (критерии работы буксира — 19.4в).</summary>
+    /// <summary>Набор критериев 19-03: маршрутные и «Швартовка» выключены; оценивается работа буксира — G5–G11 (19.4в; G1–G4 — только если буксир вызывался).</summary>
     public static AssessmentSettings Assessment()
     {
         AssessmentSettings a = DemoBerthScenario.Assessment();

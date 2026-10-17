@@ -497,6 +497,29 @@ public static class DemoAssessmentRuns
             case "tugberth_late": plan.LinesMaxGapM = 8.0; plan.TugCallDelayS = 120.0; break;   // вызвал через 2 мин — судно снесло ветром
         }
     }
+    /// <summary>
+    /// 19.4в, 19-03 (TugWorkSimulation, свой буксир, клиент Mariner, ветер 15 уз): правильно (по командам лоцмана); не слушает команды
+    /// (толкает и держит всё время «малым» 50 %); опаздывает (ступень лоцмана — через 40 с); полный до причала (100 % до кранцев,
+    /// дальше по командам); быстрый подход (касание на 0,8 уз); под углом (курс подхода 45° от перпендикуляра к борту);
+    /// рано отпустил упор (упор 0 через 10 с после «держите»).
+    /// </summary>
+    public static readonly string[] TugWorkVariants =
+        { "tugwork_correct", "tugwork_ignore", "tugwork_late", "tugwork_full", "tugwork_fast", "tugwork_angle", "tugwork_release" };
+
+    public static void ConfigureTugWork(TugWorkPlan plan, string variant)
+    {
+        plan.Name = Title(variant);
+        switch (variant)
+        {
+            case "tugwork_ignore": plan.IgnorePilot = true; plan.PushPower = 0.5; break;
+            case "tugwork_late": plan.PilotDelayS = 40.0; break;
+            case "tugwork_full": plan.FixedPush = true; plan.PushPower = 1.0; break;
+            case "tugwork_fast": plan.ApproachKn = 0.8; break;
+            case "tugwork_angle": plan.ApproachAngleDeg = 45.0; break;
+            case "tugwork_release": plan.ReleaseEarlyS = 10.0; break;
+        }
+    }
+
     public static string Title(string variant)
     {
         switch (variant)
@@ -524,6 +547,13 @@ public static class DemoAssessmentRuns
             case "tugberth_none": return "с буксиром: без буксира";
             case "tugberth_full": return "с буксиром: толкать полной тягой";
             case "tugberth_late": return "с буксиром: буксир вызван на 2 мин позже";
+            case "tugwork_correct": return "буксир: правильно, по командам лоцмана";
+            case "tugwork_ignore": return "буксир: не слушает команды (всё время 50 %)";
+            case "tugwork_late": return "буксир: команды с опозданием 40 с";
+            case "tugwork_full": return "буксир: полным до причала";
+            case "tugwork_fast": return "буксир: быстрый подход 0,8 уз";
+            case "tugwork_angle": return "буксир: подход под углом 45°";
+            case "tugwork_release": return "буксир: отпустил упор через 10 с после «держите»";
             default: return variant;
         }
     }

@@ -12,7 +12,11 @@
 //   4. «отходите» — назад ClearPower до ClearDistance, затем джойстик в ноль.
 // События упражнения — в Events, итог — EndReason, этапы — System. 19.4б-2: запись сессии (RecordFolder: track.csv,
 // targets.csv с клиентом «CLIENT», events.csv, mooring.csv — TugWorkSystem.Sample, session.json) и оценка «в шлеме»
-// (LiveAssessment, LiveResult) — как в тренажёре; критерии работы буксира — 19.4в.
+// (LiveAssessment, LiveResult) — как в тренажёре.
+// 19.4в: событие JoystickChanged — установившееся положение рукоятки, как OwnTugDrive (по нему G11 — реакция на команды
+// лоцмана); варианты «за обучающегося» (DemoAssessmentRuns.TugWorkVariants): не слушает команды (IgnorePilot), опаздывает
+// (PilotDelayS), полный до причала (FixedPush), быстрый подход (ApproachKn), под углом (ApproachAngleDeg — подход к точке
+// касания вектором, после касания — поперёк борта), рано отпустил упор (ReleaseEarlyS).
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -37,6 +41,10 @@ public sealed class TugWorkPlan
     public double HoldPower = 0.12, ClearPower = 0.4;
     /// <summary>> 0 — снять упор через … с после «держите» (не дождавшись «отходите»).</summary>
     public double ReleaseEarlyS;
+    /// <summary>19.4в, «не слушает команды»: толкать и держать постоянным PushPower, команды лоцмана упором не выполнять.</summary>
+    public bool IgnorePilot;
+    /// <summary>19.4в, «опаздывает»: ступень лоцмана ставить через … с после команды (до первой — самый малый 25 %).</summary>
+    public double PilotDelayS;
 }
 
 /// <summary>Автомат буксира: положение джойстика по состоянию упражнения.</summary>
@@ -53,7 +61,8 @@ public sealed class TugWorkAutopilot
         ShipDynamicsModel cm = sys.Client.Model;
         int side = sys.WorkSide;
         double nE = side * Math.Cos(cm.Psi), nN = -side * Math.Sin(cm.Psi);   // нормаль рабочего борта наружу
-        double psiD = Math.Atan2(-nE, -nN) + Plan.ApproachAngleDeg * Math.PI / 180.0;
+        // 19.4в: под углом — только подход; после касания — поперёк борта, как толкают
+        double psiD = Math.Atan2(-nE, -nN) + (sys.Done(TugWorkStage.Approach) ? 0.0 : Plan.ApproachAngleDeg * Math.PI / 180.0);
         double ePsi = Math.IEEERemainder(psiD - own.Psi, 2.0 * Math.PI) * 180.0 / Math.PI;
         double rDeg = own.R * 180.0 / Math.PI;
         double yaw = Clamp(KPsi * ePsi - KR * rDeg);
@@ -73,11 +82,23 @@ public sealed class TugWorkAutopilot
             double k = Math.Max(0.0, Math.Min(1.0, (ex - 2.0) / Math.Max(1.0, Plan.SlowDownM)));
             double uD = (Plan.ApproachKn + (Plan.TransitKn - Plan.ApproachKn) * Math.Sqrt(k)) * ShipParameters.KnotsToMs;
             surge = Clamp(Ku * (uD - ru));
+            if (Plan.ApproachAngleDeg != 0.0)
+            {
+                // 19.4в, «под углом»: нос под углом к борту — идти к точке касания вектором (ход и лагом), не по оси буксира,
+                // иначе лагом не успевает и нос бьёт борт вне зоны; скорость — та же по расстоянию до точки
+                double d = Math.Sqrt(ex * ex + ey * ey);
+                double kd = Math.Max(0.0, Math.Min(1.0, (d - 2.0) / Math.Max(1.0, Plan.SlowDownM)));
+                double vD = (Plan.ApproachKn + (Plan.TransitKn - Plan.ApproachKn) * Math.Sqrt(kd)) * ShipParameters.KnotsToMs;
+                double ux = d > 1e-6 ? ex / d : 1.0, uy = d > 1e-6 ? ey / d : 0.0;
+                surge = Clamp(Ku * (vD * ux - ru));
+                sway = Clamp(Kv * (vD * uy - rv));
+            }
         }
         else if (!sys.Done(TugWorkStage.Push))
         {
-            if (Plan.FixedPush) surge = Plan.PushPower;
-            else if (Plan.FollowPilot && sys.PowerStep >= 0) surge = sys.PowerStep * TugJoystick.MenuStep;   // 19.4б-3: ступень лоцмана
+            int step = PilotStep(sys, time);
+            if (Plan.FixedPush || Plan.IgnorePilot) surge = Plan.PushPower;
+            else if (Plan.FollowPilot && step >= 0) surge = step * TugJoystick.MenuStep;   // 19.4б-3: ступень лоцмана
             else
             {
                 BerthReadout br = sys.Client.Readout;
@@ -88,8 +109,12 @@ public sealed class TugWorkAutopilot
             }
         }
         else if (!sys.Done(TugWorkStage.Hold))
+        {
+            int step = PilotStep(sys, time);
             surge = Plan.ReleaseEarlyS > 0 && time - sys.DoneAt(TugWorkStage.Push) >= Plan.ReleaseEarlyS ? 0.0
-                  : Plan.FollowPilot && sys.PowerStep >= 0 ? sys.PowerStep * TugJoystick.MenuStep : Plan.HoldPower;
+                  : Plan.IgnorePilot ? Plan.PushPower
+                  : Plan.FollowPilot && step >= 0 ? step * TugJoystick.MenuStep : Plan.HoldPower;
+        }
         else if (!sys.Done(TugWorkStage.Clear))
         {
             surge = -Plan.ClearPower;
@@ -98,6 +123,24 @@ public sealed class TugWorkAutopilot
         else return JoystickState.Zero;
         if (sys.Done(TugWorkStage.Approach)) sway = 0.0;   // у борта лагом не ходить: кранец с трением о борт разворачивает буксир, корпус касается борта
         return new JoystickState(Unshape(surge), Unshape(sway), Unshape(yaw));
+    }
+
+    // 19.4в: ступень лоцмана, которую ставит автомат; «опаздывает» (PilotDelayS) — каждая команда через … с после подачи,
+    // до первой — самый малый (остаётся у борта); −1 — команд упором ещё не было
+    private readonly List<(double at, int step)> delayed = new List<(double, int)>();
+    private double lastOrderTime = double.NaN;
+
+    private int PilotStep(TugWorkSystem sys, double time)
+    {
+        if (sys.PowerStep < 0 || Plan.PilotDelayS <= 0) return sys.PowerStep;
+        if (!(sys.PowerStepTime == lastOrderTime))
+        {
+            lastOrderTime = sys.PowerStepTime;
+            delayed.Add((sys.PowerStepTime + Plan.PilotDelayS, sys.PowerStep));
+        }
+        int step = 1;
+        foreach ((double at, int s) in delayed) if (at <= time + 1e-9) step = s;
+        return step;
     }
 
     private static double Clamp(double v, double max = 1.0) => v < -max ? -max : v > max ? max : v;
@@ -149,6 +192,8 @@ public sealed class TugWorkSimulation
         var pilot = new TugWorkAutopilot { Plan = Plan };
         Events.Clear();
         MaxClientGapM = 0.0;
+        candidate = published = JoystickState.Zero;
+        candidateDone = true;
         double limit = maxTime > 0 ? maxTime : (s.timeLimitSeconds > 0 ? s.timeLimitSeconds : 1800.0);
 
         // 19.4б-2: запись и оценка — как ExerciseRecorder / ExerciseAssessmentMonitor в тренажёре
@@ -172,6 +217,7 @@ public sealed class TugWorkSimulation
         while (EndReason == ScenarioEndReason.None)
         {
             Drive.Joystick = pilot.Update(System, Own, t);
+            SettleJoystick(Drive.Joystick);
             Drive.Apply(Own, Dt);
             System.Apply(Own, Dt, t);
             Own.Step(Dt);
@@ -200,6 +246,28 @@ public sealed class TugWorkSimulation
             rec.WriteAssessment(LiveResult.ToCsv());
             rec.Close();
         }
+    }
+
+    // 19.4в: событие JoystickChanged — как OwnTugDrive в тренажёре: положение держится SettleS (рукоятка не сдвигалась
+    // больше SettleEps по оси), сдвиг от прошлого события ≥ MinChange по какой-либо оси или возврат в ноль; в событии —
+    // доли упора, % (после мёртвой зоны). По нему оценивается реакция на команды лоцмана (G11).
+    public const double SettleS = 0.5, MinChange = 0.05, SettleEps = 0.02;
+    private JoystickState candidate, published;
+    private double candidateSince;
+    private bool candidateDone = true;
+
+    private void SettleJoystick(JoystickState j)
+    {
+        if (j.DistanceTo(candidate) >= SettleEps) { candidate = j; candidateSince = t; candidateDone = false; return; }
+        if (candidateDone || t - candidateSince < SettleS - 1e-9) return;
+        candidateDone = true;
+        if (candidate.DistanceTo(published) < MinChange && !(candidate.IsZero && !published.IsZero)) return;
+        published = candidate;
+        Publish(new ExerciseEvent(ExerciseEventType.JoystickChanged)
+        {
+            Value = Math.Round(TugJoystick.Shape(candidate.Surge) * 100.0), Value2 = Math.Round(TugJoystick.Shape(candidate.Sway) * 100.0),
+            Index = (int)Math.Round(TugJoystick.Shape(candidate.Yaw) * 100.0), Subject = "рукой"
+        }, keepTime: false);
     }
 
     // Событие: время — от TugWorkSystem (keepTime) или текущее; положение — своего буксира

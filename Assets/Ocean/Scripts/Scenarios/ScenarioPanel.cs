@@ -295,7 +295,7 @@ public class ScenarioPanel : MonoBehaviour
         else
         {
             y -= Gap;
-            string color = a.Failed ? "#FF5A4A" : a.Passed ? "#6FE08A" : "#FFC85A";
+            string color = a.Failed ? "#FF5A4A" : a.Passed ? "#6FE08A" : a.NotAssessed ? "#9AA6B2" : "#FFC85A";
             var b = new StringBuilder($"<b><color={color}>{a.Headline()}</color></b>");
             string reason = DebriefText.VerdictReason(a);
             if (reason.Length > 0) b.Append($"\n<color={color}>{char.ToUpperInvariant(reason[0])}{reason.Substring(1)}</color>");

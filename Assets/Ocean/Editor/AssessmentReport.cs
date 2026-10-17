@@ -10,6 +10,8 @@
 //                             через 45 с / без реакции, отказ ГД «Стоп» через 10 с): причина, время, балл, зачёт;
 //   runs_criteria.csv       — по каждому прогону — все критерии (значение, порог, зачёт, балл);
 //   b3_<вариант>_tracks.svg, c4_<вариант>_tracks.svg — траектории своего судна и целей;
+//   tugberth_runs.csv, tugberth/ — 19-02 (19.3в); tugwork_runs.csv, tugwork/<вариант>/ — 19-03 на своём буксире
+//                             (19.4в: G5–G11, report.html с реакцией на команды лоцмана и графиком упора);
 //   summary.md              — сводка для вставки в ВКР, в том числе проверка «оценка в
 //                             реальном времени = оценка по записи» на прогоне с записью.
 // Сценарии строятся заново (DemoScenario / DemoTrafficScenario) с ассетами параметров
@@ -62,6 +64,7 @@ public static class AssessmentReport
             Runs(dir, md, area, model45, mariner, criteria);
             BerthRuns(dir, md, area, model45);
             TugBerthRuns(dir, md, area, model45);
+            TugWorkRuns(dir, md, area, mariner);
             LiveVsOffline(dir, md, area, model45, mariner, criteria);
         }
         finally { EditorUtility.ClearProgressBar(); }
@@ -189,7 +192,7 @@ public static class AssessmentReport
             DemoAssessmentRuns.Configure(sim, v);
             sim.Run();
             AssessmentResult r = sim.LiveResult;
-            string verdict = r.Failed ? "провал" : r.Passed ? "зачёт" : "незачёт";
+            string verdict = r.VerdictText.ToLowerInvariant();
             runs.Append(sc).Append(';').Append(v).Append(';').Append(Q(DemoAssessmentRuns.Title(v))).Append(';').Append(sim.EndReason).Append(';')
                 .Append(F(sim.EndTime, 1)).Append(';').Append(F(r.Score, 1)).Append(';').Append(r.Passed ? 1 : 0).Append(';').Append(r.Failed ? 1 : 0).Append(';')
                 .Append(Q(r.FailureText)).Append(';').Append(Q(string.Join(" ", r.MandatoryFailed))).Append(';').Append(r.EvaluatedCount).Append(';').Append(r.FailedCount).Append('\n');
@@ -244,6 +247,63 @@ public static class AssessmentReport
             s => DemoTugBerthScenario.Fill(s, area, own, crit), DemoAssessmentRuns.ConfigureTugBerth, true);
     }
 
+    // 19.4в: прогоны 19-03 (TugWorkSimulation, свой буксир, клиент Mariner у причала №2, ветер 15 уз — середина сектора) —
+    // tugwork/<вариант>/ (сессия + report.html: «Работа буксира», реакция на команды, график упора); tugwork_runs.csv — G5–G11.
+    private static void TugWorkRuns(string dir, StringBuilder md, WaterArea area, ShipParameters mariner)
+    {
+        ShipParameters tug = AssetDatabase.LoadAssetAtPath<ShipParameters>(SetupTowing.TugPath);
+        if (tug == null) { tug = ScriptableObject.CreateInstance<ShipParameters>(); tug.name = "ShipParameters_Tug"; ShipPresets.FillTug(tug); }
+        var probe = ScriptableObject.CreateInstance<WaterArea>();
+        DemoWaterArea.Fill(probe);
+        WaterArea a = area.berths != null && area.berths.Count > DemoWaterArea.Berth2Index ? area : probe;   // причал №2 дописывается при входе в Play Mode
+        AssessmentCriteria crit = AssetDatabase.LoadAssetAtPath<AssessmentCriteria>(SetupTugWork.CriteriaPath);
+        if (crit == null) { crit = ScriptableObject.CreateInstance<AssessmentCriteria>(); crit.settings = DemoTugWorkScenario.Assessment(); }
+        string[] codes = { AssessmentCatalog.G5, AssessmentCatalog.G6, AssessmentCatalog.G7, AssessmentCatalog.G8, AssessmentCatalog.G9, AssessmentCatalog.G10, AssessmentCatalog.G11 };
+        var csv = new StringBuilder("variant;title;end_reason;duration_s;stages_done;max_client_gap_m;score;passed;mandatory_failed;live_equals_offline");
+        foreach (string c in codes) csv.Append(';').Append(c.ToLowerInvariant());
+        csv.Append('\n');
+        md.AppendLine($"## Прогоны сценария {DemoTugWorkScenario.Id} (TugWorkSimulation, свой буксир, клиент Mariner, ветер 15 уз)\n");
+        md.AppendLine("| Вариант | Завершение | Время | Заданий | Балл | Итог | Не выполнены обязательные | Прочие не выполнены |");
+        md.AppendLine("|---|---|---|---|---|---|---|---|");
+        var log = new StringBuilder();
+        string root = Path.Combine(dir, "tugwork");
+        foreach (string v in DemoAssessmentRuns.TugWorkVariants)
+        {
+            EditorUtility.DisplayProgressBar("Отчёт C2", $"{DemoTugWorkScenario.Id}: {DemoAssessmentRuns.Title(v)}", 0.95f);
+            var s = ScriptableObject.CreateInstance<ScenarioDefinition>();
+            DemoTugWorkScenario.Fill(s, a, tug, mariner, crit);
+            string folder = Path.Combine(root, v);
+            Directory.CreateDirectory(folder);
+            var sim = new TugWorkSimulation { Scenario = s, RecordFolder = folder };
+            DemoAssessmentRuns.ConfigureTugWork(sim.Plan, v);
+            sim.Run();
+            AssessmentResult r = sim.LiveResult;
+            bool same = SessionAssessment.Assess(SessionReader.Load(folder)).ToCsv() == r.ToCsv();
+            SessionReport.BuildForFolder(folder);
+            var others = new List<string>();
+            foreach (CriterionResult c in r.Items) if (c.Evaluated && !c.Passed && !c.Mandatory) others.Add(c.Code);
+            csv.Append(v).Append(';').Append(Q(DemoAssessmentRuns.Title(v))).Append(';').Append(sim.EndReason).Append(';').Append(F(sim.EndTime, 1)).Append(';')
+               .Append(sim.System.DoneCount).Append(';').Append(F(sim.MaxClientGapM, 1)).Append(';').Append(F(r.Score, 1)).Append(';').Append(r.Passed ? 1 : 0).Append(';')
+               .Append(Q(string.Join(" ", r.MandatoryFailed))).Append(';').Append(same ? 1 : 0);
+            foreach (string code in codes)
+            {
+                CriterionResult c = r.Items.Find(x => x.Code == code);
+                csv.Append(';').Append(c != null && c.Evaluated ? F(c.Value, 4) : "");
+            }
+            csv.Append('\n');
+            md.AppendLine($"| {DemoAssessmentRuns.Title(v)} | {ScenarioText.EndReason(sim.EndReason)} | {ScenarioText.Clock(sim.EndTime)} | {sim.System.DoneCount} из {TugWorkSystem.StageCount} | " +
+                          $"{N(r.Score, 1)} | {r.VerdictText.ToLowerInvariant()} | {string.Join(", ", r.MandatoryFailed)} | {string.Join(", ", others)} |");
+            log.AppendLine($"### {DemoTugWorkScenario.Id} — {DemoAssessmentRuns.Title(v)}{(same ? "" : " (оценка по записи НЕ совпала!)")}\n");
+            foreach (CriterionResult c in r.Items)
+                if (c.Info.Group == AssessmentGroup.Towing)
+                    log.AppendLine($"- {c.Code} {c.Info.Title}: {AssessmentResult.ValueText(c)} — {(c.Evaluated ? c.Passed ? "да" : "нет" : "не оценивался")}; {Md(c.Note)}");
+            log.AppendLine();
+        }
+        File.WriteAllText(Path.Combine(dir, "tugwork_runs.csv"), csv.ToString(), Utf8Bom);
+        md.AppendLine();
+        md.Append(log);
+    }
+
     private static void RunBerthSet(string dir, StringBuilder md, WaterArea area, ShipParameters own, AssessmentCriteria crit, string id, string name,
                                     string[] variants, System.Action<ScenarioDefinition> fill, System.Action<BerthingPlan, string> configure, bool towing)
     {
@@ -286,7 +346,7 @@ public static class AssessmentReport
                 csv.Append(';').Append(c != null && c.Evaluated ? F(c.Value, 4) : "");
             }
             csv.Append('\n');
-            string verdict = r.Failed ? "провал" : r.Passed ? "зачёт" : "незачёт";
+            string verdict = r.VerdictText.ToLowerInvariant();
             md.AppendLine($"| {DemoAssessmentRuns.Title(v)} | {ScenarioText.EndReason(sim.EndReason)} | {ScenarioText.Clock(sim.EndTime)} | {N(sim.MaxImpactKn, 2)} | {N(r.Score, 1)} | {verdict} | {string.Join(", ", r.MandatoryFailed)} | {string.Join(", ", others)} |");
             log.AppendLine($"### {id} — {DemoAssessmentRuns.Title(v)}{(same ? "" : " (оценка по записи НЕ совпала!)")}\n");
             foreach (string l in sim.Log) log.AppendLine($"- {l}");

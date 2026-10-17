@@ -3319,6 +3319,7 @@ MonoBehaviour:
   keyboardShortcuts: 0
   motionModel: 0
   debugForceTonnes: 0
+  alignHullCentre: 1
 --- !u!114 &440562508
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -11430,6 +11431,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ScenarioRunner
   scenarios:
   - {fileID: 11400000, guid: ce4e31bab6f208346b7adb272fc5db8c, type: 2}
+  - {fileID: 11400000, guid: 5b111780a61e0ae4094ed7d49bd300a1, type: 2}
+  - {fileID: 11400000, guid: fa2fd9e42cc20704a9cb0b889f6cbc51, type: 2}
   - {fileID: 11400000, guid: dec80650bea5c374785aa021cbeb333d, type: 2}
   - {fileID: 11400000, guid: 5cbacf9842e397148b0c5591cf024790, type: 2}
   - {fileID: 11400000, guid: 754734c4ec4c6a9409b61718076eb779, type: 2}
@@ -11474,6 +11477,7 @@ MonoBehaviour:
   customRoot: 
   runner: {fileID: 1422889051}
   navigation: {fileID: 440562507}
+  stations: {fileID: 0}
   currentSession: 
   trackRows: 0
   eventRows: 0
@@ -14208,6 +14212,8 @@ MonoBehaviour:
   - {x: 2.7234, y: 2.8, z: 2.4835296}
   - {x: 0.41065836, y: 0.54499996, z: -7.596471}
   - {x: 5.036142, y: 0.54499996, z: -7.596471}
+  tugParameters: {fileID: 0}
+  tugJoystickOffset: {x: 0, y: 0, z: 0}
 --- !u!23 &1664263323 stripped
 MeshRenderer:
   m_CorrespondingSourceObject: {fileID: 2380718651202138832, guid: 86087020c6b9c144492a794e663e12f7, type: 3}

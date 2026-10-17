@@ -53,11 +53,14 @@ public class SessionAssessmentSummary
     public bool passed, failed;
     public string failure = "";
     public int criteria_evaluated, criteria_failed, mandatory_failed;
+    /// <summary>19.4в: «без оценки» — оценивать нечего (не незачёт).</summary>
+    public bool not_assessed;
 
     public static SessionAssessmentSummary From(AssessmentResult r) => r == null ? new SessionAssessmentSummary() : new SessionAssessmentSummary
     {
         assessed = true, score = double.IsNaN(r.Score) ? 0 : Math.Round(r.Score, 1), passed = r.Passed, failed = r.Failed,
-        failure = r.FailureText, criteria_evaluated = r.EvaluatedCount, criteria_failed = r.FailedCount, mandatory_failed = r.MandatoryFailed.Count
+        failure = r.FailureText, criteria_evaluated = r.EvaluatedCount, criteria_failed = r.FailedCount, mandatory_failed = r.MandatoryFailed.Count,
+        not_assessed = r.NotAssessed
     };
 }
 
@@ -77,6 +80,13 @@ public sealed class AssessmentResult
     public readonly List<string> MandatoryFailed = new List<string>();
     public bool Passed;
     public double PassScore;
+    /// <summary>
+    /// 19.4в: «без оценки» — упражнение закончено, провала нет, балла нет (ни один критерий с весом не оценён) и обязательные
+    /// не провалены: оценивать нечего, это не незачёт (было «— из 100 — НЕЗАЧЁТ» в 19-03 до критериев G5–G11).
+    /// </summary>
+    public bool NotAssessed => Final && !Failed && double.IsNaN(Score) && MandatoryFailed.Count == 0;
+    /// <summary>Вердикт: «ЗАЧЁТ», «НЕЗАЧЁТ», «ПРОВАЛ», «БЕЗ ОЦЕНКИ».</summary>
+    public string VerdictText => Failed ? "ПРОВАЛ" : Passed ? "ЗАЧЁТ" : NotAssessed ? "БЕЗ ОЦЕНКИ" : "НЕЗАЧЁТ";
 
     public int EvaluatedCount { get { int n = 0; foreach (CriterionResult c in Items) if (c.Evaluated) n++; return n; } }
     public int FailedCount { get { int n = 0; foreach (CriterionResult c in Items) if (c.Evaluated && !c.Passed) n++; return n; } }
@@ -181,7 +191,7 @@ public sealed class AssessmentResult
     public string Headline()
     {
         string score = double.IsNaN(Score) ? "—" : Num(Score);
-        string verdict = Failed ? "ПРОВАЛ" : Passed ? "ЗАЧЁТ" : "НЕЗАЧЁТ";
+        string verdict = VerdictText;
         return Final ? $"Оценка: {score} из 100 — {verdict}" : $"Текущая оценка: {score} из 100 (предварительно)";
     }
 
@@ -189,13 +199,14 @@ public sealed class AssessmentResult
     public string ToPanelText(bool showFailure = true)
     {
         var b = new StringBuilder();
-        string color = Failed ? "#FF5A4A" : Passed ? "#6FE08A" : "#FFC85A";
+        string color = Failed ? "#FF5A4A" : Passed ? "#6FE08A" : NotAssessed ? "#9AA6B2" : "#FFC85A";
         b.AppendLine($"<b><color={color}>{Headline()}</color></b>");
         if (showFailure && Failed) b.AppendLine($"<color=#FF5A4A>Провал: {FailureText}</color>");
         if (Final && !Failed && !Passed)
         {
             if (MandatoryFailed.Count > 0) b.AppendLine($"<color=#FFC85A>Не выполнены обязательные критерии: {string.Join(", ", MandatoryFailed)}</color>");
             else if (!double.IsNaN(Score)) b.AppendLine($"<color=#FFC85A>Балл ниже проходного ({Num(PassScore)})</color>");
+            else b.AppendLine("<color=#9AA6B2>Нечего оценивать: ни один критерий сценария не оценён</color>");
         }
         if (GroupScores.Count > 0)
         {
@@ -263,7 +274,7 @@ public sealed class AssessmentResult
         b.Append(";балл;;");
         CsvFormat.Num(b, PassScore, 2);
         b.Append(";;").Append(Passed ? '1' : '0').Append(";;;;");
-        CsvFormat.Text(b, Failed ? "провал: " + FailureText : MandatoryFailed.Count > 0 ? "не выполнены: " + string.Join(", ", MandatoryFailed) : "");
+        CsvFormat.Text(b, Failed ? "провал: " + FailureText : MandatoryFailed.Count > 0 ? "не выполнены: " + string.Join(", ", MandatoryFailed) : NotAssessed ? "без оценки: нечего оценивать" : "");
         b.Append('\n');
         return b.ToString();
     }

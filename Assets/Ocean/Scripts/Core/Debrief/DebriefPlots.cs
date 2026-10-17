@@ -206,7 +206,59 @@ public static class DebriefPlots
         }
         AddMooring(plots, s);
         AddTowing(plots, s);
+        AddTugPower(plots, s);
         return plots;
+    }
+
+    /// <summary>
+    /// 19.4в: упражнение на своём буксире — упор, %: названный лоцманом (команды упором, ступенями), рукоятка (установившиеся
+    /// положения JoystickChanged, ход) и упор колонок (mooring.csv, доля тяги на гаке); отметки — задания. Только если были
+    /// команды упором (иначе графика нет — прежние отчёты не меняются).
+    /// </summary>
+    private static void AddTugPower(List<DebriefPlot> plots, RecordedSession s)
+    {
+        var order = new List<Vector2>(); var handle = new List<Vector2>(); var units = new List<Vector2>();
+        double end = 0.0;
+        foreach (ExerciseEvent e in s.Events) end = Math.Max(end, e.Time);
+        if (s.Mooring.Count > 0) end = Math.Max(end, s.Mooring[s.Mooring.Count - 1].Time);
+        float xe = (float)(end / 60.0);
+        foreach (ExerciseEvent e in s.Events)
+        {
+            float x = (float)(e.Time / 60.0);
+            if (TugWorkReaction.IsPowerOrder(e)) Step(order, x, TugWorkReaction.StepOf(e.Value) * 25f);
+            else if (e.Type == ExerciseEventType.JoystickChanged) Step(handle, x, (float)e.Value);
+            else if (e.Type == ExerciseEventType.TugWorkStage && e.Index == (int)TugWorkStage.Hold && order.Count > 0)
+            {
+                order.Add(new Vector2(x, order[order.Count - 1].y));   // после «концы закреплены» команд упором нет
+                order.Add(new Vector2(x, float.NaN));
+            }
+        }
+        if (order.Count == 0) return;
+        if (!float.IsNaN(order[order.Count - 1].y)) order.Add(new Vector2(xe, order[order.Count - 1].y));
+        if (handle.Count > 0) handle.Add(new Vector2(xe, handle[handle.Count - 1].y));
+        int step = Math.Max(1, s.Mooring.Count / MaxPoints);
+        for (int i = 0; i < s.Mooring.Count; i += step)
+        {
+            MooringSample m = s.Mooring[i];
+            if (m.Towing.Present && !double.IsNaN(m.Towing.PowerPct)) units.Add(new Vector2((float)(m.Time / 60.0), (float)m.Towing.PowerPct));
+        }
+        var p = new DebriefPlot { Key = "tug_power", Title = "Упор буксира: команда лоцмана и рукоятка", ShortTitle = "упор", XLabel = "Время, мин", YLabel = "Упор, % тяги на гаке",
+                                  Caption = "Упор, названный лоцманом (ступени 25 %), установившееся положение рукоятки (ход; < 0 — назад) и суммарный упор колонок; отметки — задания" };
+        p.Add("команда лоцмана", SvgPlot.Dash.Solid, order);
+        p.Add("рукоятка", SvgPlot.Dash.Dashed, handle);
+        p.Add("упор колонок", SvgPlot.Dash.Dotted, units);
+        foreach (ExerciseEvent e in s.Events)
+            if (e.Type == ExerciseEventType.TugWorkStage)
+                p.AddMark((float)(e.Time / 60.0), e.Index == (int)TugWorkStage.Approach ? "касание" : e.Index == (int)TugWorkStage.Push ? "у кранцев"
+                                                  : e.Index == (int)TugWorkStage.Hold ? "концы" : "отошёл", PlotMarkKind.Berthing);
+        plots.Add(p);
+    }
+
+    // Ступенчатый ряд: прежнее значение до x, затем новое
+    private static void Step(List<Vector2> l, float x, float y)
+    {
+        if (l.Count > 0 && !float.IsNaN(l[l.Count - 1].y)) l.Add(new Vector2(x, l[l.Count - 1].y));
+        l.Add(new Vector2(x, y));
     }
 
     /// <summary>
