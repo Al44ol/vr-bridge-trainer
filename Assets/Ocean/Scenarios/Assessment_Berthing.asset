@@ -387,3 +387,17 @@ MonoBehaviour:
       pass: 30
       zero: 60
       weight: 8
+    - code: G12
+      enabled: 1
+      mandatory: 0
+      full: 60
+      pass: 90
+      zero: 180
+      weight: 4
+    - code: G13
+      enabled: 1
+      mandatory: 0
+      full: 2
+      pass: 3
+      zero: 6
+      weight: 4
