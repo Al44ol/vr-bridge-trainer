@@ -324,6 +324,9 @@ public class ExerciseRecorder : MonoBehaviour
             string folder = SessionStorage.CreateFolder(Root, meta.session_id);
             meta.session_id = Path.GetFileName(folder);
             session = new SessionRecorder(folder, meta);
+            // 21.1: копия сценария, по которому идёт упражнение (встроенный или из файла) — его можно открыть и повторить
+            string copy = ScenarioFiles.ToFileText(s);
+            if (copy != null) session.Writer.Replace(SessionFormat.ScenarioCopyFile, copy);
         }
         catch (Exception ex)
         {

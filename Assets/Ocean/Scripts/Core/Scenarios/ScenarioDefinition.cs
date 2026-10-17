@@ -198,7 +198,13 @@ public class ScenarioDefinition : ScriptableObject
     [Tooltip("19.4б-2: тип своего судна — при загрузке переключается сам (буксир — упражнение на буксире)")]
     public ScenarioShipType ownShipType = ScenarioShipType.Default;
 
-    /// <summary>19.3б-2: направление ветра при загрузке: заданное или случайное в секторе (random — источник случайных чисел).</summary>
+    /// <summary>21.1: сценарий загружен из файла (путь); пусто — встроенный ассет. В ассет и в файл не пишется.</summary>
+    [NonSerialized] public string sourceFile;
+
+    /// <summary>21.1: сценарий из файла (не встроенный).</summary>
+    public bool IsFromFile => !string.IsNullOrEmpty(sourceFile);
+
+    /// <summary>19.3б-2:направление ветра при загрузке: заданное или случайное в секторе (random — источник случайных чисел).</summary>
     public double DrawWindFromDeg(System.Random random)
     {
         if (windRandomSectorDeg <= 0f || random == null) return windFromDeg;

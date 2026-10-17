@@ -210,6 +210,15 @@ Unity Test Runner → EditMode (сейчас **250**): `TestResults.xml` — п�
   - **session.json** → `scenario.tug_work.angle_event`, `event_gap_min_m` … `end_zone_x`;
   - **прогоны** — `Tools/VR Bridge/Assessment Report` → `ThesisData/Assessment/<дата>/tugevent_runs.csv` (G5–G13), `tugevent/<вариант>/` (запись, report.html с таблицей «Случайное событие»); с 19.4г-2 — пятый вариант `tugevent_fast` («событие не развилось», табл. 19.34), раздел summary.md (ThesisNotes, табл. 19.34);
   - **ассет** `Scenario_19-03_TugWork.asset` — версия 4, обновляется сам при входе в Play Mode; G12, G13 дописываются в наборы сами (AddMissing).
+### 2.6ш. Сценарии и акватории в файлах (запрос 21.1)
+- 🎮 Видно: в выборе упражнения в шлеме и в окне инструктора — сценарии из файлов с пометкой «из файла» / «· файл»; кнопка окна инструктора «Обновить файлы» (итог и ошибки — в «События»).
+- Вне шлема:
+  - **папка** `Документы\VRBridgeTrainer\` (на Quest — папка приложения): `Мои сценарии\*.json`, `Мои акватории\*.json`, `Образцы\` (встроенные сценарии и акватория в формате файла — пишутся при запуске, если изменились), `Загрузка сценариев.txt` (что загрузилось, ошибки и предупреждения по файлам), `ПРОЧТИ.txt`;
+  - **формат** — `VRBridgeTrainer.Scenario` / `VRBridgeTrainer.Area`, версия 1 (Core `ScenarioFile`, `FieldJson`, `JsonText`; ThesisNotes 21.1);
+  - **запись упражнения** — `scenario.json` в папке сессии (копия сценария, по которому шло упражнение), `session.json` → `scenario.source_file` (имя файла; пусто — встроенный);
+  - **консоль** — `[Сценарии] Из файлов: сценариев N, акваторий M…`, при ошибках — полный отчёт;
+  - тесты `ScenarioFileTests` (7).
+
 ### 2.7. Источники значений параметров
 `Assets/Ocean/Settings/ShipParameters_Sources.md` — откуда взято каждое значение ShipParameters (Mariner, KCS, Model45m, допущения).
 

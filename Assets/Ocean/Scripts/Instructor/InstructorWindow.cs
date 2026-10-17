@@ -369,7 +369,7 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
             {
                 scenarioIndex = Mathf.Clamp(scenarioIndex, 0, list.Count - 1);
                 ScenarioDefinition s = list[scenarioIndex];
-                scenarioLabel.text = s != null ? $"<b>{s.id}</b> {s.title}" : "—";
+                scenarioLabel.text = s != null ? $"<b>{s.id}</b> {s.title}" + (s.IsFromFile ? " <size=80%><color=#9AA6B2>· файл</color></size>" : "") : "—";
             }
         }
         if (idField != null && !idField.isFocused && recorder != null && idField.text != recorder.TraineeId) idField.text = recorder.TraineeId;
@@ -583,6 +583,32 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         if (s != null) runner.Load(s);
     }
 
+    // 21.1: «Обновить файлы» — сценарии из «Мои сценарии» заново; итог и проблемы по файлам — в «События»
+    private void ReloadFiles()
+    {
+        ScenarioFiles files = ScenarioFiles.Instance;
+        if (files == null) return;
+        files.Reload();
+        ScenarioLibraryReport rep = files.LastReport;
+        if (rep == null) return;
+        string clock = $"<color=#9AA6B2>{files.LastLoad:HH:mm:ss}</color>  ";
+        events.Add(clock + $"<color={(rep.ErrorFiles > 0 ? "#FFC85A" : "#6FE08A")}>{rep.Summary()}</color>");
+        int shown = 0;
+        foreach (ScenarioLoadResult f in rep.Files)
+        {
+            if (f.Errors.Count == 0 && f.Warnings.Count == 0) continue;
+            if (++shown > 6) { events.Add(clock + $"<color=#9AA6B2>… подробно — {ScenarioFolder.ReportFile}</color>"); break; }
+            string first = f.Errors.Count > 0 ? f.Errors[0] : f.Warnings[0];
+            int more = f.Errors.Count + f.Warnings.Count - 1;
+            events.Add(clock + $"<color={(f.Errors.Count > 0 ? "#FF7A7A" : "#FFC85A")}>{(f.Errors.Count > 0 ? "не загружен" : "предупреждение")}: " +
+                       $"{System.IO.Path.GetFileName(f.File)} — {first}{(more > 0 ? $" (и ещё {more})" : "")}</color>");
+        }
+        eventsDirty = true;
+        int n = runner != null ? runner.scenarios.Count : 0;
+        scenarioIndex = n > 0 ? Mathf.Clamp(scenarioIndex, 0, n - 1) : 0;
+        nextRefresh = 0f;
+    }
+
     private void StepScenario(int dir)
     {
         int n = runner != null ? runner.scenarios.Count : 0;
@@ -692,7 +718,7 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         mapLive = Layer<InstructorMapGraphic>("MapLive");
 
         mapControls = Panel(mapRect, "MapControls", new Color(0f, 0f, 0f, 0f));
-        Place(mapControls, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(8f, -8f), new Vector2(1000f, RowHeight), new Vector2(0f, 1f));
+        Place(mapControls, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(8f, -8f), new Vector2(1130f, RowHeight), new Vector2(0f, 1f));
         float x = 0f;
         Button(mapControls, ref x, 0f, 44f, "+", NeutralColor, () => Zoom(1.5f, mapRect.rect.center));
         Button(mapControls, ref x, 0f, 44f, "−", NeutralColor, () => Zoom(1f / 1.5f, mapRect.rect.center));
@@ -710,8 +736,12 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
                () => plotter != null && plotter.RevealAll ? "Планшет: все цели" : "Планшет: обнаруженные",
                () => plotter != null && plotter.RevealAll ? WarnColor : NeutralColor, () => plotter != null);
         // 19.2 (A): вид шлема на весь монитор (зеркало XR — полная частота, без лишней отрисовки)
-        Button(mapControls, ref x, 0f, 200f, "Шлем на весь экран", NeutralColor,
+        Button(mapControls, ref x, 0f, 190f, "Шлем на весь экран", NeutralColor,
                () => station.SetMode(InstructorStation.DisplayMode.Mirror));
+        // 21.1: сценарии из папки «Мои сценарии» — загрузить заново (итог и ошибки — в «События»)
+        Button(mapControls, ref x, 0f, 155f, "Обновить файлы", NeutralColor, ReloadFiles, null,
+               () => ScenarioFiles.Instance != null && ScenarioFiles.Instance.LastReport != null && ScenarioFiles.Instance.LastReport.ErrorFiles > 0 ? WarnColor : NeutralColor,
+               () => ScenarioFiles.Instance != null);
 
         scaleText = MakeText(mapRect, "", 14f, MutedColor, TextAlignmentOptions.BottomLeft);
         Place(scaleText.rectTransform, Vector2.zero, Vector2.zero, new Vector2(10f, 8f), new Vector2(900f, 24f), Vector2.zero);

@@ -68,6 +68,8 @@ public static class SessionFormat
     public const string ReportFile = "report.html";
     /// <summary>19.2б-3б: состояние у причала (MooringRecording); только если причал понадобился.</summary>
     public const string MooringFile = "mooring.csv";
+    /// <summary>21.1: копия сценария, по которому шло упражнение (формат файла сценария, ScenarioFile).</summary>
+    public const string ScenarioCopyFile = "scenario.json";
     public static string MooringHeader => MooringRecording.Header;
 
     public const string TrackHeader =
@@ -305,6 +307,8 @@ public class SessionScenario
     public string own_ship_type = "";
     /// <summary>19.4б-2: упражнение на своём буксире (enabled = false — нет; у записей до 19.4б-2 поля нет).</summary>
     public SessionTugWork tug_work = new SessionTugWork();
+    /// <summary>21.1: сценарий из файла — имя файла (папка «Мои сценарии»); пусто — встроенный. Сам сценарий — scenario.json рядом.</summary>
+    public string source_file = "";
 
     public static SessionScenario From(ScenarioDefinition s)
     {
@@ -323,7 +327,8 @@ public class SessionScenario
             wind_kn = SessionMeta.R(s.windKnots), wind_from_deg = SessionMeta.R(s.windFromDeg), wind_random_sector_deg = SessionMeta.R(s.windRandomSectorDeg),
             tug_available = s.tugAvailable,
             own_ship_type = s.ownShipType.ToString(),
-            tug_work = SessionTugWork.From(s)
+            tug_work = SessionTugWork.From(s),
+            source_file = s.IsFromFile ? System.IO.Path.GetFileName(s.sourceFile) : ""
         };
         if (s.initial != null)
             r.initial = new SessionInitial
@@ -536,7 +541,7 @@ public class SessionRecording
     public double fixed_dt_s;
     public string time_base = "t_s — время упражнения (симуляционное) от «Начать», с";
     public string coordinates = "x_e_m — восток, y_n_m — север, м; курс 0 = N, по часовой; руль и XTE > 0 — правый борт / правее линии пути";
-    public List<string> files = new List<string> { SessionFormat.TrackFile, SessionFormat.TargetsFile, SessionFormat.EventsFile, SessionFormat.MetaFile, SessionFormat.AssessmentFile, SessionFormat.ReportFile };
+    public List<string> files = new List<string> { SessionFormat.TrackFile, SessionFormat.TargetsFile, SessionFormat.EventsFile, SessionFormat.MetaFile, SessionFormat.AssessmentFile, SessionFormat.ReportFile, SessionFormat.ScenarioCopyFile };
     /// <summary>Названия положений телеграфа по номеру (столбец telegraph, index события TelegraphChanged).</summary>
     public List<string> telegraph_positions = new List<string>();
     /// <summary>19.2б-3б: состояния концов по номеру (столбцы *_state в mooring.csv, MooringLineStatus).</summary>

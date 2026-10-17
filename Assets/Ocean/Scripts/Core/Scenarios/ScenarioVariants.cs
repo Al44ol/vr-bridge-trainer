@@ -52,6 +52,7 @@ public static class ScenarioVariants
 
         ScenarioDefinition v = UnityEngine.Object.Instantiate(s);
         v.name = s.name + idSuffix;
+        v.sourceFile = s.sourceFile;   // 21.1: [NonSerialized] — Instantiate не копирует
         v.id = s.id + idSuffix;
         v.title = s.title + titleSuffix;
         if (!string.IsNullOrEmpty(briefingNote))
