@@ -5,7 +5,8 @@
 // пустое имя, имя встроенной, границы наоборот, глубина ≤ 0. Предупреждения — знаки, мели и
 // причалы вне района, многоугольник меньше 3 вершин, фарватер меньше 2 точек, повтор имён знаков;
 // 21.2б — огонь знака не по МАМС (AidEditing.LightWarning); 21.3а — у мелей и суши стороны
-// пересекаются, фигура целиком вне района, мель не мельче глубины по умолчанию.
+// пересекаются, фигура целиком вне района, мель не мельче глубины по умолчанию; 21.3б — фарватер
+// вне района, у причала с водной стороны суша.
 // ============================================================
 using System.Collections.Generic;
 
@@ -67,6 +68,7 @@ public static class AreaChecks
                 if (f == null) continue;
                 if (f.axis == null || f.axis.Count < 2) r.Warnings.Add($"Фарватер «{f.name}»: меньше 2 точек оси.");
                 if (f.width <= 0f) r.Warnings.Add($"Фарватер «{f.name}»: ширина должна быть больше 0.");
+                if (PolygonEditing.OutsideBounds(a, f.axis)) r.Warnings.Add($"Фарватер «{f.name}» вне района.");   // 21.3б
             }
         if (a.berths != null)
             for (int i = 0; i < a.berths.Count; i++)
@@ -75,6 +77,8 @@ public static class AreaChecks
                 if (b == null) continue;
                 if (!a.InBounds(b.a) || !a.InBounds(b.b)) r.Warnings.Add($"Причал № {i} «{b.name}» вне района.");
                 if (b.Length < 20.0) r.Warnings.Add($"Причал № {i} «{b.name}»: короче 20 м.");
+                else if (PolygonEditing.WaterSideOnLand(a, b))   // 21.3б
+                    r.Warnings.Add($"Причал № {i} «{b.name}»: с водной стороны суша — кромка перевёрнута? («Вода с другой стороны»).");
             }
         return r;
     }

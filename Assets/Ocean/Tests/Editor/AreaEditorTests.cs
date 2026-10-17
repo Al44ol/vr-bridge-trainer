@@ -411,4 +411,90 @@ public class AreaEditorTests
         Assert.AreEqual(40f, back.Area.shoals[0].depth, 1e-6);
         Assert.AreEqual(0f, back.Area.DepthAt(new WorldPosition(10, 50)), 1e-6, "суша в тренажёре — глубина 0");
     }
+
+    // ─────────── 21.3б: фарватеры и причалы ───────────
+    [Test]
+    public void Lines_FairwayAndBerth_AddPointsNamesHit()
+    {
+        AreaDocument doc = AreaDocument.New("Линии");
+        WaterArea a = doc.Area;
+        AreaShape f = PolygonEditing.Add(a, AreaShapeKind.Fairway, new List<WorldPosition> { new WorldPosition(0, -1000), new WorldPosition(0, 0), new WorldPosition(500, 500) });
+        Assert.AreEqual("Фарватер-1", PolygonEditing.Name(a, f));
+        Assert.AreEqual(370.4f, a.fairways[0].width, 1e-3, "2 кбт");
+        Assert.AreEqual(1000.0 + Math.Sqrt(2) * 500.0, PolygonEditing.PolylineLength(a.fairways[0].axis), 1e-6);
+        Assert.IsTrue(PolygonEditing.Add(a, AreaShapeKind.Berth, new List<WorldPosition> { new WorldPosition(0, 0), new WorldPosition(15, 0) }).IsNone, "короче 20 м");
+        AreaShape b = PolygonEditing.Add(a, AreaShapeKind.Berth, new List<WorldPosition> { new WorldPosition(1000, 0), new WorldPosition(1100, 0) });
+        Assert.AreEqual("Причал-1", PolygonEditing.Name(a, b));
+        Assert.AreEqual(6f, a.berths[0].depthM, 1e-6);
+
+        // Точки копией: причал — [a, b]
+        List<WorldPosition> pb = PolygonEditing.Points(a, b);
+        pb[1] = new WorldPosition(1150, 0);
+        Assert.AreEqual(1100.0, a.berths[0].b.East, 1e-9, "копия не меняет причал");
+        PolygonEditing.SetPoints(a, b, pb);
+        Assert.AreEqual(150.0, a.berths[0].Length, 1e-9);
+        Assert.IsNull(PolygonEditing.Vertices(a, b));
+        Assert.AreEqual(2, PolygonEditing.MinPoints(AreaShapeKind.Fairway));
+        Assert.IsFalse(PolygonEditing.Closed(AreaShapeKind.Fairway));
+
+        // Попадание: 1 пикс. = 2 м, центр окна (500; 400) — точка (500; 0)
+        var v = new MapViewport { Follow = false, WidthPx = 1000, HeightPx = 800, MetersPerPixel = 2.0, Center = new WorldPosition(500, 0) };
+        v.ToPixel(new WorldPosition(1050, 4), out double bx, out double by);
+        Assert.AreEqual(b, PolygonEditing.HitShapeAt(a, v, bx, by), "кромка причала (4 м = 2 пикс.)");
+        v.ToPixel(new WorldPosition(250, 260), out double fx, out double fy);
+        Assert.AreEqual(f, PolygonEditing.HitShapeAt(a, v, fx, fy), "ось фарватера");
+        v.ToPixel(new WorldPosition(300, -600), out double ex, out double ey);
+        Assert.IsTrue(PolygonEditing.HitShapeAt(a, v, ex, ey).IsNone);
+
+        // Ручки середин у ломаной: 2 стороны, замыкания нет
+        List<WorldPosition> ax = a.fairways[0].axis;
+        Assert.AreEqual(2, PolygonEditing.EdgeCount(ax, false));
+        v.ToPixel(PolygonEditing.Midpoint(ax, 2), out double cx, out double cy);
+        Assert.AreEqual(-1, PolygonEditing.NearestMidpoint(ax, v, cx, cy, 5.0, closed: false), "середины замыкания у фарватера нет");
+        Assert.IsTrue(PolygonEditing.RemoveVertex(ax, 1, 2));
+        Assert.IsFalse(PolygonEditing.RemoveVertex(ax, 0, 2), "у фарватера не меньше 2 точек");
+        Assert.AreEqual(f, PolygonEditing.Find(a, AreaShapeKind.Fairway, "Фарватер-1"));
+    }
+
+    [Test]
+    public void Lines_Berth_FlipShipChecks_Saved()
+    {
+        WaterArea demo = Demo();
+        ScenarioCatalog cat = Catalog(demo);
+        string root = TempRoot();
+        AreaDocument doc = AreaDocument.New("Причалы");
+        WaterArea a = doc.Area;
+        a.land.Add(new LandArea { name = "Берег", vertices = Square(0, 0, 500) });
+        // Кромка по южному краю берега A(0;0)→B(200;0): вода справа — к югу, верно
+        AreaShape s = PolygonEditing.Add(a, AreaShapeKind.Berth, new List<WorldPosition> { new WorldPosition(0, 0), new WorldPosition(200, 0) });
+        BerthArea b = a.berths[s.Index];
+        Assert.IsFalse(PolygonEditing.WaterSideOnLand(a, b));
+        PolygonEditing.Flip(b);
+        Assert.IsTrue(PolygonEditing.WaterSideOnLand(a, b), "перевёрнута — вода на берегу");
+        Assert.IsTrue(AreaChecks.Check(a, cat).Warnings.Exists(w => w.Contains("Причал-1") && w.Contains("перевёрнута")));
+        PolygonEditing.Flip(b);
+        Assert.AreEqual(0.0, b.a.East, 1e-9);
+
+        // Под судно 161 м (Mariner): кранцы крупнее, кнехты через 0,2·L, глубина ≥ d + 3, кромка на месте
+        float d0 = b.fenderOuterDiameterM;
+        PolygonEditing.ApplyShip(b, 161.0, 23.2, 8.0, 0.6);
+        Assert.Greater(b.fenderOuterDiameterM, d0);
+        Assert.AreEqual(32f, b.bollardSpacingM, 1e-3);
+        Assert.AreEqual(11f, b.depthM, 1e-3);
+        Assert.AreEqual(200.0, b.b.East, 1e-9);
+        b.depthM = 15f;
+        PolygonEditing.ApplyShip(b, 45.0, 10.0, 3.0, 0.6);
+        Assert.AreEqual(15f, b.depthM, 1e-3, "глубже нужной — не уменьшается");
+        Assert.AreEqual(9f, b.bollardSpacingM, 1e-3, "45 м: кнехты через 0,2·L = 9 м");
+
+        PolygonEditing.Add(a, AreaShapeKind.Fairway, new List<WorldPosition> { new WorldPosition(50000, 0), new WorldPosition(51000, 0) });
+        Assert.IsTrue(AreaChecks.Check(a, cat).Warnings.Exists(w => w.Contains("Фарватер-1") && w.Contains("вне района")));
+
+        doc.Commit();
+        Assert.AreEqual(AreaSaveStatus.Saved, doc.Save(root, cat, false, new DateTime(2026, 10, 18, 12, 0, 0)));
+        AreaDocument back = AreaDocument.Open(doc.FilePath, new List<string>());
+        Assert.AreEqual(15f, back.Area.berths[0].depthM, 1e-6);
+        Assert.AreEqual(9f, back.Area.berths[0].bollardSpacingM, 1e-6);
+        Assert.AreEqual(2, back.Area.fairways[0].axis.Count);
+    }
 }

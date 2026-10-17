@@ -7,6 +7,7 @@
 // 21.2б — знаки МАМС (форма и цвет по типу, выделенный — жёлтое кольцо, под курсором — голубое).
 // 21.3а — мель/суша: выделенная — жёлтый контур, квадратные ручки вершин и круглые — середин сторон;
 // под курсором — голубой контур; рисуемая — голубая ломаная, линия к курсору и замыкание.
+// 21.3б — кромки фарватеров (ось ± ширина/2), стрелка «вода» у причалов; фарватер и причал — без замыкания.
 // Координаты: пиксель окна MapViewport = локальная точка от левого нижнего угла этой графики.
 // ============================================================
 using System.Collections.Generic;
@@ -42,6 +43,15 @@ public class EditorMapOverlay : MaskableGraphic
     public readonly List<WorldPosition> Draft = new List<WorldPosition>();
     public int HotVertex = -1, HotMid = -1;
     public bool ShapeHandles, DraftCloseHot;
+    /// <summary>21.3б: фарватер и причал — открытые (без замыкания); ручки середин — не у причала;
+    /// кольцо «закончить» — у первой (многоугольник) или последней (фарватер) точки.</summary>
+    public bool ShapeClosed = true, ShapeMidHandles = true, DraftClosed = true, HoverClosed = true;
+    public int DraftCloseIndex;
+    /// <summary>21.3б: кромки всех фарватеров (ось ± ширина/2) и стрелка «вода» у каждого причала.</summary>
+    public readonly List<(List<WorldPosition> axis, float width)> Fairways = new List<(List<WorldPosition>, float)>();
+    public readonly List<(WorldPosition a, WorldPosition b)> Berths = new List<(WorldPosition, WorldPosition)>();
+    public static readonly Color FairwayEdge = new Color(0.55f, 0.65f, 0.75f, 0.45f);
+    public static readonly Color WaterArrow = new Color(0.45f, 0.75f, 1f, 0.9f);
 
     /// <summary>Ручки рамки: 0–3 — углы (ЮЗ, ЮВ, СВ, СЗ), 4–7 — середины сторон (Ю, В, С, З).</summary>
     public static List<WorldPosition> BoundsHandles(WorldPosition min, WorldPosition max)
@@ -97,14 +107,38 @@ public class EditorMapOverlay : MaskableGraphic
             }
         }
 
+        // 21.3б: кромки фарватеров (по отрезкам оси, ± ширина/2) и стрелки «вода» у причалов
+        foreach (var f in Fairways)
+        {
+            float half = (float)(0.5 * f.width / Viewport.MetersPerPixel);
+            if (half < 2f || f.axis == null) continue;   // мелко — хватит оси на карте
+            for (int i = 0; i + 1 < f.axis.Count; i++)
+            {
+                Vector2 p0 = Px(f.axis[i], r), p1 = Px(f.axis[i + 1], r), d = p1 - p0;
+                if (d.sqrMagnitude < 1e-6f) continue;
+                Vector2 n = new Vector2(-d.y, d.x).normalized * half;
+                Seg(vh, p0 + n, p1 + n, 1f, FairwayEdge);
+                Seg(vh, p0 - n, p1 - n, 1f, FairwayEdge);
+            }
+        }
+        foreach (var bq in Berths)
+        {
+            Vector2 p0 = Px(bq.a, r), p1 = Px(bq.b, r), d = p1 - p0;
+            if (d.magnitude < 8f) continue;
+            Vector2 t = d.normalized, n = new Vector2(t.y, -t.x);   // справа от A→B — вода
+            Vector2 m = 0.5f * (p0 + p1), tip = m + n * 16f;
+            Seg(vh, m + n * 3f, tip, 2f, WaterArrow);
+            Tri(vh, tip + n * 5f, tip - t * 5f, tip + t * 5f, WaterArrow);
+        }
+
         // 21.3а: фигуры
-        if (HoverShape.Count >= 2) Outline(vh, HoverShape, r, 1.5f, new Color(CursorColor.r, CursorColor.g, CursorColor.b, 0.6f), true);
+        if (HoverShape.Count >= 2) Outline(vh, HoverShape, r, 1.5f, new Color(CursorColor.r, CursorColor.g, CursorColor.b, 0.6f), HoverClosed);
         if (Shape.Count >= 2)
         {
-            Outline(vh, Shape, r, 2f, HandleHot, true);
+            Outline(vh, Shape, r, ShapeClosed ? 2f : 3f, HandleHot, ShapeClosed);
             if (ShapeHandles)
             {
-                for (int i = 0; i < Shape.Count; i++)
+                for (int i = 0; ShapeMidHandles && i < PolygonEditing.EdgeCount(Shape, ShapeClosed); i++)
                 {
                     Vector2 m = Px(PolygonEditing.Midpoint(Shape, i), r);
                     Disc(vh, m, i == HotMid ? 6f : 4f, i == HotMid ? HandleHot : new Color(HandleColor.r, HandleColor.g, HandleColor.b, 0.7f));
@@ -122,9 +156,9 @@ public class EditorMapOverlay : MaskableGraphic
         {
             Outline(vh, Draft, r, 2f, CursorColor, false);
             Seg(vh, Px(Draft[Draft.Count - 1], r), Px(Cursor, r), 1.5f, new Color(CursorColor.r, CursorColor.g, CursorColor.b, 0.6f));
-            if (Draft.Count >= 2) Seg(vh, Px(Cursor, r), Px(Draft[0], r), 1f, new Color(CursorColor.r, CursorColor.g, CursorColor.b, 0.25f));
+            if (DraftClosed && Draft.Count >= 2) Seg(vh, Px(Cursor, r), Px(Draft[0], r), 1f, new Color(CursorColor.r, CursorColor.g, CursorColor.b, 0.25f));
             for (int i = 0; i < Draft.Count; i++) Disc(vh, Px(Draft[i], r), 4f, CursorColor);
-            if (DraftCloseHot) Ring(vh, Px(Draft[0], r), 10f, 2f, HandleHot);
+            if (DraftCloseHot && DraftCloseIndex >= 0 && DraftCloseIndex < Draft.Count) Ring(vh, Px(Draft[DraftCloseIndex], r), 10f, 2f, HandleHot);
         }
 
         for (int i = 0; i < Aids.Count; i++)

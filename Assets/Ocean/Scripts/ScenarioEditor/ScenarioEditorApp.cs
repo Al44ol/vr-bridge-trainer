@@ -13,7 +13,7 @@
 // 21.2б — знаки МАМС: палитра 8 типов, щелчок по пустому месту — поставить в узел сетки, щелчок по
 // знаку — выделить и тянуть, Delete — удалить, справа — свойства знака (имя, тип, положение, огонь);
 // правка знаков — AidEditing (Core). 21.3а — мели и суша (ScenarioEditorShapes.cs, partial-класс);
-// 21.3б — фарватеры, причалы; 21.4 — слой сценария.
+// 21.3б — фарватеры и причалы (там же); 21.4 — слой сценария.
 // ============================================================
 using System;
 using System.Collections;
@@ -30,7 +30,7 @@ using UnityEngine.XR;
 
 public partial class ScenarioEditorApp : MonoBehaviour
 {
-    private enum Tool { Select, Bounds, Aid, Shoal, Land }
+    private enum Tool { Select, Bounds, Aid, Shoal, Land, Fairway, Berth }
 
     private const float TopBar = 56f, PaletteWidth = 230f, PropsWidth = 440f, StatusBar = 32f, Pad = 8f;
     private static readonly Color Background = new Color(0.05f, 0.06f, 0.08f, 1f);
@@ -222,17 +222,15 @@ public partial class ScenarioEditorApp : MonoBehaviour
             y -= MonitorUi.RowHeight + MonitorUi.Gap;
         }
         y -= 2f * MonitorUi.Gap;
+        BuildShapePalette(p, ref y, w);   // 21.3а, 21.3б: мель, суша, фарватер, причал
         y -= 2f * MonitorUi.Gap;
-        BuildShapePalette(p, ref y, w);   // 21.3а
-        y -= 2f * MonitorUi.Gap;
-        TextMeshProUGUI soon = MonitorUi.Text(p, "Скоро: фарватеры и причалы — 21.3б; сценарий — 21.4.", 14f, MonitorUi.MutedColor, TextAlignmentOptions.TopLeft);
-        MonitorUi.TopLeft(soon.rectTransform, Pad, y, w, 40f);
-        y -= 44f;   // две строки при ширине палитры
         TextMeshProUGUI help = MonitorUi.Text(p,
             "Колесо — масштаб; правая кнопка — сдвиг\n" +
             "Знак: щелчок — поставить; по знаку — тянуть\n" +
-            "Мель, суша: щелчки — вершины, Enter — замкнуть\n" +
-            "Delete — удалить; Esc — «Выбор» / снять выделение\nCtrl+Z / Ctrl+Y, Ctrl+S",
+            "Мель, суша: щелчки, Enter — замкнуть\n" +
+            "Фарватер: щелчки, Enter — закончить\n" +
+            "Причал: два щелчка — A и B, вода справа\n" +
+            "Delete — удалить; Esc — «Выбор» / снять\nCtrl+Z / Ctrl+Y, Ctrl+S",
             14f, MonitorUi.MutedColor, TextAlignmentOptions.TopLeft);
         MonitorUi.TopLeft(help.rectTransform, Pad, y, w, 200f);
     }
@@ -337,10 +335,11 @@ public partial class ScenarioEditorApp : MonoBehaviour
                   () => SelAid != null && !string.IsNullOrEmpty(SelAid.lightCharacter));
         ui.Button(g, ref xa, ya, half, "Удалить знак", MonitorUi.StopColor, DeleteAid);
         ya -= MonitorUi.RowHeight + 3f * MonitorUi.Gap;
-        float ys = BuildShapeProps(p, w);   // 21.3а: свойства мели / суши
+        float ys = BuildShapeProps(p, w);   // 21.3а, 21.3б: свойства мели / суши / фарватера
+        float yb = BuildBerthProps(p, w);   // 21.3б: свойства причала
         ShowPropsGroup();
 
-        float yc = Mathf.Min(y, Mathf.Min(ya, ys));
+        float yc = Mathf.Min(Mathf.Min(y, ya), Mathf.Min(ys, yb));
         Header(p, "Проверка", ref yc);
         checkText = MonitorUi.Text(p, "", 15f, Color.white, TextAlignmentOptions.TopLeft);
         MonitorUi.TopLeft(checkText.rectTransform, Pad, yc, w, 1080f - TopBar - StatusBar + yc - Pad);
@@ -487,10 +486,11 @@ public partial class ScenarioEditorApp : MonoBehaviour
 
     private void ShowPropsGroup()
     {
-        bool aid = SelAid != null, shape = !aid && SelVerts != null;
-        if (areaGroup != null) areaGroup.gameObject.SetActive(!aid && !shape);
+        bool aid = SelAid != null, berth = !aid && SelBerth != null, shape = !aid && !berth && SelPoints != null;
+        if (areaGroup != null) areaGroup.gameObject.SetActive(!aid && !shape && !berth);
         if (aidGroup != null) aidGroup.gameObject.SetActive(aid);
         if (shapeGroup != null) shapeGroup.gameObject.SetActive(shape);
+        if (berthGroup != null) berthGroup.gameObject.SetActive(berth);
     }
 
     private void FillAidFields()
@@ -784,7 +784,7 @@ public partial class ScenarioEditorApp : MonoBehaviour
 
         // Нажатие
         int hot = tool == Tool.Bounds && inside ? NearestHandle(px, py, 12.0) : -1;
-        ShapeHover(inside, px, py, world);   // 21.3а: ручки выделенной фигуры, фигура под курсором
+        ShapeHover(inside, px, py);   // 21.3а: ручки выделенной фигуры, фигура под курсором
         bool shapeHandle = hotVertex >= 0 || hotMid >= 0;
         int hotAid = tool != Tool.Bounds && inside && !dragAid && dragHandle < 0 && dragVertex < 0 && !dragShape && !shapeHandle && draft.Count == 0
             ? AidEditing.HitTest(doc.Area, viewport, px, py, 11.0) : -1;
@@ -812,7 +812,7 @@ public partial class ScenarioEditorApp : MonoBehaviour
                 pressLocal = local;
             }
             else if (IsDrawTool(tool)) DraftClick(local, px, py, snapped);   // первая вершина мели / суши
-            else if (tool == Tool.Select && ShapeBodyPress(local, world, snapped)) { }
+            else if (tool == Tool.Select && ShapeBodyPress(local, px, py, snapped)) { }
             else
             {
                 SelectAid(-1);
