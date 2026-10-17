@@ -336,3 +336,52 @@ MonoBehaviour:
       pass: 0
       zero: 1
       weight: 0
+    - code: G5
+      enabled: 1
+      mandatory: 1
+      full: 1
+      pass: 1
+      zero: 0
+      weight: 10
+    - code: G6
+      enabled: 1
+      mandatory: 0
+      full: 0.3
+      pass: 0.6
+      zero: 1.2
+      weight: 6
+    - code: G7
+      enabled: 1
+      mandatory: 0
+      full: 10
+      pass: 20
+      zero: 40
+      weight: 3
+    - code: G8
+      enabled: 1
+      mandatory: 1
+      full: 0.95
+      pass: 0.8
+      zero: 0.5
+      weight: 6
+    - code: G9
+      enabled: 1
+      mandatory: 0
+      full: 0
+      pass: 0.3
+      zero: 0.6
+      weight: 4
+    - code: G10
+      enabled: 1
+      mandatory: 1
+      full: 0.15
+      pass: 0.3
+      zero: 0.5
+      weight: 8
+    - code: G11
+      enabled: 1
+      mandatory: 1
+      full: 15
+      pass: 30
+      zero: 60
+      weight: 8
