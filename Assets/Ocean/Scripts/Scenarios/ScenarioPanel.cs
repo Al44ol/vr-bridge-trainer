@@ -41,9 +41,11 @@
 // панель идёт за контроллером, отпустили — остаётся); повторный вызов разбора из меню (A «Результаты»,
 // Y «Оценка (итог)») открывает ту же вкладку и страницу (ReopenResults).
 // К1 (22.10.2026): брифинг — на трёх панелях дугой вокруг головы: в центре — название (32 px), текст брифинга (24 px;
-// длинный — страницами ◀ ▶), ID и кнопки; слева — «Судно и задание» (ExerciseTasks.BriefingShip), справа — «Условия
+// длинный — страницами «<  Назад / Вперёд  >»), ID и кнопки; слева — «Судно и задание» (ExerciseTasks.BriefingShip), справа — «Условия
 // и оценка» (BriefingConditions, обязательные критерии — BriefingMandatoryText), 22 px. Боковые панели — дочерние
 // к холсту (ручка «переместить» двигает все три), повёрнуты к голове; угол — по ширине панелей и расстоянию до головы.
+// По проверке 22.10.2026: три панели одной ширины (680 px), верхние края на одной линии, верхняя часть одной высоты
+// (по самой высокой из трёх); ниже неё у центральной — страницы, ID и кнопки.
 // ============================================================
 using System;
 using System.Collections;
@@ -84,13 +86,11 @@ public class ScenarioPanel : MonoBehaviour
     [Header("Брифинг на трёх панелях (К1)")]
     [Tooltip("Слева — судно и задание, справа — условия и оценка (false — всё на одной панели, как до К1)")]
     public bool briefingSidePanels = true;
-    [Tooltip("Ширина боковой панели, пикселей холста")]
-    public float sidePanelWidth = 520f;
     [Tooltip("Зазор между панелями по углу, градусы")]
     public float sidePanelGapDeg = 2f;
     [Tooltip("Шрифт: название, текст брифинга, боковые панели, px (до К1 — 25 / 18 / 16)")]
     public float briefingTitleSize = 32f, briefingTextSize = 24f, briefingSideTextSize = 22f;
-    [Tooltip("Наибольшая высота текста брифинга на странице, px (длиннее — страницы ◀ ▶)")]
+    [Tooltip("Наибольшая высота текста брифинга на странице, px (длиннее — страницы «<» «>»)")]
     public float briefingPageHeight = 900f;
 
     [Header("Разбор (C3)")]
@@ -263,11 +263,20 @@ public class ScenarioPanel : MonoBehaviour
             List<string> pages = BriefingPages(s.briefing, Width - 2f * Pad, briefingTextSize);
             briefingPage = Mathf.Clamp(briefingPage, 0, pages.Count - 1);
             Text(pages[briefingPage], briefingTextSize, Color.white, ref y);
-            if (pages.Count > 1)
+
+            // По проверке 22.10.2026: три панели одной ширины, верхние края на одной линии, верхняя часть — одной высоты
+            // (по самой высокой); ниже неё у центральной — страницы, ID и кнопки
+            leftSide = SidePanel("BriefingLeft", "Судно и задание", ExerciseTasks.BriefingShip(s), out float yLeft);
+            rightSide = SidePanel("BriefingRight", "Условия и оценка",
+                ExerciseTasks.BriefingConditions(s) + "\n\n" + ExerciseTasks.BriefingMandatoryText(s), out float yRight);
+            y = Mathf.Min(y, Mathf.Min(yLeft, yRight));
+            upperHeight = -y + Pad;
+            y -= Pad;   // низ боковых панелей — на уровне верха кнопок страниц / строки ID
+            if (pages.Count > 1)   // стрелок ◀ ▶ в шрифте LiberationSans нет — «<» «>»
                 ButtonRow(ref y, ButtonHeight,
-                    ("◀ Назад", NeutralColor, () => { briefingPage = Mathf.Max(0, briefingPage - 1); ShowBriefing(); }),
+                    ("<  Назад", NeutralColor, () => { briefingPage = Mathf.Max(0, briefingPage - 1); ShowBriefing(); }),
                     ($"Стр. {briefingPage + 1} из {pages.Count}", NeutralColor, null),
-                    ("Вперёд ▶", NeutralColor, () => { briefingPage = Mathf.Min(pages.Count - 1, briefingPage + 1); ShowBriefing(); }));
+                    ("Вперёд  >", NeutralColor, () => { briefingPage = Mathf.Min(pages.Count - 1, briefingPage + 1); ShowBriefing(); }));
             y -= Gap;
         }
 
@@ -283,13 +292,16 @@ public class ScenarioPanel : MonoBehaviour
         }
         else
             ButtonRow(ref y, ButtonHeight, ("Закрыть", NeutralColor, Hide));
-        EndContent(y);
+        float height = EndContent(y);
         if (briefingSidePanels)
         {
-            SidePanel(-1, "Судно и задание", ExerciseTasks.BriefingShip(s));
-            SidePanel(+1, "Условия и оценка", ExerciseTasks.BriefingConditions(s) + "\n\n" + ExerciseTasks.BriefingMandatoryText(s));
+            PlaceSide(leftSide, -1, upperHeight, height);
+            PlaceSide(rightSide, +1, upperHeight, height);
         }
     }
+
+    private RectTransform leftSide, rightSide;
+    private float upperHeight;
 
     // ─────────── К1: брифинг на трёх панелях ───────────
 
@@ -338,13 +350,10 @@ public class ScenarioPanel : MonoBehaviour
         return measure.GetPreferredValues(text, width, 0f).y;
     }
 
-    /// <summary>
-    /// Боковая панель брифинга: side −1 — слева, +1 — справа. Стоит на дуге вокруг головы (радиус — расстояние от головы
-    /// до центральной панели в плоскости панели, 0,7–1,6 м), повёрнута к голове, по высоте — по центру центральной панели.
-    /// </summary>
-    private void SidePanel(int side, string title, string text)
+    /// <summary>Боковая панель брифинга шириной с центральную: заголовок и текст; yBottom — низ текста (как y центральной панели).</summary>
+    private RectTransform SidePanel(string name, string title, string text, out float yBottom)
     {
-        var go = new GameObject(side < 0 ? "BriefingLeft" : "BriefingRight", typeof(RectTransform));
+        var go = new GameObject(name, typeof(RectTransform));
         go.transform.SetParent(panel.transform, false);
         sidePanels.Add(go);
         var bg = go.AddComponent<Image>();
@@ -353,13 +362,24 @@ public class ScenarioPanel : MonoBehaviour
         var rt = go.GetComponent<RectTransform>();
         rt.pivot = new Vector2(0.5f, 1f);
 
-        float w = sidePanelWidth - 2f * Pad;
+        float w = Width - 2f * Pad;
         float y = -Pad;
         TextIn(rt, w, title, briefingSideTextSize + 4f, TitleColor, ref y, FontStyles.Bold);
         y -= 4f;
         TextIn(rt, w, text, briefingSideTextSize, Color.white, ref y, FontStyles.Normal);
-        float height = -y + Pad;
-        rt.sizeDelta = new Vector2(sidePanelWidth, height);
+        yBottom = y;
+        return rt;
+    }
+
+    /// <summary>
+    /// Боковая панель на дуге вокруг головы: side −1 — слева, +1 — справа; радиус — расстояние от головы до центральной
+    /// панели (0,7–1,6 м), повёрнута к голове; высота — верхняя часть центральной панели, верхний край — на одной линии с ней
+    /// (centreHeight — полная высота центральной, она отцентрована в точке холста).
+    /// </summary>
+    private void PlaceSide(RectTransform rt, int side, float height, float centreHeight)
+    {
+        if (rt == null) return;
+        rt.sizeDelta = new Vector2(Width, height);
 
         // Голова в системе холста (пиксели); дуга — в плоскости холста по горизонтали
         Vector3 head = new Vector3(0f, 0f, -distanceFromHead / canvasScale);
@@ -372,11 +392,10 @@ public class ScenarioPanel : MonoBehaviour
         }
         Vector3 toCentre = -head;
         float radius = toCentre.magnitude;
-        float half = 0.5f * Width, halfSide = 0.5f * sidePanelWidth;
-        float angle = Mathf.Atan2(half, radius) * Mathf.Rad2Deg + Mathf.Atan2(halfSide, radius) * Mathf.Rad2Deg + sidePanelGapDeg;
+        float angle = 2f * Mathf.Atan2(0.5f * Width, radius) * Mathf.Rad2Deg + sidePanelGapDeg;
         Quaternion turn = Quaternion.Euler(0f, side * angle, 0f);
         Vector3 centre = head + turn * toCentre;
-        rt.localPosition = centre + Vector3.up * (height * 0.5f);   // pivot сверху: центр панели — на высоте центра холста
+        rt.localPosition = centre + Vector3.up * (centreHeight * 0.5f);   // pivot сверху: верхний край — как у центральной
         rt.localRotation = Quaternion.LookRotation(centre - head, Vector3.up);
     }
 
@@ -861,7 +880,7 @@ public class ScenarioPanel : MonoBehaviour
         }
     }
 
-    private void EndContent(float y)
+    private float EndContent(float y)
     {
         float height = -y + Pad;
         background.sizeDelta = new Vector2(Width, height);
@@ -869,6 +888,7 @@ public class ScenarioPanel : MonoBehaviour
         canvas.enabled = true;
         dragHandle.PlaceAbove(height * 0.5f);
         dragHandle.gameObject.SetActive(true);
+        return height;
     }
 
     private void Title(string text, ref float y, float size = 25f)
