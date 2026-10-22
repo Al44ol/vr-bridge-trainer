@@ -16,6 +16,8 @@
 // 21.3б — фарватеры и причалы (там же); 21.4а — слой сценария: режим «Акватория / Сценарий» вверху палитры,
 // старт и маршрут с XTE (ScenarioEditorScenario.cs); кнопки верхней панели работают с документом режима.
 // 21.4б — листы «Условия», «Критерии», «Брифинг» и «Пройти в тренажёре» (ScenarioEditorSheets.cs).
+// 21.6в — «Открыть…» — лист «Библиотека»: свои файлы, копия, переименование, корзина, история версий, флешка
+// (ScenarioEditorLibrary.cs, Core — ScenarioLibrary).
 // ============================================================
 using System;
 using System.Collections;
@@ -158,7 +160,8 @@ public partial class ScenarioEditorApp : MonoBehaviour
         ui.Button(bar, ref x, y, 100f, "", MonitorUi.NeutralColor,
                   () => Guarded(() => { if (mode == Mode.Scenario) OpenScenarioDialog(false); else NewDialog(); }),
                   () => mode == Mode.Scenario ? "Новый" : "Новая");
-        ui.Button(bar, ref x, y, 120f, "Открыть…", MonitorUi.NeutralColor, () => Guarded(() => { if (mode == Mode.Scenario) OpenScenarioDialog(false); else OpenDialog(false); }));
+        // 21.6в: «Открыть…» — лист «Библиотека» (несохранённое спрашивается при открытии файла из неё)
+        ui.Button(bar, ref x, y, 120f, "Открыть…", MonitorUi.NeutralColor, () => OpenLibrary(mode == Mode.Area));
         ui.Button(bar, ref x, y, 120f, "Сохранить", MonitorUi.ButtonColor, () => { if (mode == Mode.Scenario) SaveScenario(false); else Save(false); }, null,
                   () => ActiveDirty ? MonitorUi.WarnColor : MonitorUi.ButtonColor, () => HasDoc);
         ui.Button(bar, ref x, y, 160f, "Сохранить как…", MonitorUi.NeutralColor, () => { if (mode == Mode.Scenario) SaveScenarioAsDialog(); else SaveAsDialog(); },
@@ -645,18 +648,7 @@ public partial class ScenarioEditorApp : MonoBehaviour
         foreach (WaterArea a in Catalog.Areas)
         {
             WaterArea src = a;
-            buttons.Add(($"Встроенная «{a.name}» — копией", MonitorUi.ButtonColor, () =>
-            {
-                CloseDialog();
-                Dialog("Копия встроенной", $"Встроенная «{src.name}» не меняется — правится её копия. Имя копии:", "Моя акватория", true,
-                       ("Создать копию", MonitorUi.StartColor, () =>
-                       {
-                           string n = DialogInput();
-                           CloseDialog();
-                           SetDocument(AreaDocument.CopyOf(src, string.IsNullOrWhiteSpace(n) ? "Моя акватория" : n.Trim()));
-                       }),
-                       ("Отмена", MonitorUi.NeutralColor, CloseDialog));
-            }));
+            buttons.Add(($"Встроенная «{a.name}» — копией", MonitorUi.ButtonColor, () => CopyBuiltInAreaDialog(src)));
         }
         string dir = AreaDocument.AreasFolder(Root);
         var files = new List<string>();
@@ -677,12 +669,25 @@ public partial class ScenarioEditorApp : MonoBehaviour
                 else Dialog("Не открылся", string.Join("\n", errors), null, true, ("Понятно", MonitorUi.NeutralColor, () => { CloseDialog(); OpenDialog(doc == null); }));
             }));
         }
-        buttons.Add(("Открыть папку в Проводнике", MonitorUi.NeutralColor, () => Application.OpenURL("file:///" + Root.Replace('\\', '/'))));
+        buttons.Add(("Библиотека… (все свои, корзина, флешка)", MonitorUi.NeutralColor, () => { CloseDialog(); OpenLibrary(true); }));   // 21.6в
         buttons.Add(("К сценариям", MonitorUi.NeutralColor, () => { CloseDialog(); SetMode(Mode.Scenario); }));   // 21.4а
         if (!startup || doc != null) buttons.Add(("Отмена", MonitorUi.NeutralColor, CloseDialog));
         else buttons.Add(("В тренажёр", MonitorUi.NeutralColor, TrainerScenes.OpenTraining));
-        string more = files.Count > 10 ? $"\nСвоих акваторий {files.Count} — показаны первые 10 (по имени)." : "";
+        string more = files.Count > 10 ? $"\nСвоих акваторий {files.Count} — показаны первые 10 (по имени); все — «Библиотека»." : "";
         Dialog("Открыть акваторию", $"Папка: {Root}{more}", null, false, buttons.ToArray());
+    }
+
+    /// <summary>Копия встроенной акватории под своим именем (встроенная не меняется).</summary>
+    private void CopyBuiltInAreaDialog(WaterArea src)
+    {
+        Dialog("Копия встроенной", $"Встроенная «{src.name}» не меняется — правится её копия. Имя копии:", "Моя акватория", true,
+               ("Создать копию", MonitorUi.StartColor, () =>
+               {
+                   string n = DialogInput();
+                   CloseDialog();
+                   SetDocument(AreaDocument.CopyOf(src, string.IsNullOrWhiteSpace(n) ? "Моя акватория" : n.Trim()));
+               }),
+               ("Отмена", MonitorUi.NeutralColor, CloseDialog));
     }
 
     // Несохранённые правки — спросить перед действием
@@ -1032,6 +1037,7 @@ public partial class ScenarioEditorApp : MonoBehaviour
     // Заголовок, проверка — после правки
     private void Refresh()
     {
+        FillLibrary();   // 21.6в: открыт лист «Библиотека» — список и выбранный файл
         if (mode == Mode.Scenario) { ScenarioRefresh(); return; }   // 21.4а
         if (doc == null) { titleText.text = "<color=#9AA6B2>акватория не открыта</color>"; checkText.text = ""; return; }
         string file = doc.FilePath.Length > 0 ? Path.GetFileName(doc.FilePath) : "не сохранена";

@@ -540,10 +540,11 @@ public partial class ScenarioEditorApp
                 else Dialog("Не открылся", string.Join("\n", errors), null, true, ("Понятно", MonitorUi.NeutralColor, () => { CloseDialog(); OpenScenarioDialog(sdoc == null); }));
             }));
         }
+        buttons.Add(("Библиотека… (все свои, корзина, флешка)", MonitorUi.NeutralColor, () => { CloseDialog(); OpenLibrary(false); }));   // 21.6в
         buttons.Add(("К акваториям", MonitorUi.NeutralColor, () => { CloseDialog(); SetMode(Mode.Area); }));
         if (!startup || sdoc != null) buttons.Add(("Отмена", MonitorUi.NeutralColor, CloseDialog));
         else buttons.Add(("В тренажёр", MonitorUi.NeutralColor, TrainerScenes.OpenTraining));
-        string more = own.Count > 8 ? $"\nСвоих сценариев {own.Count} — показаны первые 8 (по имени файла)." : "";
+        string more = own.Count > 8 ? $"\nСвоих сценариев {own.Count} — показаны первые 8 (по имени файла); все — «Библиотека»." : "";
         Dialog("Открыть сценарий", $"Папка: {Path.Combine(Root, ScenarioFolder.ScenariosDir)}{more}", null, false, buttons.ToArray());
     }
 
