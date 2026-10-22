@@ -49,7 +49,7 @@ VR-тренажёр судоводительского мостика. Прот�
 - **2–3 Стенд и калибровка** — `ManoeuvringTrials`, `ShipCalibration`, `MarinerModel`; окна Manoeuvring Trials, Model Calibration → `ThesisData/Trials|Calibration`. ThesisNotes 2–3.
 - **4 Качка** — `OceanWaveField`, `SeakeepingModel`, `ShipMotion`; вода — шейдер `OceanSurface`. ThesisNotes 4.
 - **5 (B1) Акватория, мель** — `WaterArea` (ассет `WaterArea_Demo`), `GroundingDetector`/`GroundingMonitor`. ThesisNotes 5.
-- **6 (B2) Сценарии** — `ScenarioDefinition`, `RouteTracker`, `ScenarioRunner`, `ScenarioPanel`; библиотека собирается при входе в Play Mode (`ScenarioLibrarySync`). ThesisNotes 6.
+- **6 (B2) Сценарии** — `ScenarioDefinition`, `RouteTracker`, `ScenarioRunner`, `ScenarioPanel`; библиотека собирается при входе в Play Mode (`ScenarioLibrarySync`). Встроенные — номера 01…07 (с 22.10.2026; прежние B2-01…19-03 — `ScenarioNumbers`, ThesisNotes 21.7). ThesisNotes 6.
 - **7 (C1) Запись** — `Core/Recording` (track/targets/events.csv, session.json), Session Replay. ThesisNotes 7.
 - **8 (B3) Суда и огни** — `Core/Traffic`, `TrafficController`, `NavLightField`. ThesisNotes 8.
 - **9 (B4) Ночь** — `EnvironmentModel`, WeatherController (погода × время суток), `BridgeLighting`. ThesisNotes 9.

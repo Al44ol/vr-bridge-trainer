@@ -59,7 +59,7 @@ public class TugWorkTests
         CollectionAssert.IsEmpty(s.Validate());
         Assert.IsTrue(s.IsTugWork);
         Assert.IsFalse(s.IsMooring);
-        Assert.AreEqual("19-03", s.id);
+        Assert.AreEqual("07", s.id);
         Assert.AreEqual("ShipParameters_Tug", s.shipParameters.name, "своё судно — буксир");
         Assert.AreEqual(ScenarioMotionModel.Manoeuvring3Dof, s.motionModel);
         Assert.IsTrue(s.Ends(ScenarioEndConditions.TugWorkDone));

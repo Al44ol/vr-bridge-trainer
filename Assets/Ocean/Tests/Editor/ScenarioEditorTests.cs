@@ -166,7 +166,7 @@ public class ScenarioEditorTests
         doc.Commit();
 
         // Идентификатор встроенного занимать нельзя
-        s.id = "B2-01";
+        s.id = DemoScenario.Id;
         Assert.AreEqual(AreaSaveStatus.Invalid, doc.Save(root, false, DateTime.Now));
         s.id = "МОЙ-01";
         Assert.AreEqual(AreaSaveStatus.Saved, doc.Save(root, false, new DateTime(2026, 10, 18, 10, 1, 0)), doc.LastMessage);
@@ -319,7 +319,7 @@ public class ScenarioEditorTests
         s.route[1].xteLimit = 0f;
         Assert.IsTrue(ScenarioChecks.Check(s, cat).Errors.Exists(e => e.Contains("XTE")));
         s.route[1].xteLimit = 150f;
-        s.id = "B2-01";
+        s.id = DemoScenario.Id;
         Assert.IsTrue(ScenarioChecks.Check(s, cat).Errors.Exists(e => e.Contains("встроенного")));
         s.id = "МОЙ-05";
         s.initial.position = new WorldPosition(7000, 0);

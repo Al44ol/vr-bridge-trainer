@@ -18,7 +18,7 @@ using System.Collections.Generic;
 
 public static class DemoTriggerScenario
 {
-    public const string Id = "21-01";
+    public const string Id = "04";   // до 22.10.2026 — «21-01» (ScenarioNumbers)
     public const string Title = "Фарватер с триггерами";
     /// <summary>Версия содержимого (ассет с меньшей demoVersion заполняется заново при входе в Play Mode).</summary>
     public const int Version = 1;

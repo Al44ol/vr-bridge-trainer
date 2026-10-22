@@ -188,6 +188,31 @@ public class ScenarioFileTests
     }
 
     [Test]
+    public void Numbers_OrderedRenamed_LegacySamplesRemoved()
+    {
+        // 22.10.2026: порядковые номера 01…07 — по порядку, без повторов; прежние id находят нынешние
+        for (int i = 0; i < ScenarioNumbers.Renamed.Length; i++)
+            Assert.AreEqual((i + 1).ToString("00"), ScenarioNumbers.Renamed[i].Now);
+        Assert.AreEqual(DemoScenario.Id, ScenarioNumbers.Current("B2-01"));
+        Assert.AreEqual("07", ScenarioNumbers.Current("19-03"));
+        Assert.AreEqual("01-FB", ScenarioNumbers.Current("B2-01-FB"), "вариант на катере");
+        Assert.AreEqual("МОЙ-01", ScenarioNumbers.Current("МОЙ-01"));
+        Assert.AreEqual("01", ScenarioNumbers.Current("01"));
+
+        List<ScenarioDefinition> lib = BuiltIn(out _);
+        ScenarioCatalog cat = ScenarioCatalog.From(lib);
+        string root = TempRoot();
+        string samples = Path.Combine(root, ScenarioFolder.SamplesDir);
+        Directory.CreateDirectory(samples);
+        File.WriteAllText(Path.Combine(samples, "B2-01 Проход фарватером по путевым точкам.json"), "{}");
+        File.WriteAllText(Path.Combine(samples, "Заметки.json"), "{}");
+        ScenarioFolder.ExportSamples(root, cat);
+        Assert.IsFalse(File.Exists(Path.Combine(samples, "B2-01 Проход фарватером по путевым точкам.json")), "образец с прежним id убран");
+        Assert.IsTrue(File.Exists(Path.Combine(samples, "Заметки.json")), "чужой файл не трогается");
+        Assert.AreEqual(1, Directory.GetFiles(samples, DemoScenario.Id + " *").Length);
+    }
+
+    [Test]
     public void Folder_SamplesLoadDuplicatesBrokenAreas()
     {
         List<ScenarioDefinition> lib = BuiltIn(out WaterArea demo);
@@ -200,9 +225,9 @@ public class ScenarioFileTests
         Assert.AreEqual(0, ScenarioFolder.Load(root, cat).Scenarios.Count, "образцы сами не загружаются");
 
         string samples = Path.Combine(root, ScenarioFolder.SamplesDir), mine = Path.Combine(root, ScenarioFolder.ScenariosDir);
-        string sample = Directory.GetFiles(samples, "B2-01*")[0];
+        string sample = Directory.GetFiles(samples, DemoScenario.Id + " *")[0];
         // 1) копия образца с новым id — свой сценарий
-        File.WriteAllText(Path.Combine(mine, "Мой фарватер.json"), File.ReadAllText(sample).Replace("\"id\": \"B2-01\"", "\"id\": \"МОЙ-01\""));
+        File.WriteAllText(Path.Combine(mine, "Мой фарватер.json"), File.ReadAllText(sample).Replace($"\"id\": \"{DemoScenario.Id}\"", "\"id\": \"МОЙ-01\""));
         // 2) копия без смены id — загружается с предупреждением
         File.Copy(sample, Path.Combine(mine, "копия.json"));
         // 3) битый файл — не загружается
@@ -212,7 +237,7 @@ public class ScenarioFileTests
         bay.name = "Бухта";
         File.WriteAllText(Path.Combine(root, ScenarioFolder.AreasDir, "Бухта.json"), ScenarioFile.WriteArea(bay));
         File.WriteAllText(Path.Combine(mine, "В бухте.json"), File.ReadAllText(sample)
-            .Replace("\"id\": \"B2-01\"", "\"id\": \"БУХ-01\"").Replace("\"waterArea\": \"WaterArea_Demo\"", "\"waterArea\": \"Бухта\""));
+            .Replace($"\"id\": \"{DemoScenario.Id}\"", "\"id\": \"БУХ-01\"").Replace("\"waterArea\": \"WaterArea_Demo\"", "\"waterArea\": \"Бухта\""));
         // 5) временный файл записи — не сценарий
         File.WriteAllText(Path.Combine(mine, "x.json.tmp"), "мусор");
 
@@ -227,7 +252,7 @@ public class ScenarioFileTests
         Assert.AreSame(demo, my.waterArea);
         Assert.AreEqual("Бухта", rep.Scenarios.Find(s => s.id == "БУХ-01").waterArea.name);
         ScenarioLoadResult copy = rep.Files.Find(f => f.File.EndsWith("копия.json"));
-        StringAssert.Contains("«B2-01» уже есть у встроенного сценария", copy.Warnings[0]);
+        StringAssert.Contains($"«{DemoScenario.Id}» уже есть у встроенного сценария", copy.Warnings[0]);
         StringAssert.Contains("✗ НЕ ЗАГРУЖЕН", rep.Text(DateTime.Now));
         StringAssert.Contains("сценариев 3, акваторий 1; не загружено (ошибки) — 1", rep.Summary());
         Assert.IsFalse(cat.Scenarios.Contains(my), "встроенные не меняются");

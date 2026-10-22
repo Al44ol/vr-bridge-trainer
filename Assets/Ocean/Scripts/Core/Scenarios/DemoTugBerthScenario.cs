@@ -16,7 +16,7 @@ using System.Collections.Generic;
 
 public static class DemoTugBerthScenario
 {
-    public const string Id = "19-02";
+    public const string Id = "06";   // до 22.10.2026 — «19-02» (ScenarioNumbers)
     public const string Title = "Швартовка с буксиром при отжимном ветре";
     public const float WindKnots = 20f;
     public const float WindSectorDeg = 60f;

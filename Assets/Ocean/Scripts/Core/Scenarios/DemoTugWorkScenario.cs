@@ -19,7 +19,7 @@ using System.Collections.Generic;
 
 public static class DemoTugWorkScenario
 {
-    public const string Id = "19-03";
+    public const string Id = "07";   // до 22.10.2026 — «19-03» (ScenarioNumbers)
     public const string Title = "Буксир прижимает судно к причалу";
     /// <summary>Версия сценария: 1 — 19.4б-2 (Model45m, причал №1, 20 уз); 2 — 19.4б-3 (Mariner, причал №2, 15 уз, команды упором);
     /// 3 — 19.4б-3 по проверке: упор буксира — по наружной кромке носового кранца (TugSpec.ForOwnTug), старт буксира на 0,77 м дальше;

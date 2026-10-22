@@ -100,7 +100,7 @@ public class TugBerthTests
     public void Scenario_1902_OffBerthWindTugAvailable()
     {
         ScenarioDefinition s = TugBerth();
-        Assert.AreEqual("19-02", s.id);
+        Assert.AreEqual("06", s.id);
         Assert.AreEqual(330.0, s.windFromDeg, 0.5, "отжимной для причала №1 (кромка 060°, вода к ЮВ)");
         Assert.AreEqual(20f, s.windKnots);
         Assert.AreEqual(60f, s.windRandomSectorDeg);

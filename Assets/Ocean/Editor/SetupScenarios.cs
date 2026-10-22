@@ -208,6 +208,7 @@ public static class ScenarioLibrarySync
 
     private static void Sync()
     {
+        Renumber();                           // 22.10.2026: порядковые номера 01…07 вместо номеров запросов
         SetupBerthScenario.EnsureCreated();   // 19.2б-3: сценарий швартовки 19-01 — без ручного Setup
         SetupTowing.EnsureCreated();          // 19.3б: ассет буксира (Resources) — без ручного Setup
         SetupTugWork.EnsureCreated();         // 19.4б-2: сценарий 19-03 на своём буксире (после ассета буксира)
@@ -222,5 +223,22 @@ public static class ScenarioLibrarySync
             if (runner.gameObject.scene.IsValid()) EditorSceneManager.MarkSceneDirty(runner.gameObject.scene);
             Debug.Log($"[Сценарий] Библиотека обновлена: {all.Count} — " + string.Join(", ", all.Select(s => s.id)));
         }
+    }
+
+    /// <summary>Встроенные сценарии с прежним id (B2-01, 19-03…) — на порядковый номер (ScenarioNumbers); ассеты те же (ищутся по пути).</summary>
+    private static void Renumber()
+    {
+        var done = new List<string>();
+        foreach (ScenarioDefinition s in FindAll())
+        {
+            string now = ScenarioNumbers.Current(s.id);
+            if (string.IsNullOrEmpty(s.id) || now == s.id) continue;
+            done.Add($"{s.id} → {now}");
+            s.id = now;
+            EditorUtility.SetDirty(s);
+        }
+        if (done.Count == 0) return;
+        AssetDatabase.SaveAssets();
+        Debug.Log($"[Сценарий] Порядковые номера встроенных сценариев: {string.Join(", ", done)} (ассеты те же, записи со старыми id открываются)");
     }
 }

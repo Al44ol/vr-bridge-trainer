@@ -22,7 +22,7 @@ using System.Collections.Generic;
 
 public static class DemoTrafficScenario
 {
-    public const string Id = "B3-01";
+    public const string Id = "02";   // до 22.10.2026 — «B3-01» (ScenarioNumbers)
     public const string Title = "Расхождение с судами на подходе и в фарватере";
     public const double OncomingOffset = 90.0;     // T1: от оси влево (по своему ходу — вправо), м
     public const double OvertakenOffset = 80.0;    // T3: от оси вправо, м

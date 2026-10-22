@@ -14,7 +14,7 @@ using System.Collections.Generic;
 
 public static class DemoScenario
 {
-    public const string Id = "B2-01";
+    public const string Id = "01";   // до 22.10.2026 — «B2-01» (ScenarioNumbers)
     public const string Title = "Проход фарватером по путевым точкам";
     public const float ApproachXteLimit = 250f;
     public const float FairwayXteLimit = 150f;

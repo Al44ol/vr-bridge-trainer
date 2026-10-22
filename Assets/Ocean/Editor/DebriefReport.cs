@@ -49,7 +49,7 @@ public static class DebriefReport
         foreach (string guid in AssetDatabase.FindAssets("t:ScenarioDefinition"))
         {
             var s = AssetDatabase.LoadAssetAtPath<ScenarioDefinition>(AssetDatabase.GUIDToAssetPath(guid));
-            if (s != null && s.id == meta.scenario.id && s.waterArea != null) return s.waterArea;
+            if (s != null && s.id == ScenarioNumbers.Current(meta.scenario.id) && s.waterArea != null) return s.waterArea;   // старые записи — прежний id
         }
         if (string.IsNullOrEmpty(meta.scenario.water_area)) return null;
         foreach (string guid in AssetDatabase.FindAssets("t:WaterArea"))

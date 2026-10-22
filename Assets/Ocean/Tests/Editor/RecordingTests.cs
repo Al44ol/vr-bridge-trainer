@@ -403,7 +403,7 @@ public class RecordingTests
             Assert.AreEqual(sc.route.Count, s.Meta.scenario.route.Count, "маршрут сохранён в session.json");
             Assert.AreEqual(p.length, s.Meta.ship.length_m, 1e-6);
             Assert.AreEqual("017", s.Meta.trainee_id);
-            Assert.AreEqual("20261011_120000_B2-01_017", s.Meta.session_id);
+            Assert.AreEqual($"20261011_120000_{DemoScenario.Id}_017", s.Meta.session_id);
 
             // Офлайн-контроль маршрута по записанной траектории (основа C2) даёт те же точки
             var offline = new RouteTracker();

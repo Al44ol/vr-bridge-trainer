@@ -18,7 +18,7 @@ using System.Collections.Generic;
 
 public static class DemoFogScenario
 {
-    public const string Id = "C4-01";
+    public const string Id = "03";   // до 22.10.2026 — «C4-01» (ScenarioNumbers)
     public const string Title = "Плавание в тумане";
     public const float VisibilityM = 926f;          // 0,5 мили
     public const float SafeSpeedKnots = 6f;         // «Малый вперёд» судна сцены (предварительно)

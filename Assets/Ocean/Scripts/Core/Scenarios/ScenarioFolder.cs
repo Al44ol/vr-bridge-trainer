@@ -96,6 +96,9 @@ public static class ScenarioFolder
             if (WriteIfChanged(Path.Combine(dir, SafeName($"{s.id} {s.title}") + ScenarioFile.Extension), ScenarioFile.Write(s, catalog))) n++;
         foreach (WaterArea a in catalog.Areas)
             if (WriteIfChanged(Path.Combine(dir, SafeName("Акватория " + a.name) + ScenarioFile.Extension), ScenarioFile.WriteArea(a))) n++;
+        // Образцы с прежними id («B2-01 ….json») — после перехода на порядковые номера (ScenarioNumbers)
+        foreach (string f in Directory.GetFiles(dir, "*" + ScenarioFile.Extension))
+            if (ScenarioNumbers.LegacyPrefix(Path.GetFileName(f)) != null) File.Delete(f);
         return n;
     }
 

@@ -18,7 +18,7 @@ using System.Collections.Generic;
 
 public static class DemoBerthScenario
 {
-    public const string Id = "19-01";
+    public const string Id = "05";   // до 22.10.2026 — «19-01» (ScenarioNumbers)
     public const string Title = "Швартовка к причалу лагом";
     public const double StartBeforeMiddleM = 200.0;
     public const double StartGapM = 30.0;
