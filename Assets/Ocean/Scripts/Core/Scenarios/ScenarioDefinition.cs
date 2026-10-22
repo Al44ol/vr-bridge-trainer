@@ -21,7 +21,8 @@
 //     у цели — допустимая дистанция расхождения CPA_доп;
 //   • 19.2б-3: модель движения на время сценария (по умолчанию — как выбрано в тренажёре)
 //     и задание швартовки (MooringTaskDefinition: причал, условия этапов, финиш «ошвартован»);
-//   • 19.3б: ветер (скорость и «откуда»; только в модели 3 СС) и разрешение вызвать буксир в упражнении.
+//   • 19.3б: ветер (скорость и «откуда»; только в модели 3 СС) и разрешение вызвать буксир в упражнении;
+//   • 21.6а: триггеры «если — то» (TriggerDefinition.cs).
 // Досрочное завершение инструктором доступно всегда и в условиях не задаётся.
 // ============================================================
 using System;
@@ -211,6 +212,10 @@ public class ScenarioDefinition : ScriptableObject
     [Tooltip("Отличия от набора «Оценка»: критерий включён / обязательный; пусто — как в наборе. Пороги и веса — всегда набора (методика)")]
     public List<CriterionSwitch> criteriaSwitches = new List<CriterionSwitch>();
 
+    [Header("Триггеры «если — то» (21.6а)")]
+    [Tooltip("Условие → задержка → действия (цели, погода, видимость, ветер, отказы, сообщение); каждый — один раз за упражнение")]
+    public List<ScenarioTrigger> triggers = new List<ScenarioTrigger>();
+
     /// <summary>21.4б: настройки оценки упражнения — копия набора assessment с галочками criteriaSwitches.</summary>
     public AssessmentSettings EffectiveAssessment()
     {
@@ -311,6 +316,7 @@ public class ScenarioDefinition : ScriptableObject
         ValidateTraffic(problems);
         ValidateMooring(problems);
         ValidateTugWork(problems);
+        TriggerText.Validate(this, problems);   // 21.6а
         // 19.3б: ветер и буксир — только в модели 3 СС
         if (windKnots < 0f) problems.Add("Ветер отрицательный.");
         if (windKnots > 0f && motionModel != ScenarioMotionModel.Manoeuvring3Dof)

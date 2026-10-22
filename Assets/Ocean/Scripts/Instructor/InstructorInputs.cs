@@ -9,7 +9,7 @@
 //   • ухудшение видимости — WeatherController.SetVisibility (событие VisibilityChanged
 //     публикует BridgeActionMonitor, как при смене из меню «Обстановка»).
 // Каждая вводная и её устранение — событие шины (EngineFailure / EngineRestored,
-// SteeringFailure / SteeringRestored, ByInstructor = true): попадает в запись, журнал
+// SteeringFailure / SteeringRestored, ByInstructor = true; 21.6а — от триггера сценария false): попадает в запись, журнал
 // report.html, на графики и схему; от неё оценка C2 отсчитывает время реакции (N1, N2).
 // Вводные снимаются (без событий) при загрузке сценария, начале и конце упражнения.
 //
@@ -145,7 +145,7 @@ public class InstructorInputs : MonoBehaviour
     }
 
     // ─────────── Вводные ───────────
-    public void SetEngineFailure(bool failed)
+    public void SetEngineFailure(bool failed, bool byInstructor = true)   // 21.6а: false — триггер сценария
     {
         if (navigation == null || navigation.EngineFailed == failed || (failed && !CanApply)) return;
         navigation.EngineFailed = failed;
@@ -156,18 +156,18 @@ public class InstructorInputs : MonoBehaviour
             double sf = navigation.telegraph != null ? navigation.telegraph.SpeedFactor : navigation.Model.SpeedFactor;
             Publish(new ExerciseEvent(ExerciseEventType.EngineFailure)
             {
-                Value = sf, Subject = ScenarioText.Telegraph(ScenarioText.OrderFromSpeedFactor(sf)), ByInstructor = true
+                Value = sf, Subject = ScenarioText.Telegraph(ScenarioText.OrderFromSpeedFactor(sf)), ByInstructor = byInstructor
             });
             Announce("ОТКАЗ ГЛАВНОГО ДВИГАТЕЛЯ", "машина не отвечает на телеграф");
         }
         else
         {
-            Publish(new ExerciseEvent(ExerciseEventType.EngineRestored) { Value = now - engineFailedAt, ByInstructor = true });
+            Publish(new ExerciseEvent(ExerciseEventType.EngineRestored) { Value = now - engineFailedAt, ByInstructor = byInstructor });
             AfterRestore();
         }
     }
 
-    public void SetSteeringFailure(bool failed)
+    public void SetSteeringFailure(bool failed, bool byInstructor = true)
     {
         if (navigation == null || navigation.SteeringFailed == failed || (failed && !CanApply)) return;
         navigation.SteeringFailed = failed;
@@ -177,13 +177,13 @@ public class InstructorInputs : MonoBehaviour
             steeringFailedAt = now;
             Publish(new ExerciseEvent(ExerciseEventType.SteeringFailure)
             {
-                Value = navigation.RudderActual, Value2 = navigation.RudderOrdered, ByInstructor = true
+                Value = navigation.RudderActual, Value2 = navigation.RudderOrdered, ByInstructor = byInstructor
             });
             Announce("ОТКАЗ РУЛЕВОГО УСТРОЙСТВА", $"руль заклинило: {ScenarioText.Rudder(navigation.RudderActual)}");
         }
         else
         {
-            Publish(new ExerciseEvent(ExerciseEventType.SteeringRestored) { Value = now - steeringFailedAt, ByInstructor = true });
+            Publish(new ExerciseEvent(ExerciseEventType.SteeringRestored) { Value = now - steeringFailedAt, ByInstructor = byInstructor });
             AfterRestore();
         }
     }

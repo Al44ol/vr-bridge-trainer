@@ -211,6 +211,7 @@ public static class ScenarioLibrarySync
         SetupBerthScenario.EnsureCreated();   // 19.2б-3: сценарий швартовки 19-01 — без ручного Setup
         SetupTowing.EnsureCreated();          // 19.3б: ассет буксира (Resources) — без ручного Setup
         SetupTugWork.EnsureCreated();         // 19.4б-2: сценарий 19-03 на своём буксире (после ассета буксира)
+        SetupTriggerScenario.EnsureCreated(); // 21.6а: сценарий 21-01 с триггерами «если — то»
         List<ScenarioDefinition> all = FindAll();
         foreach (ScenarioRunner runner in Object.FindObjectsByType<ScenarioRunner>(FindObjectsInactive.Include))
         {

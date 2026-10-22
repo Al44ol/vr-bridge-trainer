@@ -1,7 +1,7 @@
 // ============================================================
 // ScenarioFileTests.cs — Сценарии и акватории в файлах JSON (запрос 21.1, Core)
 //
-// Шесть встроенных сценариев и WaterArea_Demo: ассет → файл → ассет бит в бит (тот же текст файла
+// Семь встроенных сценариев (с 21.6а — и 21-01 с триггерами) и WaterArea_Demo: ассет → файл → ассет бит в бит (тот же текст файла
 // и тот же JsonUtility-снимок); своя акватория вписывается в файл сценария; ошибки и предупреждения
 // чтения; папки: образцы, загрузка, повтор id, битый файл, акватория из «Мои акватории»; источник в session.json.
 // ============================================================
@@ -60,6 +60,7 @@ public class ScenarioFileTests
         ScenarioDefinition m1 = New("Scenario_19-01_Berth"); DemoBerthScenario.Fill(m1, area, own, Crit("Assessment_Berthing", DemoBerthScenario.Assessment())); list.Add(m1);
         ScenarioDefinition m2 = New("Scenario_19-02_TugBerth"); DemoTugBerthScenario.Fill(m2, area, own, Crit("Assessment_TugBerthing", DemoTugBerthScenario.Assessment())); list.Add(m2);
         ScenarioDefinition m3 = New("Scenario_19-03_TugWork"); DemoTugWorkScenario.Fill(m3, area, tug, mariner, Crit("Assessment_TugWork", DemoTugWorkScenario.Assessment())); list.Add(m3);
+        ScenarioDefinition t1 = New("Scenario_21-01_Triggers"); DemoTriggerScenario.Fill(t1, area, own, mariner, null); list.Add(t1);   // 21.6а
         return list;
     }
 
@@ -75,7 +76,7 @@ public class ScenarioFileTests
     {
         List<ScenarioDefinition> lib = BuiltIn(out WaterArea area);
         ScenarioCatalog cat = ScenarioCatalog.From(lib);
-        Assert.AreEqual(6, cat.Scenarios.Count);
+        Assert.AreEqual(7, cat.Scenarios.Count);   // 21.6а: + 21-01 с триггерами
         foreach (ScenarioDefinition s in lib)
         {
             string text = ScenarioFile.Write(s, cat);
@@ -193,7 +194,7 @@ public class ScenarioFileTests
         ScenarioCatalog cat = ScenarioCatalog.From(lib);
         string root = TempRoot();
         ScenarioFolder.Ensure(root);
-        Assert.AreEqual(7, ScenarioFolder.ExportSamples(root, cat), "6 сценариев + акватория");
+        Assert.AreEqual(8, ScenarioFolder.ExportSamples(root, cat), "7 сценариев + акватория");
         Assert.AreEqual(0, ScenarioFolder.ExportSamples(root, cat), "без изменений — не переписываются");
         Assert.IsTrue(File.Exists(Path.Combine(root, ScenarioFolder.ReadmeFile)));
         Assert.AreEqual(0, ScenarioFolder.Load(root, cat).Scenarios.Count, "образцы сами не загружаются");

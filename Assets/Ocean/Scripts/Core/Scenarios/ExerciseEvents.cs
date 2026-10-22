@@ -107,6 +107,12 @@
 //   TugWorkEvent         19.4г, «случайное событие» в 19-03: Index — TugEventPhase (1 конец отходит — Value N, °, Value2 зазор
 //                        срабатывания, м; 2 буксир у конца — Value через сколько, с, Value2 место, м; 3 ближний конец на стопоре —
 //                        Value угол, °; 4 судно всё у кранцев — Value угол, °); Subject — отошедший конец («нос» / «корма»)
+// Триггеры сценария (21.6а; источник — ScenarioTriggers, TriggerDefinition.cs):
+//   TriggerFired         сработал триггер: Index — номер в сценарии, Subject — «Тр2 «название»»; ByInstructor — вручную
+//                        (окно инструктора); дальше — события его действий (вводные с ByInstructor = false — «по сценарию»)
+//   TargetOrder          приказ цели: Subject — id цели, Index — номер цели; Value — курс, ° (NaN — не менялся);
+//                        Value2 — скорость, уз (NaN — не менялась; 0 — стоп)
+//   ScenarioMessage      сообщение обучающемуся (табличка в шлеме): Subject — текст
 // XTE > 0 — судно правее линии пути.
 // ============================================================
 using System;
@@ -187,7 +193,11 @@ public enum ExerciseEventType
     TugWorkHullContact,
     HeadingHoldChanged,
     JoystickHoldChanged,
-    TugWorkEvent
+    TugWorkEvent,
+    // Триггеры сценария (21.6а)
+    TriggerFired,
+    TargetOrder,
+    ScenarioMessage
 }
 
 public enum ScenarioEndReason
@@ -276,10 +286,17 @@ public struct ExerciseEvent
                 return $"«{Subject}»: {EncounterClassifier.Title((EncounterSituation)Index)} — {EncounterClassifier.Duty((EncounterSituation)Index)}; CPA {ScenarioText.Num(Value, 2)} мили, TCPA {ScenarioText.Num(Value2, 1)} мин";
             case ExerciseEventType.ExercisePaused: return "ПАУЗА (инструктор)";
             case ExerciseEventType.ExerciseResumed: return double.IsNaN(Value) ? "Продолжение после паузы" : $"Продолжение после паузы ({ScenarioText.Num(Value)} с по часам)";
-            case ExerciseEventType.EngineFailure: return $"ВВОДНАЯ: отказ главного двигателя (телеграф «{Subject}»)";
-            case ExerciseEventType.EngineRestored: return $"Главный двигатель восстановлен (отказ {ScenarioText.Num(Value)} с)";
-            case ExerciseEventType.SteeringFailure: return $"ВВОДНАЯ: отказ рулевого устройства — руль заклинило на {ScenarioText.Rudder(Value)}";
-            case ExerciseEventType.SteeringRestored: return $"Рулевое устройство восстановлено (отказ {ScenarioText.Num(Value)} с)";
+            case ExerciseEventType.EngineFailure: return $"ВВОДНАЯ: отказ главного двигателя (телеграф «{Subject}»){ByScenario}";
+            case ExerciseEventType.EngineRestored: return $"Главный двигатель восстановлен (отказ {ScenarioText.Num(Value)} с){ByScenario}";
+            case ExerciseEventType.SteeringFailure: return $"ВВОДНАЯ: отказ рулевого устройства — руль заклинило на {ScenarioText.Rudder(Value)}{ByScenario}";
+            case ExerciseEventType.SteeringRestored: return $"Рулевое устройство восстановлено (отказ {ScenarioText.Num(Value)} с){ByScenario}";
+            case ExerciseEventType.TriggerFired: return $"ТРИГГЕР {Subject} сработал{(ByInstructor ? " (инструктор, вручную)" : "")}";
+            case ExerciseEventType.TargetOrder:
+                return $"Цель «{Subject}» (по сценарию): " +
+                       (double.IsNaN(Value) ? "" : $"курс {ScenarioText.Bearing(Value)}") +
+                       (double.IsNaN(Value) || double.IsNaN(Value2) ? "" : ", ") +
+                       (double.IsNaN(Value2) ? "" : Value2 > 0 ? $"{ScenarioText.Num(Value2, 1)} уз" : "стоп");
+            case ExerciseEventType.ScenarioMessage: return $"Сообщение: «{Subject}»";
             case ExerciseEventType.PlotterRevealTargets:
                 return Value > 0 ? "Планшет: показаны ВСЕ цели (инструктор)" : "Планшет: все цели скрыты — только обнаруженные";
             case ExerciseEventType.TrainerModeChanged:
@@ -343,6 +360,9 @@ public struct ExerciseEvent
         }
         return $"{Type} {Subject}";
     }
+
+    // 21.6а: вводная подана триггером сценария (у инструктора ByInstructor = true — как прежде)
+    private string ByScenario => ByInstructor ? "" : " (по сценарию)";
 }
 
 public static class ExerciseEvents

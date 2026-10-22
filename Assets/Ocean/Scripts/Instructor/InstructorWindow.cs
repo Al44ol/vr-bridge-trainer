@@ -16,6 +16,7 @@
 //     «Шлем на весь экран» — режим зеркала; возврат — кнопка «« Окно инструктора» поверх
 //     зеркала, Esc или правый клик мыши (InstructorStation).
 //     19.2 (B): в верхней строке — «Режим: экзамен / обучение / инструктор» (TrainerModeSwitch, по кругу).
+//     21.6а: у сценария с триггерами — вторая строка «Триггеры: сработало N из M» и список с «Сработать».
 //   • Справа — состояние своего судна и маршрута; таблица целей (дистанция, пеленг,
 //     курсовой угол, CPA, TCPA, ситуация по МППСС из оценки C2 — инструктор видит
 //     цели и при флаге сценария «цели не показывать»); вводные (отказ ГД, отказ руля,
@@ -145,6 +146,97 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
             b.image.color = enabled ? c : new Color(0.2f, 0.22f, 0.25f);
         }
         RefreshPip();
+        RefreshTriggers();
+    }
+
+    // ─────────── Триггеры сценария (21.6а) ───────────
+    // Вторая строка над картой: «Триггеры: сработало N из M» (только у сценария с триггерами) — открывает список:
+    // состояние (ждёт / через мм:сс / сработал мм:сс) и строка триггера; «Сработать» — сразу, без задержки.
+    private const int TriggerRows = 10;
+    private const float TriggerListWidth = 820f;
+    private RectTransform triggerBar, triggerList;
+    private readonly TextMeshProUGUI[] triggerTexts = new TextMeshProUGUI[TriggerRows];
+    private readonly RectTransform[] triggerButtons = new RectTransform[TriggerRows];
+    private bool triggersOpen;
+
+    private TriggerRunner ActiveTriggers
+    {
+        get
+        {
+            ScenarioTriggers st = ScenarioTriggers.Instance;
+            return st != null && runner != null && st.Scenario != null && st.Scenario == runner.Current && Phase != ScenarioRunner.Phase.Idle
+                ? st.Runner : null;
+        }
+    }
+
+    private string TriggerTitle()
+    {
+        TriggerRunner r = ActiveTriggers;
+        return r == null ? "Триггеры" : $"Триггеры: сработало {r.FiredCount} из {r.Count}{(triggersOpen ? "  · скрыть" : "  · показать")}";
+    }
+
+    private bool CanFire(int i)
+    {
+        TriggerRunner r = ActiveTriggers;
+        return r != null && i < r.Count && r.Status(i) != TriggerStatus.Fired && ScenarioTriggers.Instance.Running;
+    }
+
+    private void FireTrigger(int i)
+    {
+        if (CanFire(i)) ScenarioTriggers.Instance.Fire(i);
+    }
+
+    private void RefreshTriggers()
+    {
+        if (triggerBar == null) return;
+        TriggerRunner r = ActiveTriggers;
+        int n = r != null ? r.Count : 0;
+        triggerBar.gameObject.SetActive(n > 0);
+        bool open = n > 0 && triggersOpen;
+        triggerList.gameObject.SetActive(open);
+        if (!open) return;
+        int shown = Mathf.Min(n, TriggerRows);
+        triggerList.sizeDelta = new Vector2(TriggerListWidth, shown * (RowHeight + Gap) + Gap);
+        double now = runner.ExerciseTime;
+        for (int i = 0; i < TriggerRows; i++)
+        {
+            bool on = i < shown;
+            triggerTexts[i].gameObject.SetActive(on);
+            triggerButtons[i].gameObject.SetActive(on);
+            if (!on) continue;
+            TriggerStatus st = r.Status(i);
+            string col = st == TriggerStatus.Fired ? "#6FE08A" : st == TriggerStatus.Delay ? "#FFC85A" : "#9AA6B2";
+            string more = i == TriggerRows - 1 && n > TriggerRows ? $"  <color=#9AA6B2>(и ещё {n - TriggerRows})</color>" : "";
+            triggerTexts[i].text = $"<color={col}>{r.StateText(i, now)}</color>  {TriggerText.Line(r.Triggers[i], runner.Current)}{more}";
+        }
+    }
+
+    private void BuildTriggers()
+    {
+        triggerBar = Panel(mapRect, "Triggers", new Color(0f, 0f, 0f, 0f));
+        Place(triggerBar, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(8f, -8f - RowHeight - Gap), new Vector2(380f, RowHeight), new Vector2(0f, 1f));
+        float x = 0f;
+        Button(triggerBar, ref x, 0f, 380f, "Триггеры", NeutralColor, () => triggersOpen = !triggersOpen, TriggerTitle,
+               () => triggersOpen ? ActiveColor : NeutralColor);
+
+        triggerList = Panel(mapRect, "TriggerList", PanelColor);
+        Place(triggerList, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(8f, -8f - 2f * (RowHeight + Gap)),
+              new Vector2(TriggerListWidth, TriggerRows * (RowHeight + Gap) + Gap), new Vector2(0f, 1f));
+        const float buttonWidth = 130f;
+        for (int i = 0; i < TriggerRows; i++)
+        {
+            int index = i;
+            float y = -Gap - i * (RowHeight + Gap);
+            TextMeshProUGUI t = MakeText(triggerList, "", 14f, Color.white, TextAlignmentOptions.MidlineLeft);
+            t.overflowMode = TextOverflowModes.Truncate;
+            Place(t.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(Pad, y),
+                  new Vector2(TriggerListWidth - buttonWidth - 3f * Pad, RowHeight), new Vector2(0f, 1f));
+            triggerTexts[i] = t;
+            float bx = TriggerListWidth - buttonWidth - Pad;
+            triggerButtons[i] = Button(triggerList, ref bx, y, buttonWidth, "Сработать", WarnColor, () => FireTrigger(index), null, null, () => CanFire(index));
+        }
+        triggerBar.gameObject.SetActive(false);
+        triggerList.gameObject.SetActive(false);
     }
 
     // ─────────── Вид из шлема (PiP): размер и частота ───────────
@@ -559,7 +651,11 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
             case ExerciseEventType.EncounterStarted:
             case ExerciseEventType.PlotterRevealTargets:   // D2: обучающемуся показаны все цели
             case ExerciseEventType.TrainerModeChanged:     // перед 19.2 (п. B): режим тренажёра
+            case ExerciseEventType.TriggerFired:           // 21.6а
                 return "#FFC85A";
+            case ExerciseEventType.TargetOrder:
+            case ExerciseEventType.ScenarioMessage:
+                return "#C9B2FF";
             case ExerciseEventType.EngineRestored:
             case ExerciseEventType.SteeringRestored:
             case ExerciseEventType.ExercisePaused:
@@ -777,6 +873,7 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         Button(pipPanel, ref px, 0f, 90f, "", NeutralColor, TogglePipRate,
                () => station.Pip != null ? $"{station.Pip.rateHz:F0} Гц" : "—");
         pipPanel.gameObject.SetActive(false);
+        BuildTriggers();   // 21.6а: поверх PiP — кнопки списка должны нажиматься
     }
 
     private T Layer<T>(string name) where T : DebriefMapGraphic

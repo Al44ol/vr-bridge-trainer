@@ -6,6 +6,7 @@
 // Во всех режимах тренажёра: это команда упражнения, а не подсказка. Ниже оповещения о провале
 // (ExerciseFailureNotice — выше уровня глаз). Строится кодом — объект «PilotOrderNotice», дочерний к Ship
 // (качается с мостиком), Setup не нужен.
+// 21.6а: сообщение триггера сценария (ScenarioMessage) — та же табличка, заголовок «СООБЩЕНИЕ», messageSeconds.
 // ============================================================
 using TMPro;
 using UnityEngine;
@@ -17,6 +18,8 @@ public class PilotOrderNotice : MonoBehaviour
     public float showSeconds = 6f;
     [Tooltip("19.4б-3: обстановка («До причала … м, идёт … уз») — секунд, без сигнала")]
     public float infoSeconds = 4f;
+    [Tooltip("21.6а: сообщение триггера сценария — секунд (текст длиннее команды)")]
+    public float messageSeconds = 9f;
     public float distanceFromHead = 1.1f;
     [Tooltip("Над уровнем глаз, м (оповещение о провале — 0,22 м)")]
     public float upOffset = 0.05f;
@@ -58,7 +61,15 @@ public class PilotOrderNotice : MonoBehaviour
 
     private void OnEvent(ExerciseEvent e)
     {
-        if (e.Type != ExerciseEventType.PilotOrder || !e.InExercise) return;
+        if (!e.InExercise) return;
+        // 21.6а: сообщение триггера сценария — та же табличка с заголовком «СООБЩЕНИЕ» и тоном
+        if (e.Type == ExerciseEventType.ScenarioMessage)
+        {
+            lastCommandAt = Time.unscaledTime;
+            Show("СООБЩЕНИЕ", e.Subject, messageSeconds, true);
+            return;
+        }
+        if (e.Type != ExerciseEventType.PilotOrder) return;
         // 19.4б-3: обстановка («До причала …») — короче и без сигнала; команды — с сигналом
         bool info = e.Index == (int)PilotOrderKind.Info;
         if (info && Time.unscaledTime - lastCommandAt < 3f) return;   // не перекрывать только что поданную команду (обстановка — и на мониторе)
@@ -68,10 +79,14 @@ public class PilotOrderNotice : MonoBehaviour
 
     public void Show(string order) => Show(order, showSeconds, true);
 
-    public void Show(string order, float seconds, bool withTone)
+    public void Show(string order, float seconds, bool withTone) => Show("ЛОЦМАН", $"«{order}»", seconds, withTone);
+
+    /// <summary>Табличка: заголовок (мелко) и текст (жирно); 21.6а — и сообщения триггеров сценария.</summary>
+    public void Show(string header, string text, float seconds, bool withTone)
     {
         Build();
-        label.text = $"<size=70%>ЛОЦМАН</size>\n<b>«{order}»</b>";
+        label.text = $"<size=70%>{header}</size>\n<b>{text}</b>";
+        ((RectTransform)canvas.transform).sizeDelta = new Vector2(700f, text.Length > 60 ? 170f : 120f);   // 21.6а: длинное — в две-три строки
         Camera cam = Camera.main;
         if (cam != null)
         {
@@ -121,6 +136,10 @@ public class PilotOrderNotice : MonoBehaviour
         text.transform.SetParent(go.transform, false);
         label = text.AddComponent<TextMeshProUGUI>();
         label.fontSize = 36f;
+        label.enableAutoSizing = true;   // 21.6а: длинное сообщение — мельче, но целиком
+        label.fontSizeMin = 20f;
+        label.fontSizeMax = 36f;
+        label.margin = new Vector4(16f, 6f, 16f, 6f);
         label.color = Color.white;
         label.alignment = TextAlignmentOptions.Center;
         label.raycastTarget = false;

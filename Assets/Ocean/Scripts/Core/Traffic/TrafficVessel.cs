@@ -9,7 +9,7 @@
 // Скорость задаётся телеграфом: SF = v_зад/V_эксп (0…1); старт — сразу
 // с заданной скоростью (Teleport), без разгона.
 // Курс — HeadingAutopilot; заданный курс — постоянный или от RouteFollower.
-// После столкновения цель ставит «Стоп» (EngineStopped).
+// После столкновения цель ставит «Стоп» (EngineStopped). 21.6а: приказ триггера — Order (курс, скорость).
 // Состояние для записи (targets.csv) — через ITrackedTarget (C1).
 // ============================================================
 using System;
@@ -74,6 +74,24 @@ public sealed class TrafficVessel : ITrackedTarget
     public void KeepPrevious()
     {
         PrevEast = Model.East; PrevNorth = Model.North; PrevPsi = Model.Psi;
+    }
+
+    /// <summary>
+    /// 21.6а: приказ по триггеру сценария — курс, ° (NaN — не менять; заданный курс снимает маршрут —
+    /// дальше постоянным курсом) и скорость, уз (NaN — не менять; 0 — стоп; машина снова работает).
+    /// </summary>
+    public void Order(double courseDeg, double speedKnots)
+    {
+        if (!double.IsNaN(courseDeg))
+        {
+            Route = null;
+            OrderedCourseDeg = ((courseDeg % 360.0) + 360.0) % 360.0;
+        }
+        if (!double.IsNaN(speedKnots))
+        {
+            OrderedSpeedKnots = Math.Max(0.0, speedKnots);
+            EngineStopped = false;
+        }
     }
 
     /// <summary>Курс, который держит авторулевой сейчас, °.</summary>

@@ -63,6 +63,7 @@ public static class TrainerScenes
         PilotOrderNotice.Ensure();
         TowingController.Ensure();
         TugWorkController.Ensure();
+        ScenarioTriggers.Ensure();   // 21.6а
         XrRigTuning.Ensure();   // К2, К3
         StartMenu.Ensure();
     }
