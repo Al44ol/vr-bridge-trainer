@@ -6,7 +6,9 @@
 // Режимы панели:
 //   • выбор — список сценариев библиотеки ScenarioRunner и «Свободное плавание»;
 //   • брифинг — название, текст, условия (погода, начальные условия, лимит,
-//     условия завершения), кнопки «Начать» / «К выбору» / «Закрыть»;
+//     условия завершения), кнопки «К упражнению» / «Начать сразу» / «К выбору»;
+//   • 21.5в: пауза перед началом — табличка «ПАУЗА» («Начать», «Брифинг»): после брифинга упражнение по умолчанию
+//     стоит (фаза Briefing), пока не нажата «Начать»; табличка на 0,3 м ниже места брифинга;
 //   • результаты — предварительный итог (ExerciseSummary; полноценно — C3),
 //     «Перезапустить» / «К выбору» / «Закрыть».
 // C1: на брифинге — ID обучающегося (обезличенный код) и цифровая
@@ -50,7 +52,7 @@ using UnityEngine.UI;
 
 public class ScenarioPanel : MonoBehaviour
 {
-    private enum Mode { Hidden, Selection, Briefing, Results, Keypad, CurrentScore }
+    private enum Mode { Hidden, Selection, Briefing, Results, Keypad, CurrentScore, Ready }
     private enum DebriefTab { Summary, Criteria, Map, Plots }
 
     public ScenarioRunner runner;
@@ -110,6 +112,9 @@ public class ScenarioPanel : MonoBehaviour
     // 17.10.2026: ручка «переместить» над панелью; разбор, для которого запомнены вкладка и страницы (повторный вызов)
     private PanelDragHandle dragHandle;
     private ExerciseSummary debriefFor;
+    // 21.5в: табличка «ПАУЗА» опущена относительно места брифинга (не заслонять вид вперёд)
+    private bool readyLowered;
+    private const float ReadyDropM = 0.3f;
 
     public bool IsOpen => canvas != null && canvas.enabled;
 
@@ -219,6 +224,7 @@ public class ScenarioPanel : MonoBehaviour
     {
         ScenarioDefinition s = runner != null ? runner.Current : null;
         if (s == null) return;
+        if (IsOpen && mode == Mode.Ready && readyLowered) { panel.transform.position += panel.transform.up * ReadyDropM; readyLowered = false; }
         BeginContent(Mode.Briefing);
         float y = Top;
         Title($"{s.id}. {s.title}", ref y);
@@ -230,11 +236,12 @@ public class ScenarioPanel : MonoBehaviour
         if (Phase == ScenarioRunner.Phase.Briefing)
         {
             TraineeRow(ref y);
-            Text("Судно стоит, пока не нажата «Начать». Начальные условия будут поставлены заново.", 15f, MutedColor, ref y);
+            Text("«К упражнению» — пауза: судно и цели стоят, время не идёт; осмотритесь, возьмите управление и нажмите «Начать» на табличке «ПАУЗА» " +
+                 "(или меню A «Начать упражнение»). Начальные условия будут поставлены заново.", 15f, MutedColor, ref y);   // 21.5в
             ButtonRow(ref y, ButtonHeight + 6f,
-                ("Начать", StartColor, () => runner.StartExercise()),
-                ("К выбору", NeutralColor, ShowSelection),
-                ("Закрыть", NeutralColor, Hide));
+                ("К упражнению", StartColor, ShowReady),
+                ("Начать сразу", ButtonColor, () => runner.StartExercise()),
+                ("К выбору", NeutralColor, ShowSelection));
         }
         else
             ButtonRow(ref y, ButtonHeight, ("Закрыть", NeutralColor, Hide));
@@ -243,6 +250,27 @@ public class ScenarioPanel : MonoBehaviour
 
     // ─────────── Разбор (C3): итог, критерии, схема ───────────
     /// <summary>Разбор упражнения с первой вкладки («Итог»).</summary>
+    /// <summary>
+    /// 21.5в: пауза перед началом — компактная табличка «ПАУЗА» вместо брифинга (фаза Briefing: модель стоит, время не идёт;
+    /// волны и качка идут). «Начать» — runner.StartExercise, «Брифинг» — обратно к тексту. Табличка — на 0,3 м ниже места брифинга.
+    /// </summary>
+    public void ShowReady()
+    {
+        ScenarioDefinition s = runner != null ? runner.Current : null;
+        if (s == null || Phase != ScenarioRunner.Phase.Briefing) return;
+        bool lower = IsOpen && mode == Mode.Briefing && !readyLowered;
+        BeginContent(Mode.Ready);
+        float y = Top;
+        Title("ПАУЗА — упражнение не начато", ref y);
+        Text($"{s.id}. {s.title}", 18f, Color.white, ref y);
+        Text("Судно и цели стоят, время не идёт. Осмотритесь, возьмите управление и нажмите «Начать».", 16f, MutedColor, ref y);
+        y -= Gap;
+        ButtonRow(ref y, 72f, ("Начать", StartColor, () => runner.StartExercise()), ("Брифинг", NeutralColor, ShowBriefing));
+        EndContent(y);
+        if (lower) { panel.transform.position -= panel.transform.up * ReadyDropM; readyLowered = true; }
+        Debug.Log($"[Сценарий] «{s.title}» — пауза перед началом (табличка «Начать»).");
+    }
+
     public void ShowResults()
     {
         tab = DebriefTab.Summary;
@@ -688,6 +716,7 @@ public class ScenarioPanel : MonoBehaviour
         mode = newMode;
         if (!wasOpen)
         {
+            readyLowered = false;
             if (placeAtAnchor && startAnchor != null) panel.transform.SetPositionAndRotation(startAnchor.position, startAnchor.rotation);
             else PositionInFrontOfPlayer();
         }

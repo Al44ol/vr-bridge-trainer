@@ -356,7 +356,7 @@ public class InstructorWindow : MonoBehaviour, IScrollHandler, IBeginDragHandler
         ScenarioRunner.Phase phase = runner != null ? runner.CurrentPhase : ScenarioRunner.Phase.Idle;
         ScenarioDefinition sc = runner != null ? runner.Current : null;
         string phaseText = phase == ScenarioRunner.Phase.Running ? (runner.IsPaused ? "<color=#7FB2FF>ПАУЗА</color>" : "<color=#6FE08A>УПРАЖНЕНИЕ</color>")
-                         : phase == ScenarioRunner.Phase.Briefing ? "<color=#FFC85A>БРИФИНГ</color>"
+                         : phase == ScenarioRunner.Phase.Briefing ? "<color=#FFC85A>БРИФИНГ · ПАУЗА ДО «НАЧАТЬ»</color>"   // 21.5в
                          : phase == ScenarioRunner.Phase.Finished ? "ЗАВЕРШЕНО" : "СВОБОДНОЕ ПЛАВАНИЕ";
         statusText.text = $"{phaseText}  <b>{(phase == ScenarioRunner.Phase.Idle ? "" : ScenarioText.Clock(runner.ExerciseTime))}</b>" +
                           (sc != null && phase != ScenarioRunner.Phase.Idle ? $"\n<size=75%><color=#9AA6B2>{sc.id} «{sc.title}»" +
