@@ -5,7 +5,7 @@
 // знает из брифинга, без подсказок решения:
 //   • название, ход упражнения (время и лимит, пройденные точки, следующая точка);
 //   • условия — тот же текст, что на панели брифинга (BriefingFacts — единственный
-//     источник, его берёт и ScenarioPanel);
+//     источник; К1: ScenarioPanel берёт его части — BriefingShip и BriefingConditions — на боковые панели);
 //   • полный текст брифинга.
 // Не показывается (это проверяют критерии оценки C2/C4 — обучающийся должен решить сам):
 // ситуация сближения и обязанность по МППСС, безопасная скорость сценария числом,
@@ -17,18 +17,24 @@
 // последняя команда лоцмана (TugWorkSystem).
 // ============================================================
 using System;
+using System.Collections.Generic;
 using System.Text;
 
 public enum TaskPhase { Free, Briefing, Running, Finished }
 
 public static class ExerciseTasks
 {
-    /// <summary>Условия упражнения — текст панели брифинга (ScenarioPanel).</summary>
-    public static string BriefingFacts(ScenarioDefinition s)
+    /// <summary>
+    /// Условия упражнения — вкладка «Задание» планшета: «судно и задание» + «условия»
+    /// (К1: на брифинге в шлеме это две боковые панели — BriefingShip и BriefingConditions).
+    /// </summary>
+    public static string BriefingFacts(ScenarioDefinition s) =>
+        "<b>Условия</b>\n" + BriefingShip(s) + "\n" + BriefingConditions(s);
+
+    /// <summary>К1: левая панель брифинга — начальное состояние своего судна и задание (маршрут, швартовка или работа буксира).</summary>
+    public static string BriefingShip(ScenarioDefinition s)
     {
         var b = new StringBuilder();
-        b.AppendLine("<b>Условия</b>");
-        b.AppendLine($"Время суток: {ScenarioText.TimeOfDayTitle(s.timeOfDay)}; погода: {ScenarioText.Weather(s.weather)}");
         OwnShipInitialState i = s.initial;
         if (i != null)
             b.AppendLine($"Начало: курс {i.headingDeg:000}°, {ScenarioText.Num(i.speedKnots, 1)} уз, телеграф «{ScenarioText.Telegraph(i.telegraph)}», руль {ScenarioText.Num(i.rudderDeg)}°");
@@ -36,13 +42,72 @@ public static class ExerciseTasks
         else if (s.IsTugWork) TugWorkFacts(s, b);
         else b.AppendLine($"Путевых точек: {Math.Max(0, s.route.Count - 1)}, маршрут {ScenarioText.Num(s.RouteLength / 1852.0, 1)} мили");
         if (s.traffic != null && s.traffic.Count > 0) b.AppendLine($"Другие суда в районе: {s.traffic.Count}");
+        if (s.tugAvailable) b.AppendLine("Буксир: по вызову (меню B → «Буксир»)");
+        return b.ToString().TrimEnd('\n', '\r');
+    }
+
+    /// <summary>К1: правая панель брифинга — время суток, погода, видимость, ветер, лимит и завершение.</summary>
+    public static string BriefingConditions(ScenarioDefinition s)
+    {
+        var b = new StringBuilder();
+        b.AppendLine($"Время суток: {ScenarioText.TimeOfDayTitle(s.timeOfDay)}; погода: {ScenarioText.Weather(s.weather)}");
+        if (s.visibilityMeters > 0f)   // К1: видимость, заданная сценарием (иначе — по погоде, она уже в строке выше)
+            b.AppendLine($"Видимость: {ScenarioText.Num(s.visibilityMeters / 1852.0, 1)} мили");
         if (s.windKnots > 0f)   // 19.3б; 19.3б-2 — случайное направление: в брифинге без числа (его видно в обстановке)
             b.AppendLine(s.windRandomSectorDeg > 0f ? $"Ветер: {ScenarioText.Num(s.windKnots)} уз, направление — {(s.windRandomSectorDeg >= 360f ? "случайное" : $"около {ScenarioText.Bearing(s.windFromDeg)}")}"
                                                   : $"Ветер: {ScenarioText.Wind(s.windKnots, s.windFromDeg)}");
-        if (s.tugAvailable) b.AppendLine("Буксир: по вызову (меню B → «Буксир»)");
         b.AppendLine(s.timeLimitSeconds > 0 ? $"Лимит времени: {ScenarioText.Clock(s.timeLimitSeconds)}" : "Без лимита времени");
         b.Append($"Завершение: {ScenarioText.EndConditions(s)}");
         return b.ToString();
+    }
+
+    /// <summary>
+    /// К1: обязательные критерии (включённые и обязательные в наборе сценария с галочками — EffectiveAssessment),
+    /// которые в этом сценарии оцениваются: расхождение и реакция — при других судах; маршрут — в упражнении по маршруту;
+    /// видимость — при ограниченной видимости на начало; швартовка — в швартовке; G1–G4 — при буксире по вызову;
+    /// G5–G13 — в работе своего буксира; аварии — всегда.
+    /// </summary>
+    public static List<CriterionInfo> BriefingMandatory(ScenarioDefinition s)
+    {
+        var list = new List<CriterionInfo>();
+        if (s == null) return list;
+        AssessmentSettings a = s.EffectiveAssessment();
+        foreach (CriterionInfo c in AssessmentCatalog.All)
+        {
+            CriterionSetting set = a.Get(c.Code);
+            if (set == null || !set.enabled || !set.mandatory) continue;
+            if (Assessed(s, a, c)) list.Add(c);
+        }
+        return list;
+    }
+
+    /// <summary>К1: текст обязательных критериев для брифинга («нет» — если обязательных нет).</summary>
+    public static string BriefingMandatoryText(ScenarioDefinition s)
+    {
+        List<CriterionInfo> list = BriefingMandatory(s);
+        var b = new StringBuilder("<b>Обязательные критерии</b> (не выполнен — незачёт)");
+        if (list.Count == 0) b.Append("\nнет");
+        foreach (CriterionInfo c in list) b.Append($"\n{c.Code} — {c.Title}");
+        return b.ToString();
+    }
+
+    private static bool Assessed(ScenarioDefinition s, AssessmentSettings a, CriterionInfo c)
+    {
+        bool traffic = s.traffic != null && s.traffic.Count > 0;
+        switch (c.Group)
+        {
+            case AssessmentGroup.Encounters:
+            case AssessmentGroup.Reaction: return traffic;
+            case AssessmentGroup.Route: return !s.IsMooring && !s.IsTugWork && s.route != null && s.route.Count >= 2;
+            case AssessmentGroup.Visibility:
+                return FogSignals.Restricted(DetectionModel.Visibility(s.weather, s.visibilityMeters), a.RestrictedVisibilityNm);
+            case AssessmentGroup.Mooring: return s.IsMooring;
+            case AssessmentGroup.Towing:
+                int n;
+                bool own = c.Code.Length > 1 && int.TryParse(c.Code.Substring(1), out n) && n >= 5;   // G5–G13 — свой буксир
+                return own ? s.IsTugWork : s.tugAvailable;
+            default: return true;   // аварии
+        }
     }
 
     /// <summary>

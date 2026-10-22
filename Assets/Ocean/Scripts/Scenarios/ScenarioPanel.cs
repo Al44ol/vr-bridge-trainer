@@ -40,6 +40,10 @@
 // 17.10.2026 (по проверке 19-03): над панелью — ручка «переместить» (PanelDragHandle: взять лучом или рукой,
 // панель идёт за контроллером, отпустили — остаётся); повторный вызов разбора из меню (A «Результаты»,
 // Y «Оценка (итог)») открывает ту же вкладку и страницу (ReopenResults).
+// К1 (22.10.2026): брифинг — на трёх панелях дугой вокруг головы: в центре — название (32 px), текст брифинга (24 px;
+// длинный — страницами ◀ ▶), ID и кнопки; слева — «Судно и задание» (ExerciseTasks.BriefingShip), справа — «Условия
+// и оценка» (BriefingConditions, обязательные критерии — BriefingMandatoryText), 22 px. Боковые панели — дочерние
+// к холсту (ручка «переместить» двигает все три), повёрнуты к голове; угол — по ширине панелей и расстоянию до головы.
 // ============================================================
 using System;
 using System.Collections;
@@ -76,6 +80,18 @@ public class ScenarioPanel : MonoBehaviour
     public float downOffset = 0.12f;
     [Tooltip("Масштаб холста, м на пиксель")]
     public float canvasScale = 0.001f;
+
+    [Header("Брифинг на трёх панелях (К1)")]
+    [Tooltip("Слева — судно и задание, справа — условия и оценка (false — всё на одной панели, как до К1)")]
+    public bool briefingSidePanels = true;
+    [Tooltip("Ширина боковой панели, пикселей холста")]
+    public float sidePanelWidth = 520f;
+    [Tooltip("Зазор между панелями по углу, градусы")]
+    public float sidePanelGapDeg = 2f;
+    [Tooltip("Шрифт: название, текст брифинга, боковые панели, px (до К1 — 25 / 18 / 16)")]
+    public float briefingTitleSize = 32f, briefingTextSize = 24f, briefingSideTextSize = 22f;
+    [Tooltip("Наибольшая высота текста брифинга на странице, px (длиннее — страницы ◀ ▶)")]
+    public float briefingPageHeight = 900f;
 
     [Header("Разбор (C3)")]
     [Tooltip("Строк таблицы критериев на странице")]
@@ -115,6 +131,10 @@ public class ScenarioPanel : MonoBehaviour
     // 21.5в: табличка «ПАУЗА» опущена относительно места брифинга (не заслонять вид вперёд)
     private bool readyLowered;
     private const float ReadyDropM = 0.3f;
+    // К1: боковые панели брифинга и страница текста брифинга
+    private readonly List<GameObject> sidePanels = new List<GameObject>();
+    private int briefingPage;
+    private ScenarioDefinition briefingFor;
 
     public bool IsOpen => canvas != null && canvas.enabled;
 
@@ -225,13 +245,31 @@ public class ScenarioPanel : MonoBehaviour
         ScenarioDefinition s = runner != null ? runner.Current : null;
         if (s == null) return;
         if (IsOpen && mode == Mode.Ready && readyLowered) { panel.transform.position += panel.transform.up * ReadyDropM; readyLowered = false; }
+        if (mode != Mode.Briefing || briefingFor != s) briefingPage = 0;   // К1: другой сценарий или вход в брифинг — с первой страницы
+        briefingFor = s;
         BeginContent(Mode.Briefing);
         float y = Top;
-        Title($"{s.id}. {s.title}", ref y);
-        Text(s.briefing, 18f, Color.white, ref y);
-        y -= Gap;
-        Text(ExerciseTasks.BriefingFacts(s), 16f, MutedColor, ref y);   // тот же текст — вкладка «Задание» планшета (D2)
-        y -= Gap;
+        if (!briefingSidePanels)
+        {
+            Title($"{s.id}. {s.title}", ref y);
+            Text(s.briefing, 18f, Color.white, ref y);
+            y -= Gap;
+            Text(ExerciseTasks.BriefingFacts(s), 16f, MutedColor, ref y);   // тот же текст — вкладка «Задание» планшета (D2)
+            y -= Gap;
+        }
+        else
+        {
+            Title($"{s.id}. {s.title}", ref y, briefingTitleSize);
+            List<string> pages = BriefingPages(s.briefing, Width - 2f * Pad, briefingTextSize);
+            briefingPage = Mathf.Clamp(briefingPage, 0, pages.Count - 1);
+            Text(pages[briefingPage], briefingTextSize, Color.white, ref y);
+            if (pages.Count > 1)
+                ButtonRow(ref y, ButtonHeight,
+                    ("◀ Назад", NeutralColor, () => { briefingPage = Mathf.Max(0, briefingPage - 1); ShowBriefing(); }),
+                    ($"Стр. {briefingPage + 1} из {pages.Count}", NeutralColor, null),
+                    ("Вперёд ▶", NeutralColor, () => { briefingPage = Mathf.Min(pages.Count - 1, briefingPage + 1); ShowBriefing(); }));
+            y -= Gap;
+        }
 
         if (Phase == ScenarioRunner.Phase.Briefing)
         {
@@ -246,6 +284,106 @@ public class ScenarioPanel : MonoBehaviour
         else
             ButtonRow(ref y, ButtonHeight, ("Закрыть", NeutralColor, Hide));
         EndContent(y);
+        if (briefingSidePanels)
+        {
+            SidePanel(-1, "Судно и задание", ExerciseTasks.BriefingShip(s));
+            SidePanel(+1, "Условия и оценка", ExerciseTasks.BriefingConditions(s) + "\n\n" + ExerciseTasks.BriefingMandatoryText(s));
+        }
+    }
+
+    // ─────────── К1: брифинг на трёх панелях ───────────
+
+    /// <summary>Текст брифинга по страницам: абзацы подряд, пока высота не больше briefingPageHeight (длинный абзац — своя страница).</summary>
+    private List<string> BriefingPages(string text, float width, float size)
+    {
+        var pages = new List<string>();
+        text = text ?? "";
+        if (TextHeight(text, width, size) <= briefingPageHeight) { pages.Add(text); return pages; }
+        var page = new StringBuilder();
+        foreach (string para in text.Split('\n'))
+        {
+            string tryText = page.Length == 0 ? para : page + "\n" + para;
+            if (page.Length > 0 && TextHeight(tryText, width, size) > briefingPageHeight)
+            {
+                pages.Add(page.ToString());
+                page.Clear();
+                page.Append(para);
+            }
+            else
+            {
+                page.Clear();
+                page.Append(tryText);
+            }
+        }
+        if (page.Length > 0 || pages.Count == 0) pages.Add(page.ToString());
+        return pages;
+    }
+
+    private TextMeshProUGUI measure;
+
+    private float TextHeight(string text, float width, float size)
+    {
+        if (measure == null)
+        {
+            // Невидимый образец для замера (пустой текст: GetPreferredValues не меняет показанное)
+            var go = new GameObject("Measure", typeof(RectTransform));
+            go.transform.SetParent(panel.transform, false);
+            measure = go.AddComponent<TextMeshProUGUI>();
+            measure.textWrappingMode = TextWrappingModes.Normal;
+            measure.raycastTarget = false;
+            measure.color = new Color(1f, 1f, 1f, 0f);
+            measure.text = "";
+        }
+        measure.fontSize = size;
+        return measure.GetPreferredValues(text, width, 0f).y;
+    }
+
+    /// <summary>
+    /// Боковая панель брифинга: side −1 — слева, +1 — справа. Стоит на дуге вокруг головы (радиус — расстояние от головы
+    /// до центральной панели в плоскости панели, 0,7–1,6 м), повёрнута к голове, по высоте — по центру центральной панели.
+    /// </summary>
+    private void SidePanel(int side, string title, string text)
+    {
+        var go = new GameObject(side < 0 ? "BriefingLeft" : "BriefingRight", typeof(RectTransform));
+        go.transform.SetParent(panel.transform, false);
+        sidePanels.Add(go);
+        var bg = go.AddComponent<Image>();
+        bg.color = PanelColor;
+        bg.raycastTarget = false;
+        var rt = go.GetComponent<RectTransform>();
+        rt.pivot = new Vector2(0.5f, 1f);
+
+        float w = sidePanelWidth - 2f * Pad;
+        float y = -Pad;
+        TextIn(rt, w, title, briefingSideTextSize + 4f, TitleColor, ref y, FontStyles.Bold);
+        y -= 4f;
+        TextIn(rt, w, text, briefingSideTextSize, Color.white, ref y, FontStyles.Normal);
+        float height = -y + Pad;
+        rt.sizeDelta = new Vector2(sidePanelWidth, height);
+
+        // Голова в системе холста (пиксели); дуга — в плоскости холста по горизонтали
+        Vector3 head = new Vector3(0f, 0f, -distanceFromHead / canvasScale);
+        Camera cam = Camera.main;
+        if (cam != null)
+        {
+            Vector3 h = panel.transform.InverseTransformPoint(cam.transform.position);
+            float r = new Vector2(h.x, h.z).magnitude * canvasScale;
+            if (h.z < 0f && r >= 0.7f && r <= 1.6f) head = new Vector3(h.x, 0f, h.z);
+        }
+        Vector3 toCentre = -head;
+        float radius = toCentre.magnitude;
+        float half = 0.5f * Width, halfSide = 0.5f * sidePanelWidth;
+        float angle = Mathf.Atan2(half, radius) * Mathf.Rad2Deg + Mathf.Atan2(halfSide, radius) * Mathf.Rad2Deg + sidePanelGapDeg;
+        Quaternion turn = Quaternion.Euler(0f, side * angle, 0f);
+        Vector3 centre = head + turn * toCentre;
+        rt.localPosition = centre + Vector3.up * (height * 0.5f);   // pivot сверху: центр панели — на высоте центра холста
+        rt.localRotation = Quaternion.LookRotation(centre - head, Vector3.up);
+    }
+
+    private void ClearSidePanels()
+    {
+        foreach (GameObject g in sidePanels) if (g != null) Destroy(g);
+        sidePanels.Clear();
     }
 
     // ─────────── Разбор (C3): итог, критерии, схема ───────────
@@ -712,6 +850,7 @@ public class ScenarioPanel : MonoBehaviour
         BuildCanvas();
         for (int i = background.childCount - 1; i >= 0; i--)
             Destroy(background.GetChild(i).gameObject);
+        ClearSidePanels();   // К1: боковые панели — только у брифинга (ShowBriefing ставит их заново)
         bool wasOpen = IsOpen;
         mode = newMode;
         if (!wasOpen)
@@ -732,24 +871,27 @@ public class ScenarioPanel : MonoBehaviour
         dragHandle.gameObject.SetActive(true);
     }
 
-    private void Title(string text, ref float y)
+    private void Title(string text, ref float y, float size = 25f)
     {
         y -= Pad;
-        Text(text, 25f, TitleColor, ref y, FontStyles.Bold);
+        Text(text, size, TitleColor, ref y, FontStyles.Bold);
         y -= 4f;
     }
 
-    private void Text(string text, float size, Color color, ref float y, FontStyles style = FontStyles.Normal)
+    private void Text(string text, float size, Color color, ref float y, FontStyles style = FontStyles.Normal) =>
+        TextIn(background, Width - 2f * Pad, text, size, color, ref y, style);
+
+    // Текст шириной w в родителе с якорем по верхнему краю (центральная панель или боковая — К1)
+    private void TextIn(RectTransform parent, float w, string text, float size, Color color, ref float y, FontStyles style)
     {
         var go = new GameObject("Text", typeof(RectTransform));
-        go.transform.SetParent(background, false);
+        go.transform.SetParent(parent, false);
         var tmp = go.AddComponent<TextMeshProUGUI>();
         tmp.fontSize = size; tmp.color = color; tmp.fontStyle = style;
         tmp.alignment = TextAlignmentOptions.TopLeft;
         tmp.textWrappingMode = TextWrappingModes.Normal;
         tmp.raycastTarget = false;
         tmp.text = text;
-        float w = Width - 2f * Pad;
         float h = Mathf.Ceil(tmp.GetPreferredValues(text, w, 0f).y) + 4f;
         RectTransform rt = Top0(go, w, h, y);
         rt.anchoredPosition = new Vector2(0f, y);

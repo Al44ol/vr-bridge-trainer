@@ -11,6 +11,7 @@
 using System;
 using System.Collections.Generic;
 using NUnit.Framework;
+using UnityEngine;
 
 public class PlotterTests
 {
@@ -173,5 +174,84 @@ public class PlotterTests
         StringAssert.Contains("только обнаруженные", off);
         Assert.IsTrue(Enum.TryParse(ExerciseEventType.PlotterRevealTargets.ToString(), out ExerciseEventType t) && t == ExerciseEventType.PlotterRevealTargets,
                       "events.csv хранит тип по имени — читается обратно");
+    }
+
+    // ─────────── К1: брифинг на трёх панелях ───────────
+
+    [Test]
+    public void Briefing_SidePanels_SplitFactsWithoutLoss()
+    {
+        foreach (ScenarioDefinition s in new[] { AssessmentTests.DemoB2(), AssessmentTests.DemoB3(), FogTests.DemoC4() })
+        {
+            string ship = ExerciseTasks.BriefingShip(s), cond = ExerciseTasks.BriefingConditions(s);
+            Assert.AreEqual("<b>Условия</b>\n" + ship + "\n" + cond, ExerciseTasks.BriefingFacts(s), $"{s.id}: планшет — те же строки, что на двух панелях");
+            StringAssert.Contains("Начало: курс", ship);
+            StringAssert.Contains("Путевых точек", ship);
+            StringAssert.DoesNotContain("Время суток", ship, "условия — на правой панели");
+            StringAssert.Contains("Время суток", cond);
+            StringAssert.Contains("Завершение:", cond);
+            StringAssert.DoesNotContain("Начало:", cond, "судно — на левой панели");
+            if (s.traffic != null && s.traffic.Count > 0) StringAssert.Contains($"Другие суда в районе: {s.traffic.Count}", ship);
+            if (s.visibilityMeters > 0f) StringAssert.Contains("Видимость:", cond);
+            else StringAssert.DoesNotContain("Видимость:", cond, "видимость по погоде — уже в строке погоды");
+        }
+    }
+
+    [Test]
+    public void Briefing_Mandatory_ScenarioSwitchesAndAssessedGroupsOnly()
+    {
+        ScenarioDefinition s = AssessmentTests.DemoB2();
+        List<CriterionInfo> list = ExerciseTasks.BriefingMandatory(s);
+        Assert.IsTrue(list.Exists(c => c.Code == "A1") && list.Exists(c => c.Code == "A2"), "аварии — всегда");
+        Assert.IsFalse(list.Exists(c => c.Group == AssessmentGroup.Mooring || c.Group == AssessmentGroup.Towing), "нет швартовки и буксира — нет их критериев");
+        if (s.traffic == null || s.traffic.Count == 0)
+            Assert.IsFalse(list.Exists(c => c.Group == AssessmentGroup.Encounters), "нет судов — нет расхождения");
+
+        CriterionInfo must = null, may = null;
+        foreach (CriterionInfo c in AssessmentCatalog.All)
+            if (c.Group == AssessmentGroup.Route)
+            {
+                if (c.Mandatory && must == null) must = c;
+                if (!c.Mandatory && may == null) may = c;
+            }
+        Assert.IsNotNull(must); Assert.IsNotNull(may);
+        Assert.IsTrue(list.Exists(c => c.Code == must.Code), $"{must.Code} обязателен по набору");
+        Assert.IsFalse(list.Exists(c => c.Code == may.Code), $"{may.Code} не обязателен");
+
+        // галочки сценария (21.4б): снять «обяз», поставить «обяз», выключить
+        s.criteriaSwitches = new List<CriterionSwitch>
+        {
+            new CriterionSwitch { code = must.Code, enabled = true, mandatory = false },
+            new CriterionSwitch { code = may.Code, enabled = true, mandatory = true },
+            new CriterionSwitch { code = "A1", enabled = false, mandatory = true }
+        };
+        list = ExerciseTasks.BriefingMandatory(s);
+        Assert.IsFalse(list.Exists(c => c.Code == must.Code), "снята галочка «обяз»");
+        Assert.IsTrue(list.Exists(c => c.Code == may.Code), "поставлена галочка «обяз»");
+        Assert.IsFalse(list.Exists(c => c.Code == "A1"), "выключенный критерий не показывается");
+        string text = ExerciseTasks.BriefingMandatoryText(s);
+        StringAssert.StartsWith("<b>Обязательные критерии</b>", text);
+        StringAssert.Contains($"{may.Code} — {may.Title}", text);
+    }
+
+    [Test]
+    public void Briefing_Mandatory_Mooring_NoRouteCriteria()
+    {
+        var area = ScriptableObject.CreateInstance<WaterArea>();
+        DemoWaterArea.Fill(area);
+        var crit = ScriptableObject.CreateInstance<AssessmentCriteria>();
+        crit.settings = DemoBerthScenario.Assessment();
+        var s = ScriptableObject.CreateInstance<ScenarioDefinition>();
+        DemoBerthScenario.Fill(s, area, LowSpeedModelTests.Model45m(), crit);
+        Assert.IsTrue(s.IsMooring);
+
+        List<CriterionInfo> list = ExerciseTasks.BriefingMandatory(s);
+        Assert.IsTrue(list.Exists(c => c.Code == "M1"), "задание швартовки — обязательно");
+        Assert.IsFalse(list.Exists(c => c.Group == AssessmentGroup.Route), "в швартовке маршрут не оценивается");
+        if (!s.tugAvailable)
+            Assert.IsFalse(list.Exists(c => c.Group == AssessmentGroup.Towing), "без буксира — критериев буксира нет");
+        Assert.IsFalse(list.Exists(c => c.Code == "G5"), "работа своего буксира — не в швартовке");
+        StringAssert.Contains("Причал", ExerciseTasks.BriefingShip(s));
+        StringAssert.DoesNotContain("Путевых точек", ExerciseTasks.BriefingShip(s));
     }
 }
