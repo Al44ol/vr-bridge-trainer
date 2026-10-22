@@ -10,6 +10,7 @@
 // 21.3б — кромки фарватеров (ось ± ширина/2), стрелка «вода» у причалов; фарватер и причал — без замыкания.
 // 21.4а — слой сценария: коридор XTE, линия маршрута с ручками точек, середин участков и кромки XTE, судно на старте.
 // 21.5а — другие суда: силуэт, путь, пунктиры до положений в момент TCPA и отрезок CPA, ручки курса, TCPA и точек.
+// 21.5б — причал задания (голубая кромка) и судно-клиент работы буксира (серый силуэт).
 // Координаты: пиксель окна MapViewport = локальная точка от левого нижнего угла этой графики.
 // ============================================================
 using System.Collections.Generic;
@@ -78,6 +79,12 @@ public class EditorMapOverlay : MaskableGraphic
     public readonly List<TrafficMark> Traffic = new List<TrafficMark>();
     public static readonly Color TrafficColor = new Color(0.95f, 0.5f, 0.85f, 1f);
     public static readonly Color CpaColor = new Color(1f, 0.35f, 0.3f, 1f);
+    /// <summary>21.5б: причал задания (швартовка, работа буксира) и судно-клиент у причала.</summary>
+    public bool ShowTaskBerth, ShowClient;
+    public WorldPosition TaskBerthA, TaskBerthB, ClientPos;
+    public float ClientHeading, ClientLength, ClientBeam;
+    public static readonly Color TaskBerthColor = new Color(0.3f, 0.85f, 1f, 1f);
+    public static readonly Color ClientColor = new Color(0.72f, 0.76f, 0.84f, 1f);
 
     /// <summary>Ручки рамки: 0–3 — углы (ЮЗ, ЮВ, СВ, СЗ), 4–7 — середины сторон (Ю, В, С, З).</summary>
     public static List<WorldPosition> BoundsHandles(WorldPosition min, WorldPosition max)
@@ -250,6 +257,9 @@ public class EditorMapOverlay : MaskableGraphic
             Quad(vh, c - new Vector2(h, h), c + new Vector2(h, h), sel ? HandleHot : hot ? CursorColor : (i == 0 ? Color.white : RouteColor));
         }
 
+        // 21.5б: причал задания — толстая голубая кромка; клиент у причала — серый силуэт
+        if (ShowTaskBerth) Seg(vh, Px(TaskBerthA, r), Px(TaskBerthB, r), 6f, TaskBerthColor);
+        if (ShowClient) Hull(vh, Px(ClientPos, r), ClientHeading, ClientLength, ClientBeam, ClientColor, mpp);
         DrawTraffic(vh, r);   // 21.5а
 
         // Судно на старте

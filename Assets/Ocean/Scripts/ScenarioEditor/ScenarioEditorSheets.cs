@@ -10,6 +10,7 @@
 //   • «Критерии оценки» — базовый набор < >, 50 критериев по группам: «вкл» / «обяз» (только отличия от набора
 //     пишутся в сценарий — CriteriaEditing), пороги и вес — серым, не правятся; «Как в наборе»;
 //   • «Брифинг» — многострочное поле и «Заготовка» (ScenarioChecks.Briefing; написанный текст — с вопросом).
+//   • 21.5б — «Задание» (швартовка, буксир по вызову, работа буксира) — ScenarioEditorTask.cs; 21.5а — листы непрозрачные.
 // Каждая правка — шаг отмены (Ctrl+Z работает и с открытым листом).
 // «Пройти в тренажёре» (палитра режима «Сценарий»): ошибки проверки — не запускается; иначе сценарий
 // сохраняется, тренажёр загружается заново, ScenarioFiles находит файл и открывает сценарий на брифинге
@@ -30,7 +31,7 @@ public partial class ScenarioEditorApp
     private readonly List<(string code, TextMeshProUGUI text)> critRows = new List<(string, TextMeshProUGUI)>();
     private AssessmentSettings critEff, critBase;
 
-    private bool SheetOpen => Active(condSheet) || Active(critSheet) || Active(briefSheet);
+    private bool SheetOpen => Active(condSheet) || Active(critSheet) || Active(briefSheet) || Active(taskSheet);
     private static bool Active(RectTransform r) => r != null && r.gameObject.activeSelf;
 
     // ─────────── Построение ───────────
@@ -56,6 +57,7 @@ public partial class ScenarioEditorApp
         BuildConditionsSheet();
         BuildCriteriaSheet();
         BuildBriefingSheet();
+        BuildTaskSheet();   // 21.5б
     }
 
     private static void SLabel(RectTransform p, string text, float x, ref float y, float w)
@@ -221,14 +223,14 @@ public partial class ScenarioEditorApp
     {
         if (sdoc == null) return;
         EndFieldEdit();
-        foreach (RectTransform r in new[] { condSheet, critSheet, briefSheet }) if (r != null) r.gameObject.SetActive(r == s);
+        foreach (RectTransform r in new[] { condSheet, critSheet, briefSheet, taskSheet }) if (r != null) r.gameObject.SetActive(r == s);
         FillSheets();
     }
 
     private void CloseSheets()
     {
         EndFieldEdit();   // незаконченный ввод — в сценарий
-        foreach (RectTransform r in new[] { condSheet, critSheet, briefSheet }) if (r != null) r.gameObject.SetActive(false);
+        foreach (RectTransform r in new[] { condSheet, critSheet, briefSheet, taskSheet }) if (r != null) r.gameObject.SetActive(false);
         Refresh();
     }
 
@@ -267,6 +269,7 @@ public partial class ScenarioEditorApp
         int nd = s.criteriaSwitches != null ? s.criteriaSwitches.Count : 0;
         critInfo.text = $"Включено {en} из {AssessmentCatalog.All.Count}, обязательных {man}\n" +
                         (nd > 0 ? $"<color=#FFC85A>Отличий от набора: {nd}</color>" : "<color=#9AA6B2>Как в наборе</color>");
+        FillTaskSheet();   // 21.5б
     }
 
     // ─────────── Правка ───────────

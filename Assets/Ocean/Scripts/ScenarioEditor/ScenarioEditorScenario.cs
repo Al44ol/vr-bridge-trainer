@@ -14,7 +14,7 @@
 //     блоки из основы), старта (место, курс, скорость, телеграф, руль) или точки (имя, место, XTE, узкость, участки).
 //   • «Проверка» — ScenarioDefinition.Validate + замечания редактора (RouteEditing.Check).
 // Условия, критерии, брифинг, «Пройти в тренажёре» — ScenarioEditorSheets.cs (21.4б); другие суда — ScenarioEditorTraffic.cs (21.5а);
-// швартовка, буксир — 21.5б (из основы — как есть).
+// швартовка, буксир по вызову, работа буксира — лист «Задание…», ScenarioEditorTask.cs (21.5б).
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -96,7 +96,7 @@ public partial class ScenarioEditorApp
         MonitorUi.TopLeft(help.rectTransform, Pad, y, w, 330f);
         y -= 338f;
         TextMeshProUGUI later = MonitorUi.Text(p,
-            "Условия, критерии, брифинг — кнопки в свойствах сценария. Швартовка, буксир — 21.5б (из основы переносятся как есть).",
+            "Условия, критерии, брифинг, задание (швартовка, буксир) — кнопки в свойствах сценария.",
             13f, MonitorUi.MutedColor, TextAlignmentOptions.TopLeft);
         MonitorUi.TopLeft(later.rectTransform, Pad, y, w, 80f);
     }
@@ -134,6 +134,10 @@ public partial class ScenarioEditorApp
         ui.Button(g, ref x, y, third, "Критерии…", MonitorUi.ButtonColor, () => OpenSheet(critSheet), null, null, null, MonitorUi.RowHeight, 15f);
         ui.Button(g, ref x, y, third, "", MonitorUi.ButtonColor, () => OpenSheet(briefSheet),
                   () => S != null && string.IsNullOrWhiteSpace(S.briefing) ? "Брифинг… (пусто)" : "Брифинг…", null, null, MonitorUi.RowHeight, 15f);
+        y -= MonitorUi.RowHeight + MonitorUi.Gap;
+        x = Pad;   // 21.5б: швартовка, буксир по вызову, работа буксира
+        ui.Button(g, ref x, y, w, "", MonitorUi.ButtonColor, () => OpenSheet(taskSheet), () => S == null ? "" : "Задание… (" + TaskTitle(S) + ")",
+                  null, null, MonitorUi.RowHeight, 15f);
         y -= MonitorUi.RowHeight + MonitorUi.Gap;
         sInfo = MonitorUi.Text(g, "", 15f, Color.white, TextAlignmentOptions.TopLeft);
         MonitorUi.TopLeft(sInfo.rectTransform, Pad, y, w, 110f);
@@ -206,6 +210,15 @@ public partial class ScenarioEditorApp
         y -= MonitorUi.RowHeight + MonitorUi.Gap;
     }
 
+    private static string TaskTitle(ScenarioDefinition s)
+    {
+        var parts = new List<string>();
+        if (s.IsMooring) parts.Add("швартовка");
+        if (s.tugAvailable) parts.Add("буксир по вызову");
+        if (s.IsTugWork) parts.Add("работа буксира");
+        return parts.Count > 0 ? string.Join(", ", parts) : "только маршрут";
+    }
+
     private static string AreaTitle(WaterArea a) => a.name + (TrainerScenes.Catalog != null && TrainerScenes.Catalog.IsBuiltIn(a) ? " · встроенная" : " · своя");
 
     private static string OwnShipTitle(ScenarioDefinition s) =>
@@ -273,12 +286,6 @@ public partial class ScenarioEditorApp
         b.AppendLine($"Маршрут: точек {s.route.Count}, {MonitorUi.Num(s.RouteLength / 1852.0, 2)} мили");
         int ships = s.traffic != null ? s.traffic.Count : 0;
         b.AppendLine(ships > 0 ? $"Других судов {ships} (щелчок по судну — свойства)" : "Других судов нет (инструмент «Другое судно»)");
-        var blocks = new List<string>();
-        if (s.IsMooring) blocks.Add("швартовка");
-        if (s.tugAvailable) blocks.Add("буксир по вызову");
-        if (s.IsTugWork) blocks.Add("работа буксира");
-        if (s.windKnots > 0f) blocks.Add($"ветер {MonitorUi.Num(s.windKnots, 0)} уз");
-        if (blocks.Count > 0) b.AppendLine("Из основы: " + string.Join(", ", blocks) + " (правка — 21.5б)");
         b.Append($"<color=#9AA6B2>{ScenarioText.Conditions(s.weather, s.timeOfDay)}; лимит {MonitorUi.Num(s.timeLimitSeconds / 60.0, 0)} мин · критериев: {CriteriaEditing.Count(s).enabled}, обязательных {CriteriaEditing.Count(s).mandatory}</color>");
         return b.ToString();
     }
@@ -379,7 +386,7 @@ public partial class ScenarioEditorApp
         if (list.Count == 0) return;
         int k = S.waterArea != null ? list.FindIndex(x => x.name == S.waterArea.name) : -1;
         WaterArea next = list[((k < 0 ? 0 : k) + d + list.Count) % list.Count];
-        EditScenario(() => { S.waterArea = next; sdoc.Commit(); });
+        EditScenario(() => { S.waterArea = next; if (S.IsTugWork) TaskEditing.PlaceTugWork(S); sdoc.Commit(); });   // 21.5б: расстановка — по новому причалу
         mapDirty = true;
         FitArea();
         Debug.Log($"[Редактор] Сценарий «{S.id}»: акватория «{next.name}».");
@@ -856,6 +863,7 @@ public partial class ScenarioEditorApp
             overlay.HeadingHot = hotHeading || dragHeading;
         }
         TrafficOverlay();   // 21.5а
+        TaskOverlay();      // 21.5б
         overlay.SetVerticesDirty();
         PointLabels();
         if (viewport.Version != builtVersion)

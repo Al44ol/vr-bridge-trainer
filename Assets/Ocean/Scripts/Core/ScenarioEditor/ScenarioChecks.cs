@@ -1,10 +1,10 @@
 // ============================================================
 // ScenarioChecks.cs — Проверка сценария в редакторе и заготовка брифинга (запрос 21.4б)
 //
-// Check — замечания ScenarioDefinition.Validate() и редактора (RouteEditing.Check, 21.5а — TrafficEditing.Check), разделённые на:
+// Check — замечания ScenarioDefinition.Validate() и редактора (RouteEditing.Check, 21.5а — TrafficEditing.Check, 21.5б — TaskEditing.Check), разделённые на:
 //   • ошибки (×) — с ними упражнение не запустить («Пройти в тренажёре» не работает): нет акватории,
 //     в маршруте меньше двух точек, точка или старт вне района, старт на мели, XTE ≤ 0, точки совпадают,
-//     нет идентификатора или он занят встроенным сценарием;
+//     нет идентификатора или он занят встроенным сценарием; 21.5б — причал задания не найден, работа буксира не на буксире;
 //   • предупреждения (!) — остальное (пустой брифинг, ветер без 3 СС, участок над мелью и т. д.).
 // Ошибки узнаются по тексту замечаний Validate (ErrorStarts, PointErrorMarks): Validate — общий для ассетов, файлов и
 // редактора и возвращает один список; новые блокирующие замечания — дописать сюда.
@@ -21,7 +21,9 @@ public static class ScenarioChecks
     public static readonly string[] ErrorStarts =
     {
         "Не задан идентификатор", "Не назначена акватория", "В маршруте меньше двух", "Путевая точка",
-        "Не заданы начальные условия", "Начальная позиция"
+        "Не заданы начальные условия", "Начальная позиция",
+        // 21.5б: причал задания удалён из акватории; работа буксира не на своём буксире
+        "Швартовка: в акватории нет причала", "Буксир: в акватории нет причала", "Буксир: упражнение на буксире"
     };
     /// <summary>У замечаний о точке маршрута («Точка 2 «WP3»: …») — части текста, с которыми не запускается.</summary>
     public static readonly string[] PointErrorMarks = { "XTE должно быть больше 0", "совпадают", "вне района акватории" };
@@ -44,6 +46,7 @@ public static class ScenarioChecks
             r.Errors.Add($"Идентификатор «{id}» — у встроенного сценария; задайте другой.");
         r.Warnings.AddRange(RouteEditing.Check(s));
         r.Warnings.AddRange(TrafficEditing.Check(s));   // 21.5а
+        r.Warnings.AddRange(TaskEditing.Check(s));      // 21.5б
         return r;
     }
 
@@ -61,7 +64,8 @@ public static class ScenarioChecks
         b.Append(".\n\n");
 
         List<RouteWaypoint> r = s.route ?? new List<RouteWaypoint>();
-        if (r.Count >= 2)
+        if (s.IsTugWork) { }   // 21.5б: линия «Старт → Борт судна» — только для карты, задача — в строках задания ниже
+        else if (r.Count >= 2)
         {
             b.Append($"Задача: пройти по путевым точкам ({r.Count}, всего {ScenarioText.Num(s.RouteLength / 1852.0, 1)} мили):\n");
             for (int i = 0; i + 1 < r.Count; i++)
@@ -87,7 +91,7 @@ public static class ScenarioChecks
         b.Append(".\n");
         if (s.safeSpeedKnots > 0f) b.Append($"Безопасная скорость в ограниченную видимость — не более {ScenarioText.Num(s.safeSpeedKnots, 1)} уз.\n");
         if (s.traffic != null && s.traffic.Count > 0) b.Append($"В районе другие суда ({s.traffic.Count}) — расходиться по МППСС-72.\n");
-        if (s.IsMooring) b.Append("Швартовка к причалу — по заданию сценария.\n");
+        b.Append(TaskEditing.BriefingLines(s));   // 21.5б: швартовка, работа буксира
         if (s.tugAvailable) b.Append("Буксир можно вызвать из меню B («Буксир»).\n");
         b.Append(s.timeLimitSeconds > 0f ? $"Лимит времени — {ScenarioText.Num(s.timeLimitSeconds / 60.0, 0)} мин. " : "Лимита времени нет. ");
         b.Append($"Упражнение завершается: {ScenarioText.EndConditions(s)}.");

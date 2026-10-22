@@ -3,6 +3,7 @@
 // («с нуля», «на основе» встроенного, отмена, сохранение с историей, черновик), правка маршрута
 // (имена, вставка, удаление, XTE от ручки, попадание мышью, курс старта), замечания редактора;
 // 21.5а — другие суда (добавление, способ задания с сохранением места, встреча = TrafficPlanner, ромб TCPA, замечания, файл).
+// 21.5б — блоки задания (швартовка вкл/выкл, работа буксира — расстановка как у 19-03, проверка причала, набор, файл).
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -497,5 +498,133 @@ public class ScenarioEditorTests
         Assert.AreEqual(0.2f, t1.cpaNm);
         Assert.AreEqual(0.1f, t1.requiredCpaNm);
         Assert.AreEqual(ScenarioFile.Write(s, cat), ScenarioFile.Write(r.Scenario, cat), "бит в бит");
+    }
+
+    // ─────────── 21.5б: блоки задания ───────────
+    private static ShipParameters Tug()
+    {
+        var p = ScriptableObject.CreateInstance<ShipParameters>();
+        p.name = "ShipParameters_Tug";
+        ShipPresets.FillTug(p);
+        return p;
+    }
+
+    [Test]
+    public void Task_Mooring_OnOff_EndsMotionBerth_SetAndErrors()
+    {
+        ScenarioDefinition b2 = BuiltInB2(out ScenarioCatalog cat);
+        ScenarioDocument doc = ScenarioDocument.BasedOn(b2, "МОЙ-01", cat, null);
+        ScenarioDefinition s = doc.Scenario;
+        Assert.IsFalse(s.IsMooring);
+        Assert.IsTrue(s.Ends(ScenarioEndConditions.Arrival));
+        Assert.IsNull(TaskEditing.SuggestedSet(s), "только маршрут — набор не подставляется");
+        s.motionModel = ScenarioMotionModel.Nomoto;
+
+        TaskEditing.SetMooring(s, true);
+        Assert.IsTrue(s.IsMooring);
+        Assert.AreEqual(ScenarioMotionModel.Manoeuvring3Dof, s.motionModel);
+        Assert.IsTrue(s.Ends(ScenarioEndConditions.Moored));
+        Assert.IsFalse(s.Ends(ScenarioEndConditions.Arrival), "прибытие завершило бы раньше швартовки");
+        Assert.IsNotNull(TaskEditing.Berth(s.waterArea, s.mooring.berthIndex));
+        Assert.IsFalse(s.Validate().Exists(p => p.StartsWith("Швартовка", StringComparison.Ordinal)), string.Join("; ", s.Validate()));
+        Assert.AreEqual(TaskEditing.BerthingSet, TaskEditing.SuggestedSet(s));
+        s.tugAvailable = true;
+        Assert.AreEqual(TaskEditing.TugBerthingSet, TaskEditing.SuggestedSet(s));
+        StringAssert.Contains("Швартовка к причалу «", ScenarioChecks.Briefing(s));
+
+        int n = TaskEditing.BerthCount(s.waterArea);
+        Assert.AreEqual(2, n, "демо-акватория: причалы №1 и №2");
+        Assert.AreEqual(0, TaskEditing.NextBerth(s.waterArea, n - 1, 1));
+        Assert.AreEqual(n - 1, TaskEditing.NextBerth(s.waterArea, 0, -1));
+        Assert.AreEqual(0, TaskEditing.NextBerth(s.waterArea, 99, 1), "нет такого — первый");
+
+        s.mooring.berthIndex = 99;   // причал удалён из акватории — ошибка, не запустить
+        Assert.IsTrue(ScenarioChecks.Check(s, cat).Errors.Exists(p => p.StartsWith("Швартовка: в акватории нет причала", StringComparison.Ordinal)));
+        doc.Commit();
+        TaskEditing.SetMooring(s, false);
+        Assert.IsFalse(s.Ends(ScenarioEndConditions.Moored));
+        Assert.IsTrue(s.Ends(ScenarioEndConditions.Arrival), "прибытие вернулось");
+        doc.Commit();
+        Assert.IsTrue(doc.Undo());
+        Assert.IsTrue(doc.Scenario.IsMooring, "отмена");
+    }
+
+    [Test]
+    public void Task_TugWork_PlacementAsDemo_Checks_File()
+    {
+        ScenarioDefinition b2 = BuiltInB2(out ScenarioCatalog cat);
+        ShipParameters tug = Tug(), mariner = LowSpeedModelTests.Mariner();
+        cat.Add(tug);
+        cat.Add(mariner);
+        var demo = ScriptableObject.CreateInstance<ScenarioDefinition>();
+        DemoTugWorkScenario.Fill(demo, b2.waterArea, tug, mariner, null);
+
+        ScenarioDocument doc = ScenarioDocument.BasedOn(b2, "МОЙ-01", cat, null);
+        ScenarioDefinition s = doc.Scenario;
+        s.tugWork.berthIndex = DemoWaterArea.Berth2Index;
+        TaskEditing.SetMooring(s, true);
+        TaskEditing.SetTugWork(s, true, tug, mariner);
+        Assert.IsTrue(s.IsTugWork);
+        Assert.IsFalse(s.IsMooring, "швартовка и работа буксира — не вместе");
+        Assert.AreEqual(ScenarioShipType.Tug, s.ownShipType);
+        Assert.AreSame(tug, s.shipParameters);
+        Assert.AreSame(mariner, s.tugWorkClient);
+        Assert.AreEqual(ScenarioMotionModel.Manoeuvring3Dof, s.motionModel);
+        Assert.IsTrue(s.Ends(ScenarioEndConditions.TugWorkDone));
+        Assert.IsFalse(s.Ends(ScenarioEndConditions.Arrival) || s.Ends(ScenarioEndConditions.Moored));
+        Assert.AreEqual(TaskEditing.TugWorkSet, TaskEditing.SuggestedSet(s));
+
+        // Старт буксира и линия «Старт → Борт судна» — как у встроенного 19-03 (тот же расчёт, что в тренажёре)
+        Assert.AreEqual(0.0, (s.initial.position - demo.initial.position).Magnitude, 1e-6);
+        Assert.AreEqual(demo.initial.headingDeg, s.initial.headingDeg, 1e-3f);
+        Assert.AreEqual(0f, s.initial.speedKnots);
+        Assert.AreEqual(2, s.route.Count);
+        Assert.AreEqual(TaskEditing.ContactPointName, s.route[1].name);
+        Assert.AreEqual(0.0, (s.route[1].position - demo.route[1].position).Magnitude, 1e-6);
+        TugWorkLayout l = TaskEditing.Layout(s);
+        Assert.IsTrue(l.Ok);
+        Assert.AreEqual(0, TaskEditing.Check(s).Count, string.Join("; ", TaskEditing.Check(s)));
+
+        // Клиент дальше от причала на 20 м — буксир на старте тоже на 20 м дальше
+        WorldPosition before = s.initial.position;
+        s.tugWork.clientGapM += 20f;
+        Assert.IsTrue(TaskEditing.PlaceTugWork(s));
+        Assert.AreEqual(20.0, (s.initial.position - before).Magnitude, 1e-6);
+        s.initial.position = s.initial.position + new WorldPosition(50, 0);
+        StringAssert.Contains("не совпадает с расстановкой", string.Join("; ", TaskEditing.Check(s)));
+        TaskEditing.PlaceTugWork(s);
+
+        string text = ScenarioChecks.Briefing(s);
+        StringAssert.Contains("Вы — на буксире", text);
+        StringAssert.DoesNotContain("пройти по путевым точкам", text);
+
+        // Файл — бит в бит
+        string file = ScenarioFile.Write(s, cat);
+        ScenarioLoadResult r = ScenarioFile.Read(file, cat, null, "МОЙ-01");
+        Assert.IsTrue(r.Ok, string.Join("; ", r.Errors));
+        Assert.IsTrue(r.Scenario.IsTugWork);
+        Assert.AreEqual(s.tugWork.clientGapM, r.Scenario.tugWork.clientGapM);
+        Assert.AreEqual(file, ScenarioFile.Write(r.Scenario, cat));
+
+        // Своё судно не буксир — ошибка
+        s.ownShipType = ScenarioShipType.Default;
+        Assert.IsTrue(ScenarioChecks.Check(s, cat).Errors.Exists(p => p.StartsWith("Буксир: упражнение на буксире", StringComparison.Ordinal)));
+        TaskEditing.SetTugWork(s, false, null, null);
+        Assert.IsFalse(s.Ends(ScenarioEndConditions.TugWorkDone));
+        Assert.IsTrue(s.Ends(ScenarioEndConditions.Arrival));
+    }
+
+    [Test]
+    public void Task_BerthFits_Depth_Length()
+    {
+        ShipParameters p = LowSpeedModelTests.Model45m();   // 45 м, осадка 3 м
+        var b = new BerthArea { a = new WorldPosition(0, 0), b = new WorldPosition(100, 0), depthM = 5f };
+        Assert.IsNull(TaskEditing.Fits(b, p));
+        b.depthM = 3.5f;
+        StringAssert.Contains("меньше осадки 3,0 м + 1 м", TaskEditing.Fits(b, p));
+        b.depthM = 5f;
+        b.b = new WorldPosition(40, 0);
+        StringAssert.Contains("причал 40 м короче судна 45 м", TaskEditing.Fits(b, p));
+        Assert.IsNull(TaskEditing.Fits(null, p));
     }
 }
