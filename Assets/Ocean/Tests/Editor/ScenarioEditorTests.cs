@@ -4,6 +4,8 @@
 // (имена, вставка, удаление, XTE от ручки, попадание мышью, курс старта), замечания редактора;
 // 21.5а — другие суда (добавление, способ задания с сохранением места, встреча = TrafficPlanner, ромб TCPA, замечания, файл).
 // 21.5б — блоки задания (швартовка вкл/выкл, работа буксира — расстановка как у 19-03, проверка причала, набор, файл).
+// 21.6б — триггеры (добавить / копия / удалить, условия и действия по умолчанию, отмена, ручки круга, «мм:сс», ошибки
+// и предупреждения «Проверки», ссылки за переименованием точки и целями).
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -309,7 +311,7 @@ public class ScenarioEditorTests
         Assert.AreEqual(0, c.Errors.Count, string.Join("; ", c.Errors));
         s.windKnots = 10f;   // ветер без 3 СС — предупреждение
         Assert.IsTrue(ScenarioChecks.Check(s, cat).Warnings.Exists(e => e.Contains("3 СС")));
-        Assert.AreEqual(0, ScenarioChecks.Check(s, cat).Errors.Count);
+        Assert.AreEqual(0, ScenarioChecks.Check(s, cat).Errors.Count, string.Join("; ", ScenarioChecks.Check(s, cat).Errors));
 
         RouteEditing.Move(s.route, 1, new WorldPosition(0, 9000));   // вне района ± 5 км
         Assert.IsTrue(ScenarioChecks.Check(s, cat).Errors.Exists(e => e.Contains("вне района")));
@@ -626,5 +628,161 @@ public class ScenarioEditorTests
         b.b = new WorldPosition(40, 0);
         StringAssert.Contains("причал 40 м короче судна 45 м", TaskEditing.Fits(b, p));
         Assert.IsNull(TaskEditing.Fits(null, p));
+    }
+
+    // ─────────── 21.6б: триггеры в редакторе ───────────
+    [Test]
+    public void Triggers_AddCopyRemove_ConditionAndActionDefaults_Undo()
+    {
+        ScenarioDefinition b2 = BuiltInB2(out ScenarioCatalog cat);
+        ScenarioDocument doc = ScenarioDocument.BasedOn(b2, "МОЙ-01", cat, null);
+        ScenarioDefinition s = doc.Scenario;
+        Assert.AreEqual(0, TriggerEditing.Add(s));
+        ScenarioTrigger t = s.triggers[0];
+        Assert.AreEqual("Тр1", t.id);
+        Assert.AreEqual(TriggerCondition.Time, t.condition);
+        Assert.AreEqual(60f, t.timeSeconds);
+        Assert.AreEqual(TriggerActionKind.Message, t.actions[0].kind);
+        Assert.IsTrue(doc.Commit());
+
+        TriggerEditing.SetCondition(s, t, TriggerCondition.EnterCircle);
+        Assert.AreEqual(0.0, t.center.East, 1e-9);
+        Assert.AreEqual(2100.0, t.center.North, 1e-9, "середина маршрута 9,2 км — на втором участке");
+        Assert.AreEqual(300f, t.radiusM);
+        TriggerEditing.SetCondition(s, t, TriggerCondition.Waypoint);
+        Assert.AreEqual("Вход в фарватер", t.waypoint, "первая точка после старта");
+        CollectionAssert.AreEqual(new[] { "Вход в фарватер", "Поворот", "Выход из фарватера" }, TriggerEditing.WaypointChoices(s));
+        Assert.AreEqual("Выход из фарватера", TriggerEditing.Cycle(TriggerEditing.WaypointChoices(s), t.waypoint, -1));
+
+        int c = TriggerEditing.Duplicate(s, 0);
+        Assert.AreEqual(1, c);
+        Assert.AreEqual("Тр2", s.triggers[1].id);
+        s.triggers[1].actions[0].text = "другое";
+        Assert.AreEqual(TriggerEditing.DefaultMessage, t.actions[0].text, "действия копии — свои");
+        TriggerEditing.SetCondition(s, s.triggers[1], TriggerCondition.AfterTrigger);
+        Assert.AreEqual("Тр1", s.triggers[1].afterTrigger);
+        CollectionAssert.AreEqual(new[] { "Тр1" }, TriggerEditing.TriggerChoices(s, s.triggers[1]));
+        TriggerEditing.SetCondition(s, s.triggers[1], TriggerCondition.TargetRange);
+        Assert.AreEqual("", s.triggers[1].target, "целей нет");
+
+        int a = TriggerEditing.AddAction(s, t, TriggerActionKind.Visibility);
+        Assert.AreEqual(1, a);
+        Assert.AreEqual(1f, t.actions[1].visibilityNm, "видимость по умолчанию — 1 миля");
+        TriggerEditing.SetActionKind(s, t.actions[1], TriggerActionKind.Wind);
+        Assert.AreEqual(15f, t.actions[1].windKnots);
+        Assert.IsTrue(TriggerEditing.RemoveAction(t, 1));
+        Assert.IsFalse(TriggerEditing.RemoveAction(t, 5));
+        Assert.IsTrue(doc.Commit());
+        Assert.IsTrue(TriggerEditing.Remove(s, 1));
+        Assert.IsTrue(doc.Commit());
+        Assert.AreEqual(1, doc.Scenario.triggers.Count);
+        Assert.IsTrue(doc.Undo());
+        Assert.AreEqual(2, doc.Scenario.triggers.Count, "отмена — триггер вернулся");
+        Assert.AreEqual(TriggerCondition.Waypoint, doc.Scenario.triggers[0].condition);
+    }
+
+    [Test]
+    public void Triggers_MapHits_Radius_Clock()
+    {
+        ScenarioDefinition s = BuiltInB2(out _);
+        MapViewport v = View(1.0);
+        int i = TriggerEditing.Add(s);
+        ScenarioTrigger t = s.triggers[i];
+        t.condition = TriggerCondition.EnterCircle;
+        t.center = new WorldPosition(0, 0);
+        t.radiusM = 100f;
+        v.ToPixel(t.center, out double cx, out double cy);
+        Assert.AreEqual(0, TriggerEditing.HitCenter(s, v, cx + 5, cy));
+        Assert.AreEqual(-1, TriggerEditing.HitCenter(s, v, cx + 15, cy));
+        Assert.IsTrue(TriggerEditing.HitEdge(s, 0, v, cx + 100 + 4, cy), "ручка радиуса — к востоку");
+        Assert.IsFalse(TriggerEditing.HitEdge(s, 0, v, cx - 100, cy));
+        Assert.AreEqual(0, TriggerEditing.HitRing(s, v, cx, cy + 103), "окружность ± 6 пикс.");
+        Assert.AreEqual(-1, TriggerEditing.HitRing(s, v, cx, cy + 50));
+        Assert.AreEqual(140f, TriggerEditing.RadiusFrom(t, new WorldPosition(137, 0), 10.0));
+        Assert.AreEqual(10f, TriggerEditing.RadiusFrom(t, new WorldPosition(2, 0), 10.0), "не меньше 10 м");
+        t.condition = TriggerCondition.Time;
+        Assert.AreEqual(-1, TriggerEditing.HitCenter(s, v, cx, cy), "у другого условия круга нет");
+
+        Assert.IsTrue(TriggerEditing.ParseClock("1:30", out double sec)); Assert.AreEqual(90.0, sec);
+        Assert.IsTrue(TriggerEditing.ParseClock("5", out sec)); Assert.AreEqual(300.0, sec, "число — минуты");
+        Assert.IsTrue(TriggerEditing.ParseClock("1,5", out sec)); Assert.AreEqual(90.0, sec);
+        Assert.IsTrue(TriggerEditing.ParseClock("1:02:03", out sec)); Assert.AreEqual(3723.0, sec);
+        Assert.IsFalse(TriggerEditing.ParseClock("0:75", out _));
+        Assert.IsFalse(TriggerEditing.ParseClock("", out _));
+        Assert.IsFalse(TriggerEditing.ParseClock("-1", out _));
+    }
+
+    [Test]
+    public void Triggers_Checks_ErrorsBlock_WarningsDoNot()
+    {
+        ScenarioDefinition b2 = BuiltInB2(out ScenarioCatalog cat);
+        ScenarioDefinition s = ScenarioDocument.BasedOn(b2, "МОЙ-07", cat, null).Scenario;   // копия: id встроенного не трогаем
+        s.traffic.Clear();
+        Assert.AreEqual(0, ScenarioChecks.Check(s, cat).Errors.Count, string.Join("; ", ScenarioChecks.Check(s, cat).Errors));
+        s.traffic.Add(new TrafficShipDefinition { id = "T1", placement = TrafficPlacement.Absolute, position = new WorldPosition(1500, 0), speedKnots = 6f,
+                                                  motion = TrafficMotion.Route, route = new List<WorldPosition> { new WorldPosition(1500, 3000) } });
+        // Ошибки: нет цели, пустое сообщение, цикл
+        ScenarioTrigger a = s.triggers[TriggerEditing.Add(s)];
+        a.actions.Add(new TriggerAction { kind = TriggerActionKind.TargetOrder, target = "T9", speedKnots = 5f });
+        AreaCheckResult c = ScenarioChecks.Check(s, cat);
+        Assert.IsTrue(c.Errors.Exists(e => e.StartsWith("Триггер Тр1: нет цели «T9»")), string.Join("; ", c.Errors));
+        a.actions[1].target = "T1";
+        a.actions[0].text = " ";
+        Assert.IsTrue(ScenarioChecks.Check(s, cat).Errors.Exists(e => e.Contains("пустое сообщение")));
+        a.actions[0].text = "ок";
+        ScenarioTrigger b = s.triggers[TriggerEditing.Add(s)];
+        a.condition = TriggerCondition.AfterTrigger; a.afterTrigger = "Тр2";
+        b.condition = TriggerCondition.AfterTrigger; b.afterTrigger = "Тр1";
+        Assert.IsTrue(ScenarioChecks.Check(s, cat).Errors.Exists(e => e.Contains("замкнута по кругу")));
+        b.condition = TriggerCondition.Time;
+        Assert.AreEqual(0, ScenarioChecks.Check(s, cat).Errors.Count, string.Join("; ", ScenarioChecks.Check(s, cat).Errors));
+
+        // Предупреждения: курс цели «по маршруту», круг не на маршруте, старт в круге, вне района, время позже лимита
+        a.actions[1].courseDeg = 90f;
+        b.condition = TriggerCondition.EnterCircle; b.center = new WorldPosition(2000, 0); b.radiusM = 300f;
+        b.timeSeconds = 5000f;
+        c = ScenarioChecks.Check(s, cat);
+        Assert.AreEqual(0, c.Errors.Count, string.Join("; ", c.Errors));
+        Assert.IsTrue(c.Warnings.Exists(w => w.Contains("заданный курс снимет маршрут")));
+        Assert.IsTrue(c.Warnings.Exists(w => w.Contains("круг не пересекает маршрут")));
+        b.center = s.initial.position;
+        Assert.IsTrue(ScenarioChecks.Check(s, cat).Warnings.Exists(w => w.Contains("старт уже в круге")));
+        b.center = new WorldPosition(20000, 0);
+        c = ScenarioChecks.Check(s, cat);
+        Assert.IsTrue(c.Warnings.Exists(w => w.Contains("центр круга вне района")) && c.Errors.Count == 0, string.Join("; ", c.Errors));
+        b.condition = TriggerCondition.Time;
+        Assert.IsTrue(ScenarioChecks.Check(s, cat).Warnings.Exists(w => w.Contains("не раньше лимита")));
+        Assert.IsTrue(ScenarioChecks.IsError("Триггер Тр3: нет действий."));
+        Assert.IsFalse(ScenarioChecks.IsError("Триггер Тр3: ветер действует только в модели 3 СС."));
+    }
+
+    [Test]
+    public void Triggers_ReferencesFollowRenameAndRemoval()
+    {
+        ScenarioDefinition s = BuiltInB2(out _);
+        s.traffic.Add(new TrafficShipDefinition { name = "A", placement = TrafficPlacement.Absolute, position = new WorldPosition(1500, 0) });
+        s.traffic.Add(new TrafficShipDefinition { name = "B", placement = TrafficPlacement.Absolute, position = new WorldPosition(1500, 1000) });
+        ScenarioTrigger t = s.triggers[TriggerEditing.Add(s)];
+        t.condition = TriggerCondition.Waypoint; t.waypoint = "Поворот";
+        t.actions.Add(new TriggerAction { kind = TriggerActionKind.TargetOrder, target = "T2", speedKnots = 5f });
+        ScenarioTrigger u = s.triggers[TriggerEditing.Add(s)];
+        u.condition = TriggerCondition.TargetRange; u.target = "T1";
+
+        Assert.AreEqual(1, TriggerEditing.RenameWaypoint(s, "Поворот", "WP-поворот"));
+        Assert.AreEqual("WP-поворот", t.waypoint);
+        // id первой цели задали — ссылка «T1» следует за ней
+        List<string> before = TriggerEditing.TargetIds(s);
+        s.traffic[0].id = "КАТЕР";
+        Assert.AreEqual(1, TriggerEditing.RemapTargets(s, before, TriggerEditing.TargetIds(s)));
+        Assert.AreEqual("КАТЕР", u.target);
+        // удалили первую: вторая (без id) стала «T1» — ссылка «T2» следует; ссылка на удалённую — «(удалено)», ошибка
+        before = TriggerEditing.TargetIds(s);
+        s.traffic.RemoveAt(0);
+        List<string> after = TriggerEditing.TargetIds(s);
+        after.Insert(0, null);
+        TriggerEditing.RemapTargets(s, before, after);
+        Assert.AreEqual("T1", t.actions[1].target);
+        Assert.AreEqual("КАТЕР (удалено)", u.target);
+        Assert.IsTrue(s.Validate().Exists(p => p.Contains("нет цели «КАТЕР (удалено)»")));
     }
 }

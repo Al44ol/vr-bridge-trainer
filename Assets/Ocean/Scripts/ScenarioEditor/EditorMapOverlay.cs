@@ -11,6 +11,7 @@
 // 21.4а — слой сценария: коридор XTE, линия маршрута с ручками точек, середин участков и кромки XTE, судно на старте.
 // 21.5а — другие суда: силуэт, путь, пунктиры до положений в момент TCPA и отрезок CPA, ручки курса, TCPA и точек.
 // 21.5б — причал задания (голубая кромка) и судно-клиент работы буксира (серый силуэт).
+// 21.6б — круги триггеров «своё судно в круге» (пунктир; у выбранного — ручки центра и радиуса).
 // Координаты: пиксель окна MapViewport = локальная точка от левого нижнего угла этой графики.
 // ============================================================
 using System.Collections.Generic;
@@ -85,6 +86,15 @@ public class EditorMapOverlay : MaskableGraphic
     public float ClientHeading, ClientLength, ClientBeam;
     public static readonly Color TaskBerthColor = new Color(0.3f, 0.85f, 1f, 1f);
     public static readonly Color ClientColor = new Color(0.72f, 0.76f, 0.84f, 1f);
+    /// <summary>21.6б: круги триггеров «своё судно в круге».</summary>
+    public struct TriggerCircleMark
+    {
+        public WorldPosition Center, Edge;
+        public float Radius;
+        public bool Selected, CenterHot, EdgeHot, RingHot;
+    }
+    public readonly List<TriggerCircleMark> TriggerCircles = new List<TriggerCircleMark>();
+    public static readonly Color TriggerColor = new Color(1f, 0.72f, 0.2f, 0.9f);
 
     /// <summary>Ручки рамки: 0–3 — углы (ЮЗ, ЮВ, СВ, СЗ), 4–7 — середины сторон (Ю, В, С, З).</summary>
     public static List<WorldPosition> BoundsHandles(WorldPosition min, WorldPosition max)
@@ -165,6 +175,7 @@ public class EditorMapOverlay : MaskableGraphic
         }
 
         if (ScenarioLayer) DrawScenario(vh, r);   // 21.4а
+        if (ScenarioLayer) DrawTriggers(vh, r);   // 21.6б
 
         // 21.3а: фигуры
         if (HoverShape.Count >= 2) Outline(vh, HoverShape, r, 1.5f, new Color(CursorColor.r, CursorColor.g, CursorColor.b, 0.6f), HoverClosed);
@@ -338,6 +349,37 @@ public class EditorMapOverlay : MaskableGraphic
                     Diamond(vh, m, t.MeetHot ? 7f : 5.5f, t.MeetHot ? CursorColor : HandleHot);
                 }
             }
+        }
+    }
+
+    // 21.6б: круги триггеров — пунктир (выбранный — сплошной жёлтый), под курсором — голубой; у выбранного —
+    // ручка центра (крест в кольце) и квадрат на краю (радиус)
+    private void DrawTriggers(VertexHelper vh, Rect r)
+    {
+        foreach (TriggerCircleMark m in TriggerCircles)
+        {
+            Vector2 c = Px(m.Center, r);
+            float rad = (float)(m.Radius / System.Math.Max(1e-6, Viewport.MetersPerPixel));
+            Color col = m.Selected ? HandleHot : m.RingHot ? CursorColor : TriggerColor;
+            if (rad >= 3f && rad < 20000f)
+            {
+                int n = Mathf.Clamp(Mathf.RoundToInt(2f * Mathf.PI * rad / 7f), 24, 720);
+                for (int k = 0; k < n; k++)
+                {
+                    if (!m.Selected && k % 2 == 1) continue;   // пунктир
+                    float a0 = 2f * Mathf.PI * k / n, a1 = 2f * Mathf.PI * (k + 1) / n;
+                    Seg(vh, c + rad * new Vector2(Mathf.Cos(a0), Mathf.Sin(a0)), c + rad * new Vector2(Mathf.Cos(a1), Mathf.Sin(a1)), m.Selected ? 2.5f : 1.5f, col);
+                }
+            }
+            Color cc = m.CenterHot ? HandleHot : col;
+            Ring(vh, c, m.Selected ? 8f : 6f, 2f, cc);
+            Quad(vh, new Vector2(c.x - 4f, c.y - 0.75f), new Vector2(c.x + 4f, c.y + 0.75f), cc);
+            Quad(vh, new Vector2(c.x - 0.75f, c.y - 4f), new Vector2(c.x + 0.75f, c.y + 4f), cc);
+            if (!m.Selected) continue;
+            Vector2 e = Px(m.Edge, r);
+            float h = m.EdgeHot ? 7f : 5f;
+            Quad(vh, e - new Vector2(h + 1f, h + 1f), e + new Vector2(h + 1f, h + 1f), new Color(0.05f, 0.05f, 0.06f, 1f));
+            Quad(vh, e - new Vector2(h, h), e + new Vector2(h, h), m.EdgeHot ? HandleHot : Color.white);
         }
     }
 

@@ -807,7 +807,7 @@ public partial class ScenarioEditorApp : MonoBehaviour
             {
                 // 21.4а: «Выбор» → снять выделение
                 if (stool != STool.Select) SetSTool(STool.Select);
-                else { SelectStart(false); SelectPoint(-1); SelectTraffic(-1); }
+                else { SelectStart(false); SelectPoint(-1); SelectTraffic(-1); mapTrigger = -1; }
             }
             else if (tool != Tool.Select) SetTool(Tool.Select);
             else { SelectAid(-1); SelectShape(AreaShape.None); }

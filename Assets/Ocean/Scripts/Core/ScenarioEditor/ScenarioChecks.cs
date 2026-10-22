@@ -5,6 +5,8 @@
 //   • ошибки (×) — с ними упражнение не запустить («Пройти в тренажёре» не работает): нет акватории,
 //     в маршруте меньше двух точек, точка или старт вне района, старт на мели, XTE ≤ 0, точки совпадают,
 //     нет идентификатора или он занят встроенным сценарием; 21.5б — причал задания не найден, работа буксира не на буксире;
+//     21.6б — триггеры: ссылка на несуществующую цель / точку / триггер, цикл, нет действий, пустое сообщение, повтор id
+//     (кроме TriggerWarningMarks — круг вне района, время позже лимита, ветер без 3 СС);
 //   • предупреждения (!) — остальное (пустой брифинг, ветер без 3 СС, участок над мелью и т. д.).
 // Ошибки узнаются по тексту замечаний Validate (ErrorStarts, PointErrorMarks): Validate — общий для ассетов, файлов и
 // редактора и возвращает один список; новые блокирующие замечания — дописать сюда.
@@ -28,9 +30,17 @@ public static class ScenarioChecks
     /// <summary>У замечаний о точке маршрута («Точка 2 «WP3»: …») — части текста, с которыми не запускается.</summary>
     public static readonly string[] PointErrorMarks = { "XTE должно быть больше 0", "совпадают", "вне района акватории" };
 
+    /// <summary>21.6б: замечания триггеров («Триггер Тр2: …», «Триггеры: …») — ошибки, кроме этих (предупреждения).</summary>
+    public static readonly string[] TriggerWarningMarks = { "центр круга вне района", "не раньше лимита", "действует только в модели 3 СС" };
+
     public static bool IsError(string problem)
     {
         foreach (string m in ErrorStarts) if (problem.StartsWith(m, StringComparison.Ordinal)) return true;
+        if (problem.StartsWith("Триггер", StringComparison.Ordinal))
+        {
+            foreach (string m in TriggerWarningMarks) if (problem.IndexOf(m, StringComparison.Ordinal) >= 0) return false;
+            return true;   // нет цели / точки / триггера, цикл, нет действий, пустое сообщение, повтор id …
+        }
         if (problem.StartsWith("Точк", StringComparison.Ordinal))
             foreach (string m in PointErrorMarks) if (problem.IndexOf(m, StringComparison.Ordinal) >= 0) return true;
         return false;
@@ -47,6 +57,7 @@ public static class ScenarioChecks
         r.Warnings.AddRange(RouteEditing.Check(s));
         r.Warnings.AddRange(TrafficEditing.Check(s));   // 21.5а
         r.Warnings.AddRange(TaskEditing.Check(s));      // 21.5б
+        r.Warnings.AddRange(TriggerEditing.Check(s));   // 21.6б
         return r;
     }
 

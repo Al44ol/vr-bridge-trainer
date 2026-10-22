@@ -14,7 +14,8 @@
 //     блоки из основы), старта (место, курс, скорость, телеграф, руль) или точки (имя, место, XTE, узкость, участки).
 //   • «Проверка» — ScenarioDefinition.Validate + замечания редактора (RouteEditing.Check).
 // Условия, критерии, брифинг, «Пройти в тренажёре» — ScenarioEditorSheets.cs (21.4б); другие суда — ScenarioEditorTraffic.cs (21.5а);
-// швартовка, буксир по вызову, работа буксира — лист «Задание…», ScenarioEditorTask.cs (21.5б).
+// швартовка, буксир по вызову, работа буксира — лист «Задание…», ScenarioEditorTask.cs (21.5б);
+// триггеры «если — то» — лист «Триггеры…» и круги на карте, ScenarioEditorTriggers.cs (21.6б).
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -91,6 +92,7 @@ public partial class ScenarioEditorApp
             "Ручка на носу судна — курс\n" +
             "Другое судно: щелчок — судно;\n  у выделенного «по маршруту» — точка\n" +
             "Ромб на своём пути — TCPA встречи\n" +
+            "Круг триггера: центр, квадрат — тянуть\n" +
             "Delete — удалить точку / судно\nEsc — «Выбор» / снять\nCtrl+Z / Ctrl+Y, Ctrl+S",
             14f, MonitorUi.MutedColor, TextAlignmentOptions.TopLeft);
         MonitorUi.TopLeft(help.rectTransform, Pad, y, w, 330f);
@@ -135,9 +137,12 @@ public partial class ScenarioEditorApp
         ui.Button(g, ref x, y, third, "", MonitorUi.ButtonColor, () => OpenSheet(briefSheet),
                   () => S != null && string.IsNullOrWhiteSpace(S.briefing) ? "Брифинг… (пусто)" : "Брифинг…", null, null, MonitorUi.RowHeight, 15f);
         y -= MonitorUi.RowHeight + MonitorUi.Gap;
-        x = Pad;   // 21.5б: швартовка, буксир по вызову, работа буксира
-        ui.Button(g, ref x, y, w, "", MonitorUi.ButtonColor, () => OpenSheet(taskSheet), () => S == null ? "" : "Задание… (" + TaskTitle(S) + ")",
+        x = Pad;   // 21.5б: швартовка, буксир по вызову, работа буксира; 21.6б: триггеры
+        float half2 = (w - MonitorUi.Gap) * 0.5f;
+        ui.Button(g, ref x, y, half2, "", MonitorUi.ButtonColor, () => OpenSheet(taskSheet), () => S == null ? "" : "Задание… (" + TaskTitle(S) + ")",
                   null, null, MonitorUi.RowHeight, 15f);
+        ui.Button(g, ref x, y, half2, "", MonitorUi.ButtonColor, () => OpenSheet(trigSheet),
+                  () => S == null ? "" : TriggerCount > 0 ? $"Триггеры… ({TriggerCount})" : "Триггеры… (нет)", null, null, MonitorUi.RowHeight, 15f);
         y -= MonitorUi.RowHeight + MonitorUi.Gap;
         sInfo = MonitorUi.Text(g, "", 15f, Color.white, TextAlignmentOptions.TopLeft);
         MonitorUi.TopLeft(sInfo.rectTransform, Pad, y, w, 110f);
@@ -178,7 +183,14 @@ public partial class ScenarioEditorApp
         MonitorUi.TopLeft(hint.rectTransform, Pad, y, w, 20f);
         y -= 24f;
         ptNameField = Row(g, "Имя", ref y, w, false, TMP_InputField.ContentType.Standard,
-                          v => EditPoint(wp => { string n = (v ?? "").Trim(); if (n.Length == 0) return false; wp.name = n; return true; }));
+                          v => EditPoint(wp =>
+                          {
+                              string n = (v ?? "").Trim();
+                              if (n.Length == 0 || n == wp.name) return false;
+                              TriggerEditing.RenameWaypoint(S, wp.name, n);   // 21.6б: условия «пройдена точка» — за точкой
+                              wp.name = n;
+                              return true;
+                          }));
         Label(g, "Положение, м: восток … север", ref y, w);
         ptEField = MonitorUi.Field(g, Pad, y, half, 34f, "", false, TMP_InputField.ContentType.Standard, v => EditPointPos(v, true));
         ptNField = MonitorUi.Field(g, Pad + half + MonitorUi.Gap, y, half, 34f, "", false, TMP_InputField.ContentType.Standard, v => EditPointPos(v, false));
@@ -444,6 +456,7 @@ public partial class ScenarioEditorApp
         selStart = false;
         selPoint = -1;
         ResetTrafficState();   // 21.5а
+        ResetTriggerState();   // 21.6б
         mapDirty = true;
         mapData = null;
         if (areaPalette != null) areaPalette.gameObject.SetActive(m == Mode.Area);
@@ -466,6 +479,8 @@ public partial class ScenarioEditorApp
         selPoint = -1;
         dragStart = dragHeading = dragPoint = dragXte = false;
         ResetTrafficState();   // 21.5а
+        selTrigger = -1;
+        ResetTriggerState();   // 21.6б
         if (mode != Mode.Scenario) SetMode(Mode.Scenario);
         mapDirty = true;
         mapData = null;
@@ -675,6 +690,7 @@ public partial class ScenarioEditorApp
         selPoint = RouteEditing.Valid(S.route, sp) ? sp : -1;
         dragStart = dragHeading = dragPoint = dragXte = false;
         ResetTrafficState();   // 21.5а: выделенная цель — по номеру, если осталась
+        ResetTriggerState();   // 21.6б: выбранный триггер — по номеру, если остался
         selTraffic = TrafficEditing.Valid(S.traffic, tr) ? tr : -1;
         mapDirty = true;   // акватория могла смениться
         ShowPropsGroup();
@@ -698,11 +714,13 @@ public partial class ScenarioEditorApp
         float wheel = m.scroll.ReadValue().y;
         if (inside && Mathf.Abs(wheel) > 0.01f) viewport.ZoomAt(px, py, wheel > 0f ? 1.25 : 0.8);
 
-        bool busy = dragStart || dragHeading || dragPoint || dragXte || TrafficBusy;
+        bool busy = dragStart || dragHeading || dragPoint || dragXte || TrafficBusy || TriggerBusy;
         if (!busy)
         {
             hotHeading = false; hotPoint = hotXte = hotLegMid = -1; hotStart = false;
             bool tHit = inside && TrafficHit(px, py);   // 21.5а: ручки выделенной цели и суда — поверх маршрута
+            ClearTriggerHot();   // 21.6б: ручки выделенного круга — поверх маршрута, остальные круги — под ним
+            if (inside && !tHit && TriggerHandleHit(px, py)) tHit = true;
             if (inside && !tHit)
             {
                 if (selStart)
@@ -717,6 +735,7 @@ public partial class ScenarioEditorApp
                 if (!hotHeading && !hotStart && hotPoint < 0) hotXte = RouteEditing.HitXte(r, viewport, px, py);
                 if (!hotHeading && !startFirst && hotPoint < 0 && hotXte < 0) hotStart = RouteEditing.HitStart(S.initial, viewport, px, py);
                 if (!hotHeading && hotPoint < 0 && hotXte < 0 && !hotStart) hotLegMid = RouteEditing.HitLegMid(r, viewport, px, py);
+                if (!hotHeading && hotPoint < 0 && hotXte < 0 && !hotStart && hotLegMid < 0) TriggerShapeHit(px, py);   // 21.6б
             }
         }
         if (inside && (m.rightButton.wasPressedThisFrame || m.middleButton.wasPressedThisFrame)) { panning = true; lastLocal = local; }
@@ -725,6 +744,7 @@ public partial class ScenarioEditorApp
             sMoved = false;
             pressLocal = local;
             if (TrafficPress()) { }   // 21.5а
+            else if (TriggerPress()) { }   // 21.6б
             else if (hotHeading) { dragHeading = true; sMoved = true; }
             else if (hotPoint >= 0) { SelectPoint(hotPoint); dragPoint = true; }
             else if (hotXte >= 0) { SelectPoint(hotXte + 1); dragXte = true; dragLeg = hotXte; sMoved = true; }
@@ -756,6 +776,7 @@ public partial class ScenarioEditorApp
                 SelectStart(false);
                 SelectPoint(-1);
                 SelectTraffic(-1);
+                mapTrigger = -1;   // 21.6б
                 panning = true;
                 lastLocal = local;
             }
@@ -780,11 +801,13 @@ public partial class ScenarioEditorApp
             if (x != r[dragLeg + 1].xteLimit) { r[dragLeg + 1].xteLimit = x; FillScenarioFields(); }
         }
         TrafficDrag(world, snapped, local);   // 21.5а
+        TriggerDrag(world, snapped, local);   // 21.6б
         bool anyHeld = m.leftButton.isPressed || m.rightButton.isPressed || m.middleButton.isPressed;
         if (!anyHeld)
         {
             bool tRel = TrafficRelease();
-            if (dragStart || dragHeading || dragPoint || dragXte || tRel)
+            bool gRel = TriggerRelease();
+            if (dragStart || dragHeading || dragPoint || dragXte || tRel || gRel)
             {
                 dragStart = dragHeading = dragPoint = dragXte = false;
                 dragLeg = -1;
@@ -864,6 +887,7 @@ public partial class ScenarioEditorApp
         }
         TrafficOverlay();   // 21.5а
         TaskOverlay();      // 21.5б
+        TriggerOverlay();   // 21.6б
         overlay.SetVerticesDirty();
         PointLabels();
         if (viewport.Version != builtVersion)
@@ -890,6 +914,7 @@ public partial class ScenarioEditorApp
                             i == selPoint ? EditorMapOverlay.HandleHot : EditorMapOverlay.RouteColor);
         }
         if (!SheetOpen) used = TrafficLabels(rc, used);
+        if (!SheetOpen) used = TriggerLabels(rc, used);   // 21.6б
         for (int i = used; i < aidLabels.Count; i++)
             if (aidLabels[i].gameObject.activeSelf) aidLabels[i].gameObject.SetActive(false);
     }
@@ -948,6 +973,7 @@ public partial class ScenarioEditorApp
         if (dragHeading || hotHeading) pos += $" · курс старта {MonitorUi.Num(s.initial.headingDeg, 0)}°";
         else if (cursorInside && (hotStart || dragStart)) pos += $" · старт: {MonitorUi.Num(s.initial.headingDeg, 0)}°, {MonitorUi.Num(s.initial.speedKnots, 1)} уз";
         if (cursorInside) pos += TrafficStatus();   // 21.5а
+        if (cursorInside) pos += TriggerStatus();   // 21.6б
         string saved = sdoc.SavedAt.HasValue ? $"сохранено {sdoc.SavedAt.Value:HH:mm}" : sdoc.Dirty ? "не сохранено" : "";
         statusText.text = $"{pos} · 1 пикс. = {MonitorUi.Num(viewport.MetersPerPixel, viewport.MetersPerPixel < 10 ? 1 : 0)} м · сетка {MapGrid.StepTitle(GridStep)}" +
                           $"{(snap ? " (привязка)" : "")} · {saved}{(lastScenarioDraftText.Length > 0 ? " · " + lastScenarioDraftText : "")}";

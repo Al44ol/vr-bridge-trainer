@@ -71,6 +71,9 @@ public class TriggerAction
 
     public bool ChangesCourse => courseDeg >= 0f;
     public bool ChangesSpeed => speedKnots >= 0f;
+
+    /// <summary>21.6б: копия (редактор).</summary>
+    public TriggerAction Clone() => (TriggerAction)MemberwiseClone();
 }
 
 /// <summary>21.6а: триггер сценария «если — то».</summary>
@@ -102,6 +105,15 @@ public class ScenarioTrigger
 
     /// <summary>Подпись: id и название.</summary>
     public string Label => string.IsNullOrWhiteSpace(title) ? id : $"{id} «{title}»";
+
+    /// <summary>21.6б: копия с копиями действий (редактор).</summary>
+    public ScenarioTrigger Clone()
+    {
+        var c = (ScenarioTrigger)MemberwiseClone();
+        c.actions = new List<TriggerAction>();
+        if (actions != null) foreach (TriggerAction a in actions) if (a != null) c.actions.Add(a.Clone());
+        return c;
+    }
 }
 
 /// <summary>21.6а: тексты триггеров (окно инструктора, журнал, проверка).</summary>
@@ -118,6 +130,39 @@ public static class TriggerText
             bool used = false;
             if (list != null) foreach (ScenarioTrigger t in list) if (t != null && t.id == id) { used = true; break; }
             if (!used) return id;
+        }
+    }
+
+    /// <summary>21.6б: название условия (выбор в редакторе).</summary>
+    public static string ConditionTitle(TriggerCondition c)
+    {
+        switch (c)
+        {
+            case TriggerCondition.Time: return "Время от начала";
+            case TriggerCondition.EnterCircle: return "Своё судно в круге";
+            case TriggerCondition.Waypoint: return "Пройдена точка маршрута";
+            case TriggerCondition.TargetRange: return "Дистанция до цели меньше";
+            case TriggerCondition.TaskStage: return "Выполнен этап задания";
+            case TriggerCondition.AfterTrigger: return "Сработал другой триггер";
+            default: return c.ToString();
+        }
+    }
+
+    /// <summary>21.6б: название вида действия (выбор в редакторе).</summary>
+    public static string ActionTitle(TriggerActionKind k)
+    {
+        switch (k)
+        {
+            case TriggerActionKind.TargetOrder: return "Цель: курс и скорость";
+            case TriggerActionKind.Weather: return "Погода";
+            case TriggerActionKind.Visibility: return "Видимость";
+            case TriggerActionKind.Wind: return "Ветер";
+            case TriggerActionKind.EngineFailure: return "Отказ главного двигателя";
+            case TriggerActionKind.EngineRestore: return "Главный двигатель восстановлен";
+            case TriggerActionKind.SteeringFailure: return "Отказ рулевого устройства";
+            case TriggerActionKind.SteeringRestore: return "Рулевое устройство восстановлено";
+            case TriggerActionKind.Message: return "Сообщение";
+            default: return k.ToString();
         }
     }
 

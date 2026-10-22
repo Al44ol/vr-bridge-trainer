@@ -41,7 +41,13 @@ public partial class ScenarioEditorApp
         tNameField = MonitorUi.Field(g, Pad, y, w - 120f - MonitorUi.Gap, 34f, "имя", false, TMP_InputField.ContentType.Standard,
                                      v => EditTraffic(d => { string n = (v ?? "").Trim(); if (n.Length == 0) return false; d.name = n; return true; }));
         tIdField = MonitorUi.Field(g, Pad + w - 120f, y, 120f, 34f, "T№", false, TMP_InputField.ContentType.Standard,
-                                   v => EditTraffic(d => { d.id = (v ?? "").Trim(); return true; }));
+                                   v => EditTraffic(d =>
+                                   {
+                                       List<string> before = TriggerEditing.TargetIds(S);
+                                       d.id = (v ?? "").Trim();
+                                       TriggerEditing.RemapTargets(S, before, TriggerEditing.TargetIds(S));   // 21.6б: ссылки триггеров — за целью
+                                       return true;
+                                   }));
         y -= 34f + MonitorUi.Gap;
         Label(g, "Вид · модель (размеры и манёвренность)", ref y, w);
         float x = Pad;
@@ -267,7 +273,14 @@ public partial class ScenarioEditorApp
 
     private void DeleteTraffic()
     {
-        if (S == null || !TrafficEditing.Remove(S.traffic, selTraffic)) return;
+        if (S == null) return;
+        List<string> before = TriggerEditing.TargetIds(S);
+        int removed = selTraffic;
+        if (!TrafficEditing.Remove(S.traffic, selTraffic)) return;
+        // 21.6б: номера целей сдвинулись (у целей без id — «T№» по номеру): ссылки триггеров — за целью, на удалённую — «(удалено)»
+        List<string> after = TriggerEditing.TargetIds(S);
+        after.Insert(removed, null);
+        TriggerEditing.RemapTargets(S, before, after);
         selTraffic = selTPoint = hotTraffic = hotTPoint = -1;
         ShowPropsGroup();
         EditScenario(() => sdoc.Commit());
