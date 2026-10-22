@@ -241,6 +241,13 @@ XR Origin — дочерний объект Ship, игрок качается в
 - 21.5в — пауза перед началом: `ScenarioPanel` — режим `Ready` (`ShowReady`: табличка «ПАУЗА», «Начать» / «Брифинг», опущена на 0,3 м — `readyLowered`), брифинг — «К упражнению» / «Начать сразу» / «К выбору»; фаза `ScenarioRunner.Briefing` не менялась (она и есть пауза); `InstructorWindow` — «БРИФИНГ · ПАУЗА ДО «НАЧАТЬ»».
 
 
+## Удобство в шлеме (План К, 22.10.2026)
+- **К-а (К2–К4)** — ThesisNotes 21.К-а. `Scripts/XrRigTuning.cs` — ставится сам на XR Origin (`AfterSceneLoad` и `TrainerScenes.OnSceneLoaded`); префабы XRI и сцена не меняются.
+  - К2: у всех `NearFarInteractor` — `CurveInteractionCaster.enableStabilization = false`, `CurveVisualController.customizeLinePropertiesForState = true`, `smoothlyCurveLine = false` у noValidHit / uiHit / uiPressHit / hoverHit; selectHit не трогается (изгиб к органу управления). «Как в XRI» — сохранённые значения префаба.
+  - К3: `Ship/TeleportFloor` — `TeleportationArea` на коллайдере пола под игроком (RaycastAll вниз от XR Origin, ≤ 3 м, без триггеров и коллайдеров рига), слой «Teleport», `MatchOrientation.None`, `filterSelectionByHitNormal` ±20° по оси палубы; слой пола добавляется в `raycastMask` луча телепорта; пересоздаётся по `ShipTypeSwitcher.TypeChanged` (через 0,5 с). Поворот — `ControllerInputActionManager.smoothTurnEnabled` у правой руки (по имени «Right»).
+  - Меню Y → группа «Игрок» (подменю, порядок −94): «Луч: прямой / как в XRI», «Поворот: плавный / шагами 45°»; PlayerPrefs `VRBridge.StraightRay`, `VRBridge.SmoothTurn`. Консоль — `[Игрок] …`.
+  - К4: `ShipMotion` — пункт «Общее» → «Качка мостика: N %» (100 → 50 → 25 → 0 → 100; `comfortScale`, также в синусоидальном режиме), PlayerPrefs `VRBridge.BridgeMotionPct`, консоль `[Качка]`; session.json → `ship.bridge_motion_pct` (`ExerciseRecorder.Open`). Модель качки, волны, запись и оценка не меняются.
+
 ## Сборка (после запроса 17)
 - Пока только PC (Windows) — пробная сборка для проверки окна инструктора, PiP и замера вне редактора; инструкция — `Docs/Build.md`. В сборке: сессии — `Документы/VRBridgeTrainer/Sessions`; замеры — `<папка сборки>/ThesisData/Performance` (путь от `Application.dataPath`); лог — `%USERPROFILE%/AppData/LocalLow/DefaultCompany/VR_BridgeTrainer_1/Player.log`; список сценариев — сохранённый в сцене (`ScenarioLibrarySync` работает только при входе в Play Mode).
 - Уровень качества: редактор играет на «Low» (`Performance URP Config`), а по умолчанию для Windows стоял «Ultra» (`Quality URP Config`, VSync) — для сборки выставить «Low», чтобы сборка совпадала с замерами в редакторе.

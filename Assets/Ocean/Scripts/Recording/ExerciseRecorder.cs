@@ -317,6 +317,8 @@ public class ExerciseRecorder : MonoBehaviour
             SessionMeta meta = SessionMeta.Create(s, p, TraineeId, startLocal);
             if (navigation != null && navigation.Model != null && meta.ship != null)
                 meta.ship.motion_model = navigation.Model.ActiveMotionModel.ToString();   // запрос 19.1: переключатель в сцене
+            ShipMotion motion = FindAnyObjectByType<ShipMotion>();
+            if (motion != null && meta.ship != null) meta.ship.bridge_motion_pct = motion.ComfortPercent;   // К4: меню Y «Качка мостика»
             FillApp(meta.app);
             meta.recording.track_rate_hz = trackRateHz;
             meta.recording.fixed_dt_s = Math.Round(Time.fixedDeltaTime, 6);

@@ -513,6 +513,8 @@ public class SessionShip
     public string motion_model = "";
     /// <summary>19.3б-2: контур корпуса — конец цилиндрической вставки к носу, доля L (MooringHull).</summary>
     public double hull_parallel_l;
+    /// <summary>К4: качка мостика для игрока при начале записи, % (меню Y; модель качки и запись не меняются). В старых записях — 100.</summary>
+    public int bridge_motion_pct = 100;
 
     public static SessionShip From(ShipParameters p) => new SessionShip
     {

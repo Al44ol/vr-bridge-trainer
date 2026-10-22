@@ -24,6 +24,9 @@
 // крена и дифферента max·tanh(x/max) — только для отображения.
 // Запрос 15: SetHullFrame — другой центр качки и сдвиг судна по вертикали (катер: палуба
 // ≈ 1,2 м над водой вместо ≈ 5 м у мостика); задаёт ShipTypeSwitcher.
+// К4 (22.10.2026): пункт меню Y «Качка мостика: N %» — по нажатию 100 → 50 → 25 → 0 → 100 %
+// (comfortScale; запоминается на станции, PlayerPrefs). Волны, модель качки, движение судна,
+// запись и оценка не меняются — только то, как качается мостик вместе с игроком.
 // ============================================================
 using UnityEngine;
 
@@ -125,6 +128,56 @@ public class ShipMotion : MonoBehaviour
     public SeakeepingModel Model => model;
 
     private bool started;
+
+    // ── К4: качка мостика для игрока (меню Y) ──
+    /// <summary>Ступени «Качка мостика», % (по нажатию — следующая, после 0 — снова 100).</summary>
+    public static readonly int[] ComfortSteps = { 100, 50, 25, 0 };
+    private const string ComfortPref = "VRBridge.BridgeMotionPct";
+    private BridgeMenuCommand comfortCommand;
+
+    /// <summary>Качка мостика для игрока, % (comfortScale × 100) — пишется в session.json.</summary>
+    public int ComfortPercent => Mathf.RoundToInt(comfortScale * 100f);
+
+    void Awake()
+    {
+        try
+        {
+            if (PlayerPrefs.HasKey(ComfortPref))
+                comfortScale = Mathf.Clamp01(PlayerPrefs.GetInt(ComfortPref, 100) / 100f);
+        }
+        catch (System.Exception) { }   // нет доступа к настройкам — остаётся значение сцены
+    }
+
+    void OnEnable()
+    {
+        BridgeMenu.SetGroupOrder("Общее", -95);
+        BridgeMenu.SetGroupExpanded("Общее", true);   // на главной странице меню Y
+        comfortCommand = BridgeMenu.Register("Общее", () => $"Качка мостика: {ComfortPercent} %", NextComfortStep)
+            .InMenu(BridgeMenu.SettingsMenuId);
+    }
+
+    void OnDisable()
+    {
+        BridgeMenu.Unregister(comfortCommand);
+        comfortCommand = null;
+    }
+
+    /// <summary>Следующая ступень (100 → 50 → 25 → 0 → 100 %); значение между ступенями — к ближайшей меньшей.</summary>
+    public void NextComfortStep()
+    {
+        int now = ComfortPercent, next = ComfortSteps[0];
+        for (int i = 0; i < ComfortSteps.Length; i++)
+            if (ComfortSteps[i] < now) { next = ComfortSteps[i]; break; }
+        SetComfortPercent(next);
+    }
+
+    public void SetComfortPercent(int percent)
+    {
+        comfortScale = Mathf.Clamp01(percent / 100f);
+        try { PlayerPrefs.SetInt(ComfortPref, ComfortPercent); PlayerPrefs.Save(); }
+        catch (System.Exception) { }
+        Debug.Log($"[Качка] Качка мостика для игрока: {ComfortPercent} % (волны, модель и запись не меняются).", this);
+    }
 
     void Start()
     {
@@ -349,6 +402,9 @@ public class ShipMotion : MonoBehaviour
         pitch += Mathf.Sin(t * 2f * Mathf.PI / (pitchPeriod * 0.6f) + 1.0f) * pitchAmplitude * seaState * 0.15f;
 
         // Применяем поворот
+        // К4: множитель качки мостика — и в запасном режиме
+        roll *= comfortScale; pitch *= comfortScale; yaw *= comfortScale; heave *= comfortScale;
+
         Quaternion rocking = Quaternion.Euler(pitch, yaw, roll);
         transform.localRotation = initialRotation * rocking;
 
