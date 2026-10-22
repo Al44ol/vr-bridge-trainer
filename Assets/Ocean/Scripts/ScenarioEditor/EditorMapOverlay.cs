@@ -9,6 +9,7 @@
 // под курсором — голубой контур; рисуемая — голубая ломаная, линия к курсору и замыкание.
 // 21.3б — кромки фарватеров (ось ± ширина/2), стрелка «вода» у причалов; фарватер и причал — без замыкания.
 // 21.4а — слой сценария: коридор XTE, линия маршрута с ручками точек, середин участков и кромки XTE, судно на старте.
+// 21.5а — другие суда: силуэт, путь, пунктиры до положений в момент TCPA и отрезок CPA, ручки курса, TCPA и точек.
 // Координаты: пиксель окна MapViewport = локальная точка от левого нижнего угла этой графики.
 // ============================================================
 using System.Collections.Generic;
@@ -64,6 +65,19 @@ public class EditorMapOverlay : MaskableGraphic
     public static readonly Color CorridorFill = new Color(1f, 0.6f, 0.25f, 0.08f);
     public static readonly Color CorridorEdge = new Color(1f, 0.6f, 0.25f, 0.4f);
     public static readonly Color OwnShipColor = new Color(0.35f, 0.9f, 0.45f, 1f);
+    /// <summary>21.5а: другие суда — силуэт по курсу, путь, пунктиры своего судна и цели до момента TCPA, отрезок CPA.</summary>
+    public struct TrafficMark
+    {
+        public WorldPosition Pos, HeadingHandle, MeetHandle, OwnAtCpa, TargetAtCpa;
+        public float Heading, Length, Beam;
+        public bool Selected, Hot, ShowHeading, HeadingHot, ShowMeetHandle, MeetHot, Closing;
+        /// <summary>Путь после старта (TrafficPlanner) — линией; Points — правимые точки маршрута цели (ручки у выделенной).</summary>
+        public List<WorldPosition> Path, Points;
+        public int HotPoint, SelPoint;
+    }
+    public readonly List<TrafficMark> Traffic = new List<TrafficMark>();
+    public static readonly Color TrafficColor = new Color(0.95f, 0.5f, 0.85f, 1f);
+    public static readonly Color CpaColor = new Color(1f, 0.35f, 0.3f, 1f);
 
     /// <summary>Ручки рамки: 0–3 — углы (ЮЗ, ЮВ, СВ, СЗ), 4–7 — середины сторон (Ю, В, С, З).</summary>
     public static List<WorldPosition> BoundsHandles(WorldPosition min, WorldPosition max)
@@ -236,24 +250,96 @@ public class EditorMapOverlay : MaskableGraphic
             Quad(vh, c - new Vector2(h, h), c + new Vector2(h, h), sel ? HandleHot : hot ? CursorColor : (i == 0 ? Color.white : RouteColor));
         }
 
+        DrawTraffic(vh, r);   // 21.5а
+
         // Судно на старте
-        float a = StartHeading * Mathf.Deg2Rad;
-        Vector2 f = new Vector2(Mathf.Sin(a), Mathf.Cos(a)), s = new Vector2(f.y, -f.x);
-        float L = Mathf.Max(18f, ShipLength / mpp), B = Mathf.Max(7f, ShipBeam / mpp);
-        Vector2 c0 = Px(StartPos, r);
-        Vector2 bow = c0 + f * (0.5f * L), sb = c0 + f * (0.2f * L) + s * (0.5f * B), pb = c0 + f * (0.2f * L) - s * (0.5f * B);
-        Vector2 ss = c0 - f * (0.5f * L) + s * (0.5f * B), ps = c0 - f * (0.5f * L) - s * (0.5f * B);
         Color hull = StartSelected ? HandleHot : StartHot ? CursorColor : OwnShipColor;
+        Vector2 bow = Hull(vh, Px(StartPos, r), StartHeading, ShipLength, ShipBeam, hull, mpp);
         if (StartSelected)
         {
             Vector2 hh = Px(HeadingHandle, r);
             Seg(vh, bow, hh, 1.5f, new Color(hull.r, hull.g, hull.b, 0.7f));
             Disc(vh, hh, HeadingHot ? 7f : 5f, HeadingHot ? CursorColor : HandleHot);
         }
-        Tri(vh, bow, pb, sb, hull);
-        Tri(vh, pb, ps, ss, hull);
-        Tri(vh, pb, ss, sb, hull);
+    }
+
+    // Силуэт судна по курсу в масштабе (не меньше 18 × 7 пикс.), с диаметральной к носу; возвращает нос
+    private static Vector2 Hull(VertexHelper vh, Vector2 c0, float headingDeg, float length, float beam, Color col, float mpp)
+    {
+        float a = headingDeg * Mathf.Deg2Rad;
+        Vector2 f = new Vector2(Mathf.Sin(a), Mathf.Cos(a)), s = new Vector2(f.y, -f.x);
+        float L = Mathf.Max(18f, length / mpp), B = Mathf.Max(7f, beam / mpp);
+        Vector2 bow = c0 + f * (0.5f * L), sb = c0 + f * (0.2f * L) + s * (0.5f * B), pb = c0 + f * (0.2f * L) - s * (0.5f * B);
+        Vector2 ss = c0 - f * (0.5f * L) + s * (0.5f * B), ps = c0 - f * (0.5f * L) - s * (0.5f * B);
+        Tri(vh, bow, pb, sb, col);
+        Tri(vh, pb, ps, ss, col);
+        Tri(vh, pb, ss, sb, col);
         Seg(vh, c0 - f * (0.3f * L), c0 + f * (0.35f * L), 1.5f, new Color(0.05f, 0.05f, 0.06f, 0.8f));   // диаметральная — где нос
+        return bow;
+    }
+
+    // 21.5а: другие суда. У каждой цели — путь (тонкая линия), пунктир своего судна и цели до положений в момент TCPA,
+    // отрезок CPA между ними (красный); у выделенной — ручки точек маршрута, курса и ромб TCPA на пути своего судна
+    private void DrawTraffic(VertexHelper vh, Rect r)
+    {
+        float mpp = (float)Viewport.MetersPerPixel;
+        Color dim = new Color(TrafficColor.r, TrafficColor.g, TrafficColor.b, 0.55f);
+        foreach (TrafficMark t in Traffic)
+        {
+            Vector2 c0 = Px(t.Pos, r);
+            if (t.Path != null)
+            {
+                Vector2 prev = c0;
+                foreach (WorldPosition p in t.Path) { Vector2 q = Px(p, r); Seg(vh, prev, q, t.Selected ? 1.5f : 1f, dim); prev = q; }
+            }
+            if (t.Closing)
+            {
+                float w = t.Selected ? 2f : 1.2f, alpha = t.Selected ? 0.9f : 0.5f;
+                Vector2 o = Px(t.OwnAtCpa, r), g = Px(t.TargetAtCpa, r);
+                Dash(vh, Px(StartPos, r), o, w, new Color(OwnShipColor.r, OwnShipColor.g, OwnShipColor.b, alpha));
+                Dash(vh, c0, g, w, new Color(TrafficColor.r, TrafficColor.g, TrafficColor.b, alpha));
+                Seg(vh, o, g, t.Selected ? 2.5f : 1.5f, new Color(CpaColor.r, CpaColor.g, CpaColor.b, t.Selected ? 1f : 0.7f));
+                Disc(vh, o, t.Selected ? 4f : 3f, OwnShipColor);
+                Disc(vh, g, t.Selected ? 4f : 3f, TrafficColor);
+            }
+            if (t.Selected && t.Points != null)
+                for (int i = 0; i < t.Points.Count; i++)
+                {
+                    Vector2 c = Px(t.Points[i], r);
+                    bool hot = i == t.HotPoint || i == t.SelPoint;
+                    float h = hot ? 6f : 4.5f;
+                    Quad(vh, c - new Vector2(h + 1f, h + 1f), c + new Vector2(h + 1f, h + 1f), new Color(0.05f, 0.05f, 0.06f, 1f));
+                    Quad(vh, c - new Vector2(h, h), c + new Vector2(h, h), i == t.SelPoint ? HandleHot : hot ? CursorColor : TrafficColor);
+                }
+            Color hull = t.Selected ? HandleHot : t.Hot ? CursorColor : TrafficColor;
+            Vector2 bow = Hull(vh, c0, t.Heading, t.Length, t.Beam, hull, mpp);
+            if (t.Selected)
+            {
+                if (t.ShowHeading)
+                {
+                    Vector2 hh = Px(t.HeadingHandle, r);
+                    Seg(vh, bow, hh, 1.5f, new Color(hull.r, hull.g, hull.b, 0.7f));
+                    Disc(vh, hh, t.HeadingHot ? 7f : 5f, t.HeadingHot ? CursorColor : HandleHot);
+                }
+                if (t.ShowMeetHandle)
+                {
+                    Vector2 m = Px(t.MeetHandle, r);
+                    Diamond(vh, m, t.MeetHot ? 9f : 7f, new Color(0.05f, 0.05f, 0.06f, 1f));
+                    Diamond(vh, m, t.MeetHot ? 7f : 5.5f, t.MeetHot ? CursorColor : HandleHot);
+                }
+            }
+        }
+    }
+
+    // Пунктир: штрих 8 пикс., промежуток 6
+    private static void Dash(VertexHelper vh, Vector2 a, Vector2 b, float w, Color col)
+    {
+        Vector2 d = b - a;
+        float len = d.magnitude;
+        if (len < 1f) return;
+        Vector2 u = d / len;
+        int n = 0;
+        for (float s = 0f; s < len && n < 400; s += 14f, n++) Seg(vh, a + u * s, a + u * Mathf.Min(len, s + 8f), w, col);
     }
 
     private static bool Major(double v, double s) => System.Math.Abs(System.Math.IEEERemainder(v, 5.0 * s)) < 0.5 * s;

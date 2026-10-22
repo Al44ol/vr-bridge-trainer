@@ -36,7 +36,7 @@ public partial class ScenarioEditorApp
     // ─────────── Построение ───────────
     private RectTransform Sheet(string name, string title, out float y)
     {
-        RectTransform s = MonitorUi.Panel(root, name, MonitorUi.PanelColor);
+        RectTransform s = MonitorUi.Panel(root, name, MonitorUi.SheetColor);   // 21.5а: непрозрачный — карта и подписи не просвечивают
         MonitorUi.Stretch(s, PaletteWidth + Pad, StatusBar + Pad, PropsWidth + Pad, TopBar + Pad);
         TextMeshProUGUI t = MonitorUi.Text(s, title, 22f, MonitorUi.TitleColor, TextAlignmentOptions.TopLeft);
         t.fontStyle = FontStyles.Bold;

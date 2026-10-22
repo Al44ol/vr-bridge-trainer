@@ -1,7 +1,8 @@
 // ============================================================
 // ScenarioEditorTests.cs — Слой сценария в редакторе (запрос 21.4а, Core): документ сценария
 // («с нуля», «на основе» встроенного, отмена, сохранение с историей, черновик), правка маршрута
-// (имена, вставка, удаление, XTE от ручки, попадание мышью, курс старта), замечания редактора.
+// (имена, вставка, удаление, XTE от ручки, попадание мышью, курс старта), замечания редактора;
+// 21.5а — другие суда (добавление, способ задания с сохранением места, встреча = TrafficPlanner, ромб TCPA, замечания, файл).
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -347,5 +348,154 @@ public class ScenarioEditorTests
         StringAssert.Contains("E2 — ", t);
         s.timeLimitSeconds = 0f;
         StringAssert.Contains("Лимита времени нет", ScenarioChecks.Briefing(s));
+    }
+
+    // ─────────── 21.5а: другие суда ───────────
+    [Test]
+    public void Traffic_AddMove_PlacementKeepsPlace_Undo()
+    {
+        ScenarioDefinition b2 = BuiltInB2(out ScenarioCatalog cat);
+        string before = ScenarioFile.Write(b2, cat);
+        ScenarioDocument doc = ScenarioDocument.BasedOn(b2, "МОЙ-01", cat, null);
+        ScenarioDefinition s = doc.Scenario;
+        s.traffic.Clear();
+        s.initial.position = new WorldPosition(0, 0);
+        s.initial.headingDeg = 0f;
+        s.initial.speedKnots = 10f;
+        doc.Commit();
+        OwnShipInitialState own = s.initial;
+
+        Assert.AreEqual(0, TrafficEditing.Add(s.traffic, new WorldPosition(3000, 3000), own));
+        TrafficShipDefinition d = s.traffic[0];
+        Assert.AreEqual("T1", d.id);
+        Assert.AreEqual("Цель-1", d.name);
+        Assert.AreEqual(225f, d.headingDeg, "курс — на старт своего судна");
+        Assert.AreEqual(TrafficPlacement.Absolute, d.placement);
+        Assert.AreEqual(1, TrafficEditing.Add(s.traffic, new WorldPosition(-2000, 4000), own));
+        Assert.AreEqual("T2", s.traffic[1].id);
+        Assert.AreEqual("Цель-2", s.traffic[1].name);
+
+        // Смена способа задания — цель на месте
+        d.position = new WorldPosition(3000, 2500);
+        d.headingDeg = 270f;
+        WorldPosition p0 = TrafficEditing.StartOf(d, own);
+        TrafficEditing.SetPlacement(d, own, TrafficPlacement.RelativeToOwnShip);
+        Assert.AreEqual(0.0, (TrafficEditing.StartOf(d, own) - p0).Magnitude, 1e-3);
+        Assert.AreEqual(Math.Sqrt(3000.0 * 3000.0 + 2500.0 * 2500.0) / 1852.0, d.distanceNm, 1e-5);
+        TrafficEditing.SetPlacement(d, own, TrafficPlacement.MeetingPoint);
+        Assert.AreEqual(0.0, (TrafficEditing.StartOf(d, own) - p0).Magnitude, 1.0, "встреча — по текущей геометрии");
+        Assert.Greater(d.tcpaMinutes, 0f);
+        Assert.Greater(d.cpaNm, 0f);
+        Assert.IsFalse(TrafficEditing.MoveStart(d, own, new WorldPosition(0, 0)), "«встреча» — место считается само");
+        TrafficEditing.SetPlacement(d, own, TrafficPlacement.Absolute);
+        Assert.IsTrue(TrafficEditing.MoveStart(d, own, new WorldPosition(500, 600)));
+        Assert.AreEqual(500.0, d.position.East, 1e-9);
+        // «пеленг и дистанция» — от старта своего судна
+        TrafficEditing.SetPlacement(d, own, TrafficPlacement.RelativeToOwnShip);
+        Assert.IsTrue(TrafficEditing.MoveStart(d, own, new WorldPosition(0, 1852)));
+        Assert.AreEqual(0f, d.bearingDeg, 1e-4f);
+        Assert.AreEqual(1f, d.distanceNm, 1e-5f);
+
+        Assert.AreEqual(0, TrafficEditing.AddPoint(d, new WorldPosition(10, 20)));
+        Assert.IsTrue(doc.Commit());
+        Assert.IsTrue(TrafficEditing.Remove(s.traffic, 1));
+        Assert.AreEqual("T2", TrafficEditing.NextId(s.traffic), "номер освободился");
+        doc.Commit();
+        Assert.IsTrue(doc.Undo());
+        Assert.AreEqual(2, doc.Scenario.traffic.Count);
+        Assert.AreEqual(TrafficPlacement.RelativeToOwnShip, doc.Scenario.traffic[0].placement);
+        Assert.AreEqual(1, doc.Scenario.traffic[0].route.Count);
+        Assert.IsTrue(doc.Undo());
+        Assert.AreEqual(0, doc.Scenario.traffic.Count);
+        Assert.AreEqual(before, ScenarioFile.Write(b2, cat), "встроенный не меняется");
+    }
+
+    [Test]
+    public void Traffic_Encounter_MatchesPlanner_MeetHandle_Hit()
+    {
+        var own = new OwnShipInitialState { position = new WorldPosition(100, 200), headingDeg = 0f, speedKnots = 12f };
+        var d = new TrafficShipDefinition
+        {
+            placement = TrafficPlacement.MeetingPoint, cpaNm = 0.5f, tcpaMinutes = 12f, meetingSide = MeetingSide.Starboard,
+            headingDeg = 270f, speedKnots = 10f
+        };
+        TrafficEncounter e = TrafficEditing.Meet(d, own);
+        Assert.IsTrue(e.Closing);
+        Assert.AreEqual(0.5, e.CpaNm, 1e-6);
+        Assert.AreEqual(12.0, e.TcpaMin, 1e-6);
+        TrafficStart st = TrafficPlanner.Resolve(d, own);
+        Assert.AreEqual(st.Position.East, e.Start.Position.East, 1e-9, "тот же расчёт, что в тренажёре");
+        Assert.AreEqual(st.MeetingPoint.East, e.TargetAtCpa.East, 1e-6);
+        Assert.AreEqual(st.MeetingPoint.North, e.TargetAtCpa.North, 1e-6);
+        double v = 12.0 * ShipParameters.KnotsToMs;
+        Assert.AreEqual(200.0 + v * 720.0, e.OwnAtCpa.North, 1e-6);
+        Assert.AreEqual(0.5 * 1852.0, (e.TargetAtCpa - e.OwnAtCpa).Magnitude, 1e-6, "концы отрезка CPA");
+        Assert.AreEqual(MeetingSide.Starboard, TrafficEditing.SideAt(own, e.TargetAtCpa - e.OwnAtCpa));
+
+        // Ромб TCPA — на пути своего судна; тянуть: проекция на курс, шаг 0,5 мин
+        WorldPosition h = TrafficEditing.MeetHandle(d, own);
+        Assert.AreEqual(e.OwnAtCpa.North, h.North, 1e-6);
+        Assert.AreEqual(12f, TrafficEditing.TcpaFrom(own, h + new WorldPosition(30, 0)));
+        Assert.AreEqual(6f, TrafficEditing.TcpaFrom(own, own.position + new WorldPosition(0, v * 360.0 + 20.0)));
+        Assert.AreEqual(0.5f, TrafficEditing.TcpaFrom(own, own.position - new WorldPosition(0, 500)), "не меньше шага");
+        Assert.AreEqual(-1f, TrafficEditing.TcpaFrom(new OwnShipInitialState { speedKnots = 0f }, h), "своё судно стоит");
+
+        // Попадание мышью: 10 м/пикс., (0, 0) — пиксель (400, 300)
+        MapViewport vp = View(10.0);
+        var list = new List<TrafficShipDefinition> { d };
+        vp.ToPixel(e.Start.Position, out double x, out double y);
+        Assert.AreEqual(0, TrafficEditing.HitShip(list, own, vp, x + 5, y + 5));
+        Assert.AreEqual(-1, TrafficEditing.HitShip(list, own, vp, x + 20, y));
+        vp.ToPixel(h, out double hx, out double hy);
+        Assert.IsTrue(TrafficEditing.HitMeet(d, own, vp, hx + 3, hy));
+        d.placement = TrafficPlacement.Absolute;
+        Assert.IsFalse(TrafficEditing.HitMeet(d, own, vp, hx, hy), "ромб — только у «встречи»");
+    }
+
+    [Test]
+    public void Traffic_Checks_CloseStart_Cpa_TurnBeforeTcpa_File()
+    {
+        ScenarioDefinition b2 = BuiltInB2(out ScenarioCatalog cat);
+        AreaDocument ad = AreaDocument.New("Бухта");
+        ScenarioDocument doc = ScenarioDocument.New(ad.Area, b2.shipParameters, "МОЙ-01", "Встреча", cat, null);
+        ScenarioDefinition s = doc.Scenario;
+        s.initial.position = new WorldPosition(0, 0);
+        s.initial.headingDeg = 0f;
+        s.initial.speedKnots = 10f;
+        s.route.Clear();
+        RouteEditing.Add(s.route, new WorldPosition(0, 0));
+        RouteEditing.Add(s.route, new WorldPosition(0, 1852));   // поворот у WP2 через 6 мин
+        Assert.AreEqual(0, TrafficEditing.Check(s).Count, "судов нет");
+        s.traffic.Add(new TrafficShipDefinition
+        {
+            id = "T1", name = "Пересекающее", placement = TrafficPlacement.MeetingPoint, cpaNm = 0.2f, tcpaMinutes = 12f,
+            meetingSide = MeetingSide.Port, headingDeg = 90f, speedKnots = 10f
+        });
+        List<string> w = TrafficEditing.Check(s);
+        Assert.AreEqual(1, w.Count, "маршрут без поворота — только CPA: " + string.Join("; ", w));
+        StringAssert.Contains("CPA 0,20 мили < CPA_доп 0,50", w[0]);
+        s.traffic[0].requiredCpaNm = 0.1f;
+        Assert.AreEqual(0, TrafficEditing.Check(s).Count, "CPA_доп цели 0,1 мили");
+
+        RouteEditing.Add(s.route, new WorldPosition(1852, 1852));
+        s.traffic.Add(new TrafficShipDefinition { id = "T2", name = "Попутное", position = new WorldPosition(100, 300), headingDeg = 0f, speedKnots = 10f });
+        w = TrafficEditing.Check(s);
+        Assert.AreEqual(3, w.Count, string.Join("; ", w));
+        StringAssert.Contains("поворачивает у «WP2» через 6,0 мин", w[0]);
+        StringAssert.Contains("Судно T2 «Попутное»: на старте в 0,17 мили", w[1]);
+        StringAssert.Contains("встречи не будет", w[2]);
+        Assert.IsTrue(ScenarioChecks.Check(s, cat).Warnings.Contains(w[1]), "в общей проверке редактора");
+
+        // Файл: цели — как заданы
+        string text = ScenarioFile.Write(s, cat);
+        ScenarioLoadResult r = ScenarioFile.Read(text, cat, new[] { ad.Area }, "МОЙ-01");
+        Assert.IsTrue(r.Ok, string.Join("; ", r.Errors));
+        Assert.AreEqual(2, r.Scenario.traffic.Count);
+        TrafficShipDefinition t1 = r.Scenario.traffic[0];
+        Assert.AreEqual(TrafficPlacement.MeetingPoint, t1.placement);
+        Assert.AreEqual(MeetingSide.Port, t1.meetingSide);
+        Assert.AreEqual(0.2f, t1.cpaNm);
+        Assert.AreEqual(0.1f, t1.requiredCpaNm);
+        Assert.AreEqual(ScenarioFile.Write(s, cat), ScenarioFile.Write(r.Scenario, cat), "бит в бит");
     }
 }

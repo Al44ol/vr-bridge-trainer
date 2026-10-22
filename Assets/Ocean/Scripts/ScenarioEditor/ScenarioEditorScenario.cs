@@ -13,7 +13,8 @@
 //   • Справа: свойства сценария (id, название, акватория, судно — модель 45 м / свой буксир, модель движения,
 //     блоки из основы), старта (место, курс, скорость, телеграф, руль) или точки (имя, место, XTE, узкость, участки).
 //   • «Проверка» — ScenarioDefinition.Validate + замечания редактора (RouteEditing.Check).
-// Условия, критерии, брифинг, «Пройти в тренажёре» — ScenarioEditorSheets.cs (21.4б); суда, швартовка, буксир — 21.5 (из основы — как есть).
+// Условия, критерии, брифинг, «Пройти в тренажёре» — ScenarioEditorSheets.cs (21.4б); другие суда — ScenarioEditorTraffic.cs (21.5а);
+// швартовка, буксир — 21.5б (из основы — как есть).
 // ============================================================
 using System;
 using System.Collections.Generic;
@@ -25,7 +26,7 @@ using UnityEngine.InputSystem;
 public partial class ScenarioEditorApp
 {
     private enum Mode { Area, Scenario }
-    private enum STool { Select, Start, Route }
+    private enum STool { Select, Start, Route, Traffic }
 
     private Mode mode = Mode.Area;
     private STool stool = STool.Select;
@@ -67,7 +68,7 @@ public partial class ScenarioEditorApp
         RectTransform p = scenarioPalette = Group(panel, "ScenarioPalette");
         float y = y0, w = PaletteWidth - 2f * Pad;
         Header(p, "Инструменты", ref y);
-        foreach ((STool t, string title) in new[] { (STool.Select, "Выбор / сдвиг"), (STool.Start, "Старт судна"), (STool.Route, "Маршрут") })
+        foreach ((STool t, string title) in new[] { (STool.Select, "Выбор / сдвиг"), (STool.Start, "Старт судна"), (STool.Route, "Маршрут"), (STool.Traffic, "Другое судно") })
         {
             STool tt = t;
             float x = Pad;
@@ -88,12 +89,14 @@ public partial class ScenarioEditorApp
             "Круг на участке — вставить точку\n" +
             "Ромб на кромке — XTE участка\n" +
             "Ручка на носу судна — курс\n" +
-            "Delete — удалить точку\nEsc — «Выбор» / снять\nCtrl+Z / Ctrl+Y, Ctrl+S",
+            "Другое судно: щелчок — судно;\n  у выделенного «по маршруту» — точка\n" +
+            "Ромб на своём пути — TCPA встречи\n" +
+            "Delete — удалить точку / судно\nEsc — «Выбор» / снять\nCtrl+Z / Ctrl+Y, Ctrl+S",
             14f, MonitorUi.MutedColor, TextAlignmentOptions.TopLeft);
-        MonitorUi.TopLeft(help.rectTransform, Pad, y, w, 260f);
-        y -= 268f;
+        MonitorUi.TopLeft(help.rectTransform, Pad, y, w, 330f);
+        y -= 338f;
         TextMeshProUGUI later = MonitorUi.Text(p,
-            "Условия, критерии, брифинг — кнопки в свойствах сценария. Суда, швартовка, буксир — 21.5 (из основы переносятся как есть).",
+            "Условия, критерии, брифинг — кнопки в свойствах сценария. Швартовка, буксир — 21.5б (из основы переносятся как есть).",
             13f, MonitorUi.MutedColor, TextAlignmentOptions.TopLeft);
         MonitorUi.TopLeft(later.rectTransform, Pad, y, w, 80f);
     }
@@ -161,6 +164,7 @@ public partial class ScenarioEditorApp
                                         v => EditScenarioNumber(v, d => Math.Abs(d) <= 35.0, d => S.initial.rudderDeg = (float)d));
         y -= 34f + 3f * MonitorUi.Gap;
         float yStart = y;
+        float yTraffic = BuildTrafficProps(p, w);   // 21.5а: другое судно
 
         // Точка маршрута
         g = pointGroup = Group(p, "PointProps");
@@ -189,7 +193,7 @@ public partial class ScenarioEditorApp
         x = Pad;
         ui.Button(g, ref x, y, w, "Удалить точку", MonitorUi.StopColor, DeletePoint);
         y -= MonitorUi.RowHeight + 3f * MonitorUi.Gap;
-        return Mathf.Min(yScenario, Mathf.Min(yStart, y));
+        return Mathf.Min(Mathf.Min(yScenario, yTraffic), Mathf.Min(yStart, y));
     }
 
     // «<» · значение (щелчок — дальше) · «>»
@@ -220,7 +224,8 @@ public partial class ScenarioEditorApp
     private void ShowScenarioGroups()
     {
         bool sc = mode == Mode.Scenario && sdoc != null;
-        if (scenarioGroup != null) scenarioGroup.gameObject.SetActive(sc && !selStart && SelWp == null);
+        if (scenarioGroup != null) scenarioGroup.gameObject.SetActive(sc && !selStart && SelWp == null && SelT == null);
+        if (trafficGroup != null) trafficGroup.gameObject.SetActive(sc && !selStart && SelWp == null && SelT != null);   // 21.5а
         if (startGroup != null) startGroup.gameObject.SetActive(sc && selStart);
         if (pointGroup != null) pointGroup.gameObject.SetActive(sc && !selStart && SelWp != null);
     }
@@ -238,6 +243,7 @@ public partial class ScenarioEditorApp
         Set(stSpeedField, MonitorUi.Num(s.initial.speedKnots, 1));
         Set(stRudderField, MonitorUi.Num(s.initial.rudderDeg, 0));
         sInfo.text = ScenarioInfo(s);
+        FillTrafficFields();   // 21.5а
         RouteWaypoint wp = SelWp;
         if (wp == null) return;
         Set(ptNameField, wp.name);
@@ -265,13 +271,14 @@ public partial class ScenarioEditorApp
     {
         var b = new System.Text.StringBuilder();
         b.AppendLine($"Маршрут: точек {s.route.Count}, {MonitorUi.Num(s.RouteLength / 1852.0, 2)} мили");
+        int ships = s.traffic != null ? s.traffic.Count : 0;
+        b.AppendLine(ships > 0 ? $"Других судов {ships} (щелчок по судну — свойства)" : "Других судов нет (инструмент «Другое судно»)");
         var blocks = new List<string>();
-        if (s.traffic != null && s.traffic.Count > 0) blocks.Add($"других судов {s.traffic.Count}");
         if (s.IsMooring) blocks.Add("швартовка");
         if (s.tugAvailable) blocks.Add("буксир по вызову");
         if (s.IsTugWork) blocks.Add("работа буксира");
         if (s.windKnots > 0f) blocks.Add($"ветер {MonitorUi.Num(s.windKnots, 0)} уз");
-        b.AppendLine(blocks.Count > 0 ? "Из основы: " + string.Join(", ", blocks) + " (правка — 21.5)" : "Блоков задания нет (суда, швартовка, буксир — 21.5).");
+        if (blocks.Count > 0) b.AppendLine("Из основы: " + string.Join(", ", blocks) + " (правка — 21.5б)");
         b.Append($"<color=#9AA6B2>{ScenarioText.Conditions(s.weather, s.timeOfDay)}; лимит {MonitorUi.Num(s.timeLimitSeconds / 60.0, 0)} мин · критериев: {CriteriaEditing.Count(s).enabled}, обязательных {CriteriaEditing.Count(s).mandatory}</color>");
         return b.ToString();
     }
@@ -390,10 +397,10 @@ public partial class ScenarioEditorApp
     // ─────────── Выделение, инструменты, режим ───────────
     private void SelectStart(bool on)
     {
-        if (on == selStart && (!on || selPoint < 0)) return;
+        if (on == selStart && (!on || selPoint < 0 && selTraffic < 0)) return;
         EndFieldEdit();
         selStart = on;
-        if (on) selPoint = -1;
+        if (on) { selPoint = -1; selTraffic = selTPoint = -1; }
         ShowPropsGroup();
         FillScenarioFields();
         Refresh();
@@ -402,10 +409,10 @@ public partial class ScenarioEditorApp
     private void SelectPoint(int i)
     {
         if (S == null || !RouteEditing.Valid(S.route, i)) i = -1;
-        if (i == selPoint && (i < 0 || !selStart)) return;
+        if (i == selPoint && (i < 0 || !selStart && selTraffic < 0)) return;
         EndFieldEdit();
         selPoint = i;
-        if (i >= 0) selStart = false;
+        if (i >= 0) { selStart = false; selTraffic = selTPoint = -1; }
         ShowPropsGroup();
         FillScenarioFields();
         Refresh();
@@ -415,6 +422,7 @@ public partial class ScenarioEditorApp
     {
         stool = t;
         dragStart = dragHeading = dragPoint = dragXte = false;
+        TrafficRelease();
         Refresh();
     }
 
@@ -428,6 +436,7 @@ public partial class ScenarioEditorApp
         SetSTool(STool.Select);
         selStart = false;
         selPoint = -1;
+        ResetTrafficState();   // 21.5а
         mapDirty = true;
         mapData = null;
         if (areaPalette != null) areaPalette.gameObject.SetActive(m == Mode.Area);
@@ -449,6 +458,7 @@ public partial class ScenarioEditorApp
         selStart = false;
         selPoint = -1;
         dragStart = dragHeading = dragPoint = dragXte = false;
+        ResetTrafficState();   // 21.5а
         if (mode != Mode.Scenario) SetMode(Mode.Scenario);
         mapDirty = true;
         mapData = null;
@@ -639,24 +649,26 @@ public partial class ScenarioEditorApp
     private void UndoScenario()
     {
         bool st = selStart;
-        int sp = selPoint;
+        int sp = selPoint, tr = selTraffic;
         if (sdoc == null || !sdoc.Undo()) return;
-        AfterScenarioRestore(st, sp);
+        AfterScenarioRestore(st, sp, tr);
     }
 
     private void RedoScenario()
     {
         bool st = selStart;
-        int sp = selPoint;
+        int sp = selPoint, tr = selTraffic;
         if (sdoc == null || !sdoc.Redo()) return;
-        AfterScenarioRestore(st, sp);
+        AfterScenarioRestore(st, sp, tr);
     }
 
-    private void AfterScenarioRestore(bool st, int sp)
+    private void AfterScenarioRestore(bool st, int sp, int tr)
     {
         selStart = st;
         selPoint = RouteEditing.Valid(S.route, sp) ? sp : -1;
         dragStart = dragHeading = dragPoint = dragXte = false;
+        ResetTrafficState();   // 21.5а: выделенная цель — по номеру, если осталась
+        selTraffic = TrafficEditing.Valid(S.traffic, tr) ? tr : -1;
         mapDirty = true;   // акватория могла смениться
         ShowPropsGroup();
         FillScenarioFields();
@@ -679,11 +691,12 @@ public partial class ScenarioEditorApp
         float wheel = m.scroll.ReadValue().y;
         if (inside && Mathf.Abs(wheel) > 0.01f) viewport.ZoomAt(px, py, wheel > 0f ? 1.25 : 0.8);
 
-        bool busy = dragStart || dragHeading || dragPoint || dragXte;
+        bool busy = dragStart || dragHeading || dragPoint || dragXte || TrafficBusy;
         if (!busy)
         {
             hotHeading = false; hotPoint = hotXte = hotLegMid = -1; hotStart = false;
-            if (inside)
+            bool tHit = inside && TrafficHit(px, py);   // 21.5а: ручки выделенной цели и суда — поверх маршрута
+            if (inside && !tHit)
             {
                 if (selStart)
                 {
@@ -704,7 +717,8 @@ public partial class ScenarioEditorApp
         {
             sMoved = false;
             pressLocal = local;
-            if (hotHeading) { dragHeading = true; sMoved = true; }
+            if (TrafficPress()) { }   // 21.5а
+            else if (hotHeading) { dragHeading = true; sMoved = true; }
             else if (hotPoint >= 0) { SelectPoint(hotPoint); dragPoint = true; }
             else if (hotXte >= 0) { SelectPoint(hotXte + 1); dragXte = true; dragLeg = hotXte; sMoved = true; }
             else if (hotStart) { SelectStart(true); dragStart = true; }
@@ -729,10 +743,12 @@ public partial class ScenarioEditorApp
                 dragPoint = true;
                 sMoved = true;
             }
+            else if (stool == STool.Traffic) TrafficClickEmpty(snapped);   // 21.5а
             else
             {
                 SelectStart(false);
                 SelectPoint(-1);
+                SelectTraffic(-1);
                 panning = true;
                 lastLocal = local;
             }
@@ -756,10 +772,12 @@ public partial class ScenarioEditorApp
             float x = RouteEditing.XteFrom(r, dragLeg, world, snap ? RouteEditing.XteStep : 1.0);
             if (x != r[dragLeg + 1].xteLimit) { r[dragLeg + 1].xteLimit = x; FillScenarioFields(); }
         }
+        TrafficDrag(world, snapped, local);   // 21.5а
         bool anyHeld = m.leftButton.isPressed || m.rightButton.isPressed || m.middleButton.isPressed;
         if (!anyHeld)
         {
-            if (dragStart || dragHeading || dragPoint || dragXte)
+            bool tRel = TrafficRelease();
+            if (dragStart || dragHeading || dragPoint || dragXte || tRel)
             {
                 dragStart = dragHeading = dragPoint = dragXte = false;
                 dragLeg = -1;
@@ -768,7 +786,9 @@ public partial class ScenarioEditorApp
             panning = false;
         }
 
-        overlay.ShowCursor = inside && (stool != STool.Select && hotPoint < 0 && !hotStart || dragPoint && sMoved || dragStart && sMoved);
+        bool tHot = hotTraffic >= 0 || hotTPoint >= 0 || hotTHeading || hotMeet;
+        overlay.ShowCursor = inside && (stool != STool.Select && hotPoint < 0 && !hotStart && !tHot || dragPoint && sMoved || dragStart && sMoved ||
+                                        (dragTraffic || dragTPoint) && sMoved);
         overlay.Cursor = snapped;
         cursorWorld = world;
         cursorInside = inside;
@@ -786,6 +806,7 @@ public partial class ScenarioEditorApp
     private void DeleteScenarioSelected()
     {
         if (SelWp != null) DeletePoint();
+        else if (SelT != null) { if (selTPoint >= 0) DeleteTrafficPoint(); else DeleteTraffic(); }   // 21.5а
     }
 
     // ─────────── Карта, подписи, заголовок, строка состояния ───────────
@@ -834,6 +855,7 @@ public partial class ScenarioEditorApp
             overlay.HeadingHandle = HeadingHandlePos();
             overlay.HeadingHot = hotHeading || dragHeading;
         }
+        TrafficOverlay();   // 21.5а
         overlay.SetVerticesDirty();
         PointLabels();
         if (viewport.Version != builtVersion)
@@ -845,33 +867,42 @@ public partial class ScenarioEditorApp
         }
     }
 
-    // Имена точек маршрута (пул подписей — общий со знаками)
+    // Имена точек маршрута, 21.5а — имена целей и подписи встреч (пул подписей — общий со знаками).
+    // Под открытым листом подписей нет (21.5а: сквозь лист их не должно быть видно)
     private void PointLabels()
     {
         Rect rc = overlay.rectTransform.rect;
         int used = 0;
         List<RouteWaypoint> r = S != null ? S.route : null;
-        bool show = r != null && r.Count <= 60;
+        bool show = r != null && r.Count <= 60 && !SheetOpen;
         for (int i = 0; show && i < r.Count; i++)
         {
             if (r[i] == null) continue;
-            Vector2 c = overlay.Px(r[i].position, rc);
-            if (!rc.Contains(c)) continue;
-            if (used >= aidLabels.Count)
-            {
-                TextMeshProUGUI t = MonitorUi.Text(overlay.transform, "", 14f, Color.white, TextAlignmentOptions.Left);
-                t.textWrappingMode = TextWrappingModes.NoWrap;
-                MonitorUi.Place(t.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(240f, 20f), new Vector2(0f, 0.5f));
-                aidLabels.Add(t);
-            }
-            TextMeshProUGUI l = aidLabels[used++];
-            if (l.text != r[i].name) l.text = r[i].name;
-            l.color = i == selPoint ? EditorMapOverlay.HandleHot : EditorMapOverlay.RouteColor;
-            l.rectTransform.anchoredPosition = c + new Vector2(12f, 10f);
-            if (!l.gameObject.activeSelf) l.gameObject.SetActive(true);
+            used = PutLabel(rc, used, overlay.Px(r[i].position, rc) + new Vector2(12f, 10f), r[i].name,
+                            i == selPoint ? EditorMapOverlay.HandleHot : EditorMapOverlay.RouteColor);
         }
+        if (!SheetOpen) used = TrafficLabels(rc, used);
         for (int i = used; i < aidLabels.Count; i++)
             if (aidLabels[i].gameObject.activeSelf) aidLabels[i].gameObject.SetActive(false);
+    }
+
+    // Подпись из пула в точку at (левый край, середина по высоте); вне карты — не ставится
+    private int PutLabel(Rect rc, int used, Vector2 at, string text, Color color)
+    {
+        if (!rc.Contains(at)) return used;
+        if (used >= aidLabels.Count)
+        {
+            TextMeshProUGUI t = MonitorUi.Text(overlay.transform, "", 14f, Color.white, TextAlignmentOptions.Left);
+            t.textWrappingMode = TextWrappingModes.NoWrap;
+            MonitorUi.Place(t.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(240f, 20f), new Vector2(0f, 0.5f));
+            aidLabels.Add(t);
+        }
+        TextMeshProUGUI l = aidLabels[used++];
+        if (l.text != text) l.text = text;
+        l.color = color;
+        l.rectTransform.anchoredPosition = at;
+        if (!l.gameObject.activeSelf) l.gameObject.SetActive(true);
+        return used;
     }
 
     private void ScenarioRefresh()
@@ -908,6 +939,7 @@ public partial class ScenarioEditorApp
                    (hotLegMid >= 0 && !dragXte ? " — щелчок: вставить точку" : "");
         if (dragHeading || hotHeading) pos += $" · курс старта {MonitorUi.Num(s.initial.headingDeg, 0)}°";
         else if (cursorInside && (hotStart || dragStart)) pos += $" · старт: {MonitorUi.Num(s.initial.headingDeg, 0)}°, {MonitorUi.Num(s.initial.speedKnots, 1)} уз";
+        if (cursorInside) pos += TrafficStatus();   // 21.5а
         string saved = sdoc.SavedAt.HasValue ? $"сохранено {sdoc.SavedAt.Value:HH:mm}" : sdoc.Dirty ? "не сохранено" : "";
         statusText.text = $"{pos} · 1 пикс. = {MonitorUi.Num(viewport.MetersPerPixel, viewport.MetersPerPixel < 10 ? 1 : 0)} м · сетка {MapGrid.StepTitle(GridStep)}" +
                           $"{(snap ? " (привязка)" : "")} · {saved}{(lastScenarioDraftText.Length > 0 ? " · " + lastScenarioDraftText : "")}";

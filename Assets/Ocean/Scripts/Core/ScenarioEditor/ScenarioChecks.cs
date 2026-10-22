@@ -1,7 +1,7 @@
 // ============================================================
 // ScenarioChecks.cs — Проверка сценария в редакторе и заготовка брифинга (запрос 21.4б)
 //
-// Check — замечания ScenarioDefinition.Validate() и редактора (RouteEditing.Check), разделённые на:
+// Check — замечания ScenarioDefinition.Validate() и редактора (RouteEditing.Check, 21.5а — TrafficEditing.Check), разделённые на:
 //   • ошибки (×) — с ними упражнение не запустить («Пройти в тренажёре» не работает): нет акватории,
 //     в маршруте меньше двух точек, точка или старт вне района, старт на мели, XTE ≤ 0, точки совпадают,
 //     нет идентификатора или он занят встроенным сценарием;
@@ -43,6 +43,7 @@ public static class ScenarioChecks
         if (id.Length > 0 && catalog != null && catalog.Scenarios.Exists(x => x != null && string.Equals(x.id, id, StringComparison.OrdinalIgnoreCase)))
             r.Errors.Add($"Идентификатор «{id}» — у встроенного сценария; задайте другой.");
         r.Warnings.AddRange(RouteEditing.Check(s));
+        r.Warnings.AddRange(TrafficEditing.Check(s));   // 21.5а
         return r;
     }
 

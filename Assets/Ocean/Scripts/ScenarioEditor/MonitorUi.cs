@@ -16,6 +16,8 @@ public sealed class MonitorUi
 {
     public static readonly Color BarColor = new Color(0.08f, 0.1f, 0.13f, 1f);
     public static readonly Color PanelColor = new Color(0.07f, 0.09f, 0.12f, 0.97f);
+    /// <summary>21.5а: листы сценария поверх карты — непрозрачные.</summary>
+    public static readonly Color SheetColor = new Color(0.07f, 0.09f, 0.12f, 1f);
     public static readonly Color ButtonColor = new Color(0.22f, 0.4f, 0.62f);
     public static readonly Color NeutralColor = new Color(0.2f, 0.23f, 0.28f);
     public static readonly Color ActiveColor = new Color(0.25f, 0.55f, 0.85f);
