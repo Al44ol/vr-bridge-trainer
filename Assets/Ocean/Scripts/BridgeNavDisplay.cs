@@ -147,7 +147,8 @@ public class BridgeNavDisplay : MonoBehaviour
         return $"\n<color={(blinkOn ? "#FF5A4A" : "#8A2A22")}><b>{line}</b></color>";
     }
 
-    private static string Hazard(HazardInfo h)
+    /// <summary>Опасность словами: «Имя» — берег / «Имя», глубина … м (и на мониторе M9 «Эхолот · сигнализация»).</summary>
+    public static string Hazard(HazardInfo h)
     {
         if (!h.Valid) return "";
         return h.IsLand ? $"«{h.Name}» — берег" : $"«{h.Name}», глубина {h.Depth:F1} м";

@@ -7,7 +7,11 @@
 //   M2 Cube.6314 — машина                      M7 Cube.6302 — цели (16в)
 //   M3 Cube.6319 — руль                        M8 Cube.6303 — ветер и погода (16в)
 //   M4 Cube.6306 — курс                        M9 Cube.6286 — сигнализация и швартовка (16в)
-//   M5 Cube.6292 — скорость и поворот (16б)    P  Cube.6297 — большая панель: карта (16б)
+//   M5 Cube.6292 — скорость и поворот (16б)    P  Cube.6297 — большая панель на центральной стойке
+// По проверке 16а-2: M9 — эхолот и сигнализация мели (раньше 16в), остальные незаполненные — «ожидание» без технических
+// надписей; P скрыта (showBigPanel): стойка — цельная часть модели, холст на ней не ложится как надо — стойка как в модели.
+// Виртуальное табло (NavDisplay) на модели 45 м скрыто — данные на мониторах; меню Y «Общее» → «Виртуальное табло»
+// (запоминается на станции, PlayerPrefs). На катере табло — как раньше (мониторов там нет), на буксире его скрывает TugConsole.
 // На каждый экран — World Space Canvas точно по лицевой грани: по граням сетки (Core ScreenFace — самая большая плоская грань,
 // обращённая к игроку; наклон мониторов у модели «запечён» в вершины, поэтому габариты сетки не годятся), в сборке —
 // из ассета Resources/BridgeMonitorLayout (пишет редактор при входе в Play — BridgeMonitorLayoutSync).
@@ -50,16 +54,28 @@ public class BridgeMonitors : MonoBehaviour
     [Tooltip("Тексты, раз в секунду")]
     public float textRateHz = 5f;
     public bool logScreens = true;
+    [Tooltip("Холст на большой панели центральной стойки (Cube.6297). По проверке 16а-2 выключен — стойка как в модели")]
+    public bool showBigPanel = false;
+
+    [Header("Виртуальное табло (NavDisplay)")]
+    [Tooltip("Показывать на модели 45 м (по умолчанию скрыто — данные на мониторах); меняется в меню Y, запоминается на станции")]
+    public bool showVirtualPanel = false;
+
+    public const string MenuGroup = "Общее";
+    private const string VirtualPanelPref = "VRBridge.VirtualPanel";
 
     public ShipNavigation Nav { get; private set; }
     public ThrusterLever Thruster { get; private set; }
+    public GroundingMonitor Grounding { get; private set; }
     public readonly EngineRpm Engine = new EngineRpm();
     public static BridgeMonitors Instance { get; private set; }
 
     private ShipTypeSwitcher switcher;
     private Transform root;
+    private GameObject virtualPanel;
+    private BridgeMenuCommand panelCommand;
     private readonly List<MonitorScreen> screens = new List<MonitorScreen>();
-    private float nextNeedle, nextText;
+    private float nextNeedle, nextText, checkTextsAt = -1f;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     internal static void Ensure()   // и при повторной загрузке сцены — TrainerScenes
@@ -77,6 +93,8 @@ public class BridgeMonitors : MonoBehaviour
     {
         if (Instance == this) Instance = null;
         if (switcher != null) switcher.TypeChanged -= ApplyType;
+        BridgeMenu.Unregister(panelCommand);
+        panelCommand = null;
     }
 
     private IEnumerator Start()
@@ -84,13 +102,50 @@ public class BridgeMonitors : MonoBehaviour
         yield return null;   // XR Origin и стойка — на месте
         Nav = FindAnyObjectByType<ShipNavigation>();
         Thruster = FindAnyObjectByType<ThrusterLever>();
+        Grounding = FindAnyObjectByType<GroundingMonitor>();
         switcher = GetComponent<ShipTypeSwitcher>() ?? FindAnyObjectByType<ShipTypeSwitcher>();
         Engine.RatedRpm = ratedRpm;
         Engine.TimeConstantS = engineTimeConstantS;
         Build();
+        checkTextsAt = Time.unscaledTime + 2f;   // тексты уже заполнены — проверить, всё ли поместилось
+        SetupVirtualPanel();
         if (switcher != null) switcher.TypeChanged += ApplyType;
         ApplyType();
     }
+
+    // ─────────── Виртуальное табло (NavDisplay) ───────────
+    private void SetupVirtualPanel()
+    {
+        try { if (PlayerPrefs.HasKey(VirtualPanelPref)) showVirtualPanel = PlayerPrefs.GetInt(VirtualPanelPref, 0) != 0; }
+        catch (System.Exception) { }
+        BridgeNavDisplay nav = FindAnyObjectByType<BridgeNavDisplay>(FindObjectsInactive.Include);
+        if (nav != null)
+        {
+            // Весь объект под Ship (табло, полоса глубины, шторки подсветки) — как у TugConsole
+            Transform t = nav.transform;
+            while (t.parent != null && t.parent != transform && t.parent.parent != null) t = t.parent;
+            virtualPanel = (t.parent == transform ? t : nav.transform).gameObject;
+        }
+        panelCommand = BridgeMenu.Register(MenuGroup,
+                () => showVirtualPanel ? "Виртуальное табло: показано" : "Виртуальное табло: скрыто",
+                () => SetVirtualPanel(!showVirtualPanel),
+                () => virtualPanel != null && OnModel45m, hideWhenUnavailable: true)
+            .InMenu(BridgeMenu.SettingsMenuId);
+        if (logScreens)
+            Debug.Log(virtualPanel == null ? "[Мониторы] Виртуальное табло (NavDisplay) не найдено."
+                : $"[Мониторы] Виртуальное табло «{virtualPanel.name}»: {(showVirtualPanel ? "показано" : "скрыто")} на модели 45 м " +
+                  "(глубина и мель — на M9; меню Y «Общее» → «Виртуальное табло»).", this);
+    }
+
+    public void SetVirtualPanel(bool on)
+    {
+        showVirtualPanel = on;
+        try { PlayerPrefs.SetInt(VirtualPanelPref, on ? 1 : 0); PlayerPrefs.Save(); } catch (System.Exception) { }
+        ApplyType();
+        Debug.Log($"[Мониторы] Виртуальное табло: {(on ? "показано" : "скрыто")}.", this);
+    }
+
+    private bool OnModel45m => switcher == null || switcher.Type == ShipType.Model45m;
 
     // ─────────── Экраны ───────────
     private void Build()
@@ -106,6 +161,11 @@ public class BridgeMonitors : MonoBehaviour
         {
             bool big = i == ScreenNames.Length;
             string name = big ? BigPanelName : ScreenNames[i];
+            if (big && !showBigPanel)
+            {
+                log.Append($"\n  P {name} — скрыта (центральная стойка — как в модели; showBigPanel)");
+                continue;
+            }
             Transform t = FindDeep(model, name);
             if (t == null) { missing.Add(name); continue; }
             // Плоскость: ассет раскладки (пишет редактор при входе в Play) → грани сетки на месте → габариты (запасной)
@@ -129,10 +189,11 @@ public class BridgeMonitors : MonoBehaviour
             MonitorScreen s = MonitorScreen.For(i, label, name, big);
             s.Setup(canvas, size, this);
             screens.Add(s);
-            log.Append($"\n  {label} {name} — {w * 100f:F0} × {h * 100f:F0} см, {s.Title}, нормаль {Facing(n)}, {source}");
+            log.Append($"\n  {label} {name} — {w * 100f:F0} × {h * 100f:F0} см, {s.Title}{(s.Note.Length > 0 ? $" ({s.Note})" : "")}, " +
+                       $"нормаль {Facing(n)}, {source}");
         }
         if (logScreens)
-            Debug.Log($"[Мониторы] Экраны: {screens.Count} из {ScreenNames.Length + 1} (модель «{model.name}»){log}" +
+            Debug.Log($"[Мониторы] Экраны: {screens.Count} из {ScreenNames.Length + (showBigPanel ? 1 : 0)} (модель «{model.name}»){log}" +
                       (missing.Count > 0 ? $"\n  не найдены: {string.Join(", ", missing)}" : ""), this);
     }
 
@@ -255,12 +316,14 @@ public class BridgeMonitors : MonoBehaviour
         return null;
     }
 
-    // Только на модели 45 м (на катере и буксире — свои органы управления)
+    // Только на модели 45 м (на катере и буксире — свои органы управления); виртуальное табло — наоборот:
+    // на модели 45 м — по выбору (меню Y), на катере — как раньше, на буксире его холсты и рендеры гасит TugConsole
     private void ApplyType()
     {
-        if (root == null) return;
-        bool on = switcher == null || switcher.Type == ShipType.Model45m;
-        if (root.gameObject.activeSelf != on) root.gameObject.SetActive(on);
+        bool on = OnModel45m;
+        if (root != null && root.gameObject.activeSelf != on) root.gameObject.SetActive(on);
+        bool panel = !on || showVirtualPanel;
+        if (virtualPanel != null && virtualPanel.activeSelf != panel) virtualPanel.SetActive(panel);
     }
 
     // ─────────── Кадр ───────────
@@ -278,6 +341,14 @@ public class BridgeMonitors : MonoBehaviour
         {
             nextText = now + 1f / Mathf.Max(0.5f, textRateHz);
             foreach (MonitorScreen s in screens) s.Texts();
+        }
+        if (checkTextsAt > 0f && now >= checkTextsAt)
+        {
+            checkTextsAt = -1f;
+            var over = new List<string>();
+            foreach (MonitorScreen s in screens) s.Overflowing(over);
+            if (over.Count > 0) Debug.LogWarning($"[Мониторы] Текст не помещается (обрезан «…»): {string.Join("; ", over)}", this);
+            else if (logScreens) Debug.Log("[Мониторы] Тексты на всех экранах в пределах панелей.", this);
         }
     }
 

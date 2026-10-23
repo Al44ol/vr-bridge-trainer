@@ -11,10 +11,16 @@
 //     «ЗАДАН. / ФАКТ.», «ОТКАЗ РУЛЯ», полоса подруливающего;
 //   • EngineScreen (M2, Cube.6314) — обороты ГД −n_ном … +n_ном (0 — вверху; по телеграфу с инерцией — Core EngineRpm),
 //     цифровая вставка, положение телеграфа, «ОТКАЗ ГД»;
-//   • PlaceholderScreen — остальные экраны: та же панель, номер, назначение и часть (16б, 16в).
+//   • AlarmScreen (M9, Cube.6286) — эхолот и сигнализация мели (как полоса NavDisplay): глубина, запас под килем,
+//     табло «МЕЛЬ» (мигает при опасном приближении, горит на мели), опасность, «КВИТ.» (по проверке 16а-2);
+//   • StandbyScreen — остальные экраны: прибор в режиме ожидания (название, тёмный экран, лампа «ОЖИДАНИЕ»);
+//     номер экрана, часть модели и запрос, в котором экран заполнится, — только в консоли (по проверке 16а-2).
+// Тексты не выходят за плиту: рамка текста ужимается в пределы плиты, шрифт уменьшается до половины, дальше — «…»;
+// не поместившиеся тексты BridgeMonitors пишет в консоль (Overflowing).
 // Рисование — стандартными Image (MonitorDraw). Размеры — доли сторон холста (ширина — BridgeMonitors.canvasWidthPx).
 // ============================================================
 using System;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -40,27 +46,31 @@ public abstract class MonitorScreen
     public static readonly Color AlarmColor = new Color(1f, 0.25f, 0.2f, 1f);
     public static readonly Color OkColor = new Color(0.3f, 0.85f, 0.4f, 1f);
 
-    public string Label = "", ScreenName = "", Title = "";
+    /// <summary>Label (M1…M9, P), ScreenName (Cube.…), Title, Note — только для консоли, на экран не выводятся.</summary>
+    public string Label = "", ScreenName = "", Title = "", Note = "";
     protected RectTransform Root;
     protected Vector2 Size;
     protected BridgeMonitors M;
     protected float W => Size.x;
     protected float H => Size.y;
     protected float S => Mathf.Min(W, H);
+    protected float Frame => S * 0.035f;            // светлая рамка панели
+    protected float Margin => Frame + S * 0.08f;    // поле от края холста до содержимого (винты — в углах поля)
     protected bool Landscape => W >= 1.2f * H;
+    private readonly List<TextMeshProUGUI> texts = new List<TextMeshProUGUI>();
 
     public static MonitorScreen For(int index, string label, string screenName, bool big)
     {
-        MonitorScreen s = big ? new PlaceholderScreen("Карта (копия планшета: маршрут, курс, цели)", "16б")
+        MonitorScreen s = big ? new StandbyScreen("Карта (копия планшета: маршрут, курс, цели)", "КАРТА", "16б")
             : index == 1 ? new EngineScreen()
             : index == 2 ? new RudderScreen()
             : index == 3 ? new HeadingScreen()
-            : index == 0 ? new PlaceholderScreen("Задание и сообщения", "16в")
-            : index == 4 ? new PlaceholderScreen("Скорость и поворот", "16б")
-            : index == 5 ? new PlaceholderScreen("Маршрут", "16б")
-            : index == 6 ? new PlaceholderScreen("Цели (CPA, TCPA)", "16в")
-            : index == 7 ? new PlaceholderScreen("Ветер и погода", "16в")
-            : (MonitorScreen)new PlaceholderScreen("Сигнализация и швартовка", "16в");
+            : index == 0 ? new StandbyScreen("Задание и сообщения", "СООБЩЕНИЯ", "16в")
+            : index == 4 ? new StandbyScreen("Скорость и поворот", "СКОРОСТЬ И ПОВОРОТ", "16б")
+            : index == 5 ? new StandbyScreen("Маршрут", "МАРШРУТ", "16б")
+            : index == 6 ? new StandbyScreen("Цели (CPA, TCPA)", "ЦЕЛИ", "16в")
+            : index == 7 ? new StandbyScreen("Ветер и погода", "ВЕТЕР И ПОГОДА", "16в")
+            : (MonitorScreen)new AlarmScreen();
         s.Label = label;
         s.ScreenName = screenName;
         return s;
@@ -84,7 +94,7 @@ public abstract class MonitorScreen
     private void Plate()
     {
         MonitorDraw.Img(Root, FrameColor);
-        float f = S * 0.035f;
+        float f = Frame;
         MonitorDraw.Rect(Root, Vector2.zero, new Vector2(W - 2f * f, H - 2f * f), PlateColor, "Plate");
         float sr = S * 0.022f, sx = W * 0.5f - f - sr * 1.8f, sy = H * 0.5f - f - sr * 1.8f;
         foreach (Vector2 p in new[] { new Vector2(-sx, sy), new Vector2(sx, sy), new Vector2(-sx, -sy), new Vector2(sx, -sy) })
@@ -95,31 +105,66 @@ public abstract class MonitorScreen
         }
     }
 
-    /// <summary>Гравированный заголовок панели вверху слева.</summary>
+    /// <summary>Гравированный заголовок панели вверху слева — по ширине плиты между винтами.</summary>
     protected void Header(string text)
     {
-        float f = S * 0.035f;
-        TextMeshProUGUI t = Text(text, new Vector2(-W * 0.5f + f + S * 0.08f, H * 0.5f - f - S * 0.065f), new Vector2(W * 0.6f, S * 0.08f),
-                                 S * 0.055f, EngraveColor, TextAlignmentOptions.MidlineLeft);
-        t.rectTransform.pivot = new Vector2(0f, 0.5f);
+        TextMeshProUGUI t = Text(text, new Vector2(-W * 0.5f + Margin, H * 0.5f - Frame - S * 0.065f), new Vector2(W - 2f * Margin, S * 0.08f),
+                                 S * 0.055f, EngraveColor, TextAlignmentOptions.MidlineLeft, null, new Vector2(0f, 0.5f));
         t.fontStyle = FontStyles.Bold;
         t.characterSpacing = 6f;
     }
 
     // ─────────── Элементы ───────────
+    /// <summary>
+    /// Текст в рамке size: не шире плиты (рамка ужимается и сдвигается внутрь), шрифт — от fontSize до половины,
+    /// не поместилось и так — «…». pivot — точка рамки в pos (по умолчанию центр).
+    /// </summary>
     protected TextMeshProUGUI Text(string text, Vector2 pos, Vector2 size, float fontSize, Color c,
-                                   TextAlignmentOptions align = TextAlignmentOptions.Center, RectTransform parent = null)
+                                   TextAlignmentOptions align = TextAlignmentOptions.Center, RectTransform parent = null,
+                                   Vector2? pivot = null)
     {
-        RectTransform rt = MonitorDraw.Node(parent != null ? parent : Root, "Text", pos, size);
+        Vector2 pv = pivot ?? new Vector2(0.5f, 0.5f);
+        size.y = Mathf.Max(size.y, fontSize * 1.3f);   // по высоте шрифт не ужимается
+        if (parent == null) FitInPlate(ref pos, ref size, pv);
+        RectTransform rt = MonitorDraw.Node(parent != null ? parent : Root, "Text", pos, size, pv);
         TextMeshProUGUI t = rt.gameObject.AddComponent<TextMeshProUGUI>();
         t.text = text;
         t.fontSize = fontSize;
+        t.enableAutoSizing = true;
+        t.fontSizeMax = fontSize;
+        t.fontSizeMin = fontSize * 0.5f;
         t.color = c;
         t.alignment = align;
         t.textWrappingMode = TextWrappingModes.NoWrap;
-        t.overflowMode = TextOverflowModes.Overflow;
+        t.overflowMode = TextOverflowModes.Ellipsis;
         t.raycastTarget = false;
+        texts.Add(t);
         return t;
+    }
+
+    // Рамка текста (в координатах холста) — внутри плиты: сначала не больше плиты, потом сдвиг внутрь
+    private void FitInPlate(ref Vector2 pos, ref Vector2 size, Vector2 pivot)
+    {
+        float m = Frame + S * 0.01f;
+        for (int k = 0; k < 2; k++)
+        {
+            float half = (k == 0 ? W : H) * 0.5f - m;
+            float len = Mathf.Min(size[k], 2f * half);
+            float lo = pos[k] - pivot[k] * len;
+            size[k] = len;
+            pos[k] += Mathf.Max(0f, -half - lo) - Mathf.Max(0f, lo + len - half);
+        }
+    }
+
+    /// <summary>Тексты, которые не поместились даже мелким шрифтом (обрезаны «…») — для консоли.</summary>
+    public void Overflowing(List<string> into)
+    {
+        foreach (TextMeshProUGUI t in texts)
+        {
+            if (t == null || !t.isActiveAndEnabled || string.IsNullOrEmpty(t.text)) continue;
+            t.ForceMeshUpdate();
+            if (t.isTextOverflowing || t.isTextTruncated) into.Add($"{Label} «{t.text}»");
+        }
     }
 
     /// <summary>Круглый прибор: тень, металлический обод, чёрный циферблат радиуса r.</summary>
@@ -145,12 +190,20 @@ public abstract class MonitorScreen
         fontSize = Mathf.Min(fontSize, size.x / (ghost.Length * 0.72f));   // цифры — в окне табло
         MonitorDraw.Rect(Root, pos, size + new Vector2(S * 0.02f, S * 0.02f), new Color(0.3f, 0.34f, 0.38f, 1f), "DigitsFrame");
         RectTransform box = MonitorDraw.Rect(Root, pos, size, new Color(0.012f, 0.012f, 0.015f, 1f), "Digits").rectTransform;
-        TextMeshProUGUI g = Text(ghost, Vector2.zero, size, fontSize, DigitGhost, TextAlignmentOptions.Center, box);
-        g.fontStyle = FontStyles.Bold;
+        TextMeshProUGUI g = DigitText(ghost, size, fontSize, DigitGhost, TextAlignmentOptions.Center, box);
         g.characterSpacing = 8f;
-        TextMeshProUGUI t = Text("", Vector2.zero, size, fontSize, DigitColor, TextAlignmentOptions.Center, box);
-        t.fontStyle = FontStyles.Bold;
+        TextMeshProUGUI t = DigitText("", size, fontSize, DigitColor, TextAlignmentOptions.Center, box);
         t.characterSpacing = 8f;
+        return t;
+    }
+
+    /// <summary>Цифры табло: размер шрифта постоянный (живые — точно поверх «погашенных»), окно уже внутри плиты.</summary>
+    protected TextMeshProUGUI DigitText(string text, Vector2 size, float fontSize, Color c, TextAlignmentOptions align, RectTransform box, Vector2 pos = default)
+    {
+        TextMeshProUGUI t = Text(text, pos, size, fontSize, c, align, box);
+        t.enableAutoSizing = false;
+        t.overflowMode = TextOverflowModes.Overflow;
+        t.fontStyle = FontStyles.Bold;
         return t;
     }
 
@@ -358,22 +411,92 @@ public sealed class EngineScreen : MonitorScreen
     }
 }
 
-// ─────────── Остальные экраны (16б, 16в) ───────────
-public sealed class PlaceholderScreen : MonitorScreen
+// ─────────── M9: глубина и сигнализация мели ───────────
+// То же, что полоса над NavDisplay (B1): глубина по карте под судном, запас под килем; табло «МЕЛЬ» — тёмное,
+// мигает при опасном приближении (горит ровно после квитирования), горит на мели; ниже — опасность и «КВИТ.».
+public sealed class AlarmScreen : MonitorScreen
 {
-    private readonly string part;
+    private static readonly Color TileIdle = new Color(0.1f, 0.035f, 0.03f, 1f);
+    private static readonly Color TileIdleText = new Color(0.32f, 0.12f, 0.1f, 1f);
+    private const string Mono = "<mspace=0.6em>";   // цифры одной ширины — живые ложатся на «погашенные» 8
 
-    public PlaceholderScreen(string title, string part)
+    private TextMeshProUGUI depth, keel, hazard, ack, tileText;
+    private Image tile;
+
+    public AlarmScreen() => Title = "Глубина и сигнализация мели";
+
+    protected override void Build()
+    {
+        Header("ЭХОЛОТ · СИГНАЛИЗАЦИЯ");
+        float colW = (W - 2f * Margin) * 0.46f;
+        float lx = -W * 0.5f + Margin + colW * 0.5f, rx = W * 0.5f - Margin - colW * 0.5f;
+        float digH = H * 0.26f, fs = S * 0.07f;
+
+        // Слева — эхолот
+        Text("ГЛУБИНА, м", new Vector2(lx, H * 0.2f), new Vector2(colW, fs * 1.2f), fs * 0.8f, EngraveColor);
+        MonitorDraw.Rect(Root, new Vector2(lx, -H * 0.01f), new Vector2(colW + S * 0.02f, digH + S * 0.02f), new Color(0.3f, 0.34f, 0.38f, 1f), "DigitsFrame");
+        RectTransform box = MonitorDraw.Rect(Root, new Vector2(lx, -H * 0.01f), new Vector2(colW, digH), new Color(0.012f, 0.012f, 0.015f, 1f), "Digits").rectTransform;
+        float dfs = Mathf.Min(digH * 0.75f, colW / (5 * 0.72f));
+        DigitText(Mono + "888,8", new Vector2(colW * 0.88f, digH), dfs, DigitGhost, TextAlignmentOptions.MidlineRight, box);
+        depth = DigitText("", new Vector2(colW * 0.88f, digH), dfs, DigitColor, TextAlignmentOptions.MidlineRight, box);
+        keel = Text("", new Vector2(lx, -H * 0.24f), new Vector2(colW, fs * 1.3f), fs * 0.85f, LabelColor);
+
+        // Справа — табло «МЕЛЬ»
+        Vector2 tp = new Vector2(rx, H * 0.06f), ts = new Vector2(colW, H * 0.3f);
+        MonitorDraw.Rect(Root, tp, ts + new Vector2(S * 0.024f, S * 0.024f), new Color(0.3f, 0.34f, 0.38f, 1f), "TileFrame");
+        tile = MonitorDraw.Rect(Root, tp, ts, TileIdle, "Tile");
+        tileText = Text("МЕЛЬ", Vector2.zero, ts * 0.9f, ts.y * 0.42f, TileIdleText, TextAlignmentOptions.Center, tile.rectTransform);
+        tileText.fontStyle = FontStyles.Bold;
+        hazard = Text("", new Vector2(rx, -H * 0.17f), new Vector2(colW, fs * 1.2f), fs * 0.7f, LabelColor);
+        ack = Text("", new Vector2(rx, -H * 0.27f), new Vector2(colW, fs * 1.2f), fs * 0.7f, MutedColor);
+    }
+
+    public override void Texts()
+    {
+        GroundingMonitor g = M.Grounding;
+        float d = g != null ? g.DepthUnderShip : float.NaN;
+        depth.text = float.IsNaN(d) ? Mono + "  —  " : Mono + ScenarioText.Num(Mathf.Min(d, 999.9f), 1).PadLeft(5);
+        keel.text = float.IsNaN(d) ? "ПОД КИЛЕМ  —" : $"ПОД КИЛЕМ  {ScenarioText.Num(d - g.Draft, 1)} м";
+        GroundingState st = g != null ? g.State : GroundingState.Clear;
+        bool lit = st == GroundingState.Grounded || (st == GroundingState.Warning && (g.AlarmAcknowledged || BridgeMonitors.BlinkOn));
+        tile.color = lit ? AlarmColor : TileIdle;
+        tileText.color = lit ? Color.white : st == GroundingState.Warning ? new Color(0.55f, 0.15f, 0.12f, 1f) : TileIdleText;
+        HazardInfo h = st == GroundingState.Grounded ? g.GroundedOn : g != null ? g.Nearest : default;
+        tileText.text = st == GroundingState.Grounded ? "НА МЕЛИ"
+            : st == GroundingState.Warning && h.Valid ? $"МЕЛЬ {ScenarioText.Num(h.Distance / WaterArea.CableMeters, 1)} кбт" : "МЕЛЬ";
+        hazard.text = st != GroundingState.Clear ? BridgeNavDisplay.Hazard(h) : "";
+        ack.text = st != GroundingState.Clear && g.AlarmAcknowledged ? "КВИТ." : "";
+    }
+}
+
+// ─────────── Остальные экраны (16б, 16в): прибор в режиме ожидания ───────────
+// Название прибора, тёмный экран с едва заметной сеткой, янтарная лампа «ОЖИДАНИЕ» — как включённый прибор без данных.
+public sealed class StandbyScreen : MonitorScreen
+{
+    private readonly string header;
+
+    public StandbyScreen(string title, string header, string part)
     {
         Title = title;
-        this.part = part;
+        this.header = header;
+        Note = $"ожидание, заполнится в {part}";
     }
 
     protected override void Build()
     {
-        Header($"{Label} · {Title.ToUpperInvariant()}");
-        float fs = S * 0.085f;
-        Text(Label, new Vector2(0f, fs * 0.9f), new Vector2(W * 0.8f, fs * 2f), fs * 1.6f, MutedColor).fontStyle = FontStyles.Bold;
-        Text($"{ScreenName} · будет в {part}", new Vector2(0f, -fs * 0.8f), new Vector2(W * 0.8f, fs * 1.2f), fs * 0.6f, MutedColor);
+        Header(header);
+        float top = H * 0.5f - Frame - S * 0.13f, bottom = -H * 0.5f + Frame + S * 0.1f;
+        Vector2 c = new Vector2(0f, (top + bottom) * 0.5f), size = new Vector2(W - 2f * Margin, top - bottom);
+        MonitorDraw.Rect(Root, c, size + new Vector2(S * 0.02f, S * 0.02f), new Color(0.3f, 0.34f, 0.38f, 1f), "ScreenFrame");
+        RectTransform screen = MonitorDraw.Rect(Root, c, size, new Color(0.012f, 0.014f, 0.017f, 1f), "Screen").rectTransform;
+        Color grid = new Color(1f, 1f, 1f, 0.035f);
+        for (int i = 1; i < 4; i++) MonitorDraw.Rect(screen, new Vector2(size.x * (i / 4f - 0.5f), 0f), new Vector2(1.5f, size.y), grid, "Grid");
+        for (int j = 1; j < 3; j++) MonitorDraw.Rect(screen, new Vector2(0f, size.y * (j / 3f - 0.5f)), new Vector2(size.x, 1.5f), grid, "Grid");
+
+        float fs = S * 0.05f, ly = -H * 0.5f + Frame + S * 0.05f, lx = -W * 0.5f + Margin + fs * 0.5f;
+        MonitorDraw.Disc(Root, new Vector2(lx, ly), fs * 0.42f, new Color(0.3f, 0.34f, 0.38f, 1f));
+        MonitorDraw.Disc(Root, new Vector2(lx, ly), fs * 0.32f, new Color(0.85f, 0.6f, 0.15f, 1f));
+        Text("ОЖИДАНИЕ", new Vector2(lx + fs * 0.8f, ly), new Vector2(W * 0.4f, fs * 1.2f), fs, MutedColor,
+             TextAlignmentOptions.MidlineLeft, null, new Vector2(0f, 0.5f)).characterSpacing = 4f;
     }
 }

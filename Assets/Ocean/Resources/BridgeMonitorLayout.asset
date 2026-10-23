@@ -1,0 +1,75 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0ea5857b8c4dc66429829781c8aecdf0, type: 3}
+  m_Name: BridgeMonitorLayout
+  m_EditorClassIdentifier: Assembly-CSharp::BridgeMonitorLayout
+  screens:
+  - name: Cube.6310
+    center: {x: 4.7325974, y: 0.8564038, z: -3.6711555}
+    normal: {x: -0.7219764, y: 0.54891574, z: 0.42123812}
+    up: {x: 0.47411746, y: 0.8358777, z: -0.27662447}
+    width: 0.5238814
+    height: 0.30808768
+  - name: Cube.6314
+    center: {x: 4.3001065, y: 0.85649437, z: -4.116363}
+    normal: {x: -0.41415513, y: 0.54876536, z: 0.7261764}
+    up: {x: 0.2718665, y: 0.8359764, z: -0.4766886}
+    width: 0.51569074
+    height: 0.3096937
+  - name: Cube.6319
+    center: {x: 3.2260582, y: 0.8565388, z: -4.4117594}
+    normal: {x: -0.00003469906, y: 0.5486916, z: 0.8360248}
+    up: {x: 0.000022773345, y: 0.8360248, z: -0.5486916}
+    width: 0.511673
+    height: 0.31048092
+  - name: Cube.6306
+    center: {x: 2.502221, y: 0.8507209, z: -4.419949}
+    normal: {x: -0.0000013560293, y: 0.5495929, z: 0.8354326}
+    up: {x: 0.0000008920697, y: 0.8354326, z: -0.5495929}
+    width: 0.5116733
+    height: 0.31046996
+  - name: Cube.6292
+    center: {x: 1.7875797, y: 0.8507209, z: -4.419949}
+    normal: {x: -0.0000005774747, y: 0.5495929, z: 0.8354326}
+    up: {x: 0.0000003798942, y: 0.8354326, z: -0.5495929}
+    width: 0.5116732
+    height: 0.31046996
+  - name: Cube.6298
+    center: {x: 0.70949566, y: 0.8507061, z: -4.12344}
+    normal: {x: 0.41383204, y: 0.54966503, z: 0.72567993}
+    up: {x: -0.27229235, y: 0.83538514, z: -0.4774814}
+    width: 0.51569074
+    height: 0.30968282
+  - name: Cube.6302
+    center: {x: 0.2740778, y: 0.8506758, z: -3.6752162}
+    normal: {x: 0.72145146, y: 0.549811, z: 0.42096993}
+    up: {x: -0.47487983, y: 0.83528906, z: -0.2770944}
+    width: 0.5238817
+    height: 0.308077
+  - name: Cube.6303
+    center: {x: 0.10978797, y: 0.85066044, z: -3.0649166}
+    normal: {x: 0.83524, y: 0.54988545, z: 0.0003785238}
+    up: {x: -0.5498854, y: 0.83524007, z: -0.00024920344}
+    width: 0.52803457
+    height: 0.30726177
+  - name: Cube.6286
+    center: {x: 0.10978797, y: 0.85066044, z: -2.4284322}
+    normal: {x: 0.83524, y: 0.54988545, z: 0.0003785107}
+    up: {x: -0.5498854, y: 0.83524007, z: -0.00024919483}
+    width: 0.52803427
+    height: 0.30726177
+  - name: Cube.6297
+    center: {x: 2.50675, y: 0.103759766, z: -3.6939917}
+    normal: {x: 0.00000008742278, y: 0, z: 1}
+    up: {x: 0, y: 1, z: 0}
+    width: 0.82014084
+    height: 0.65834904
