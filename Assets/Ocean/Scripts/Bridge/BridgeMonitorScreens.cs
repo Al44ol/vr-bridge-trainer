@@ -13,8 +13,11 @@
 //     цифровая вставка, положение телеграфа, «ОТКАЗ ГД»;
 //   • AlarmScreen (M9, Cube.6286) — эхолот и сигнализация мели (как полоса NavDisplay): глубина, запас под килем,
 //     табло «МЕЛЬ» (мигает при опасном приближении, горит на мели), опасность, «КВИТ.» (по проверке 16а-2);
-//   • StandbyScreen — остальные экраны: прибор в режиме ожидания (название, тёмный экран, лампа «ОЖИДАНИЕ»);
-//     номер экрана, часть модели и запрос, в котором экран заполнится, — только в консоли (по проверке 16а-2).
+//   • 16б: SpeedScreen (M5) — указатель поворота, табло скорости, лагом; RouteScreen (M6) — карта с маршрутом, коридором
+//     и целями, следующая точка, XTE; TargetsScreen (M7) — таблица САРП; WindScreen (M8) — анемометр, погода;
+//     MessagesScreen (M1) — состояние упражнения и журнал событий (данные — Core MonitorData);
+//   • StandbyScreen — прибор в режиме ожидания (название, тёмный экран, лампа «ОЖИДАНИЕ») — для экрана без данных
+//     (сейчас только скрытая большая панель); номер экрана и часть модели — только в консоли (по проверке 16а-2).
 // Тексты не выходят за плиту: рамка текста ужимается в пределы плиты, шрифт уменьшается до половины, дальше — «…»;
 // не поместившиеся тексты BridgeMonitors пишет в консоль (Overflowing).
 // Рисование — стандартными Image (MonitorDraw). Размеры — доли сторон холста (ширина — BridgeMonitors.canvasWidthPx).
@@ -65,11 +68,11 @@ public abstract class MonitorScreen
             : index == 1 ? new EngineScreen()
             : index == 2 ? new RudderScreen()
             : index == 3 ? new HeadingScreen()
-            : index == 0 ? new StandbyScreen("Задание и сообщения", "СООБЩЕНИЯ", "16в")
-            : index == 4 ? new StandbyScreen("Скорость и поворот", "СКОРОСТЬ И ПОВОРОТ", "16б")
-            : index == 5 ? new StandbyScreen("Маршрут", "МАРШРУТ", "16б")
-            : index == 6 ? new StandbyScreen("Цели (CPA, TCPA)", "ЦЕЛИ", "16в")
-            : index == 7 ? new StandbyScreen("Ветер и погода", "ВЕТЕР И ПОГОДА", "16в")
+            : index == 0 ? new MessagesScreen()
+            : index == 4 ? new SpeedScreen()
+            : index == 5 ? new RouteScreen()
+            : index == 6 ? new TargetsScreen()
+            : index == 7 ? new WindScreen()
             : (MonitorScreen)new AlarmScreen();
         s.Label = label;
         s.ScreenName = screenName;
@@ -196,6 +199,40 @@ public abstract class MonitorScreen
         t.characterSpacing = 8f;
         return t;
     }
+
+    // Моноширинные цифры (16б): живые ложатся точно на «погашенные» 8 при любом числе знаков и знаке «−»
+    protected const string Mono = "<mspace=0.6em>";
+    protected static string MonoText(string s, int cells) => Mono + s.PadLeft(cells);
+
+    /// <summary>Табло на cells знакоместах (последнее — после запятой): окно в рамке, «888,8» и живые цифры справа.</summary>
+    protected TextMeshProUGUI MonoDigits(int cells, Vector2 pos, Vector2 size)
+    {
+        MonitorDraw.Rect(Root, pos, size + new Vector2(S * 0.02f, S * 0.02f), new Color(0.3f, 0.34f, 0.38f, 1f), "DigitsFrame");
+        RectTransform box = MonitorDraw.Rect(Root, pos, size, new Color(0.012f, 0.012f, 0.015f, 1f), "Digits").rectTransform;
+        float fs = Mathf.Min(size.y * 0.75f, size.x * 0.88f / (cells * 0.62f));
+        Vector2 inner = new Vector2(size.x * 0.9f, size.y);
+        DigitText(MonoText(new string('8', cells - 2) + ",8", cells), inner, fs, DigitGhost, TextAlignmentOptions.MidlineRight, box);
+        return DigitText("", inner, fs, DigitColor, TextAlignmentOptions.MidlineRight, box);
+    }
+
+    /// <summary>Круглый прибор слева (на узком экране — сверху): центр и радиус, как у «Машины».</summary>
+    protected void LeftGauge(out Vector2 c, out float r)
+    {
+        r = Landscape ? Mathf.Min(H * 0.34f, W * 0.24f) : Mathf.Min(W * 0.36f, H * 0.26f);
+        c = Landscape ? new Vector2(-W * 0.5f + r * 1.12f + W * 0.07f, -H * 0.06f) : new Vector2(0f, H * 0.5f - r * 1.12f - H * 0.14f);
+    }
+
+    /// <summary>Столбец справа от прибора (на узком экране — под ним): левый край, ширина, центр.</summary>
+    protected void RightColumn(Vector2 c, float r, out float colX, out float colW, out float cx)
+    {
+        colX = Landscape ? c.x + r * 1.3f : -W * 0.4f;
+        colW = Landscape ? W * 0.5f - W * 0.07f - colX : W * 0.8f;
+        cx = colX + colW * 0.5f;
+    }
+
+    /// <summary>Строка столбца: текст слева, по ширине столбца.</summary>
+    protected TextMeshProUGUI ColumnLine(float colX, float colW, float y, float fs, Color c) =>
+        Text("", new Vector2(colX, y), new Vector2(colW, fs * 1.3f), fs, c, TextAlignmentOptions.MidlineLeft, null, new Vector2(0f, 0.5f));
 
     /// <summary>Цифры табло: размер шрифта постоянный (живые — точно поверх «погашенных»), окно уже внутри плиты.</summary>
     protected TextMeshProUGUI DigitText(string text, Vector2 size, float fontSize, Color c, TextAlignmentOptions align, RectTransform box, Vector2 pos = default)
@@ -411,6 +448,435 @@ public sealed class EngineScreen : MonitorScreen
     }
 }
 
+// ─────────── M5: скорость и поворот ───────────
+// Указатель угловой скорости −120…+120 °/мин (0 — вверху, ЛБ — красный, ПБ — зелёный), табло скорости по лагу
+// (продольная u, уз; назад — «−»), поперечная скорость — только в модели 3 СС (в модели Номото её нет — «—»).
+public sealed class SpeedScreen : MonitorScreen
+{
+    private const double MaxRot = 120.0;
+    private RectTransform needle;
+    private TextMeshProUGUI speed, rotText, sway;
+    private GaugeScale scale;
+
+    public SpeedScreen() => Title = "Скорость и поворот";
+
+    protected override void Build()
+    {
+        Header("СКОРОСТЬ · ПОВОРОТ");
+        scale = new GaugeScale(-MaxRot, MaxRot, -135, 135);
+        LeftGauge(out Vector2 c, out float r);
+        Gauge(c, r);
+        MonitorDraw.Arc(Root, c, -135f, 0f, r * 0.92f, r * 0.98f, PortColor);
+        MonitorDraw.Arc(Root, c, 0f, 135f, r * 0.92f, r * 0.98f, StbdColor);
+        Scale(c, scale, r * 0.91f, 10, 30, v => Math.Abs(v).ToString("0"), r * 0.66f, r * 0.12f);
+        Text("°/мин", c + new Vector2(0f, r * 0.3f), new Vector2(r, r * 0.15f), r * 0.1f, MutedColor);
+        Text("ЛБ", c + new Vector2(-r * 0.34f, -r * 0.76f), new Vector2(r * 0.6f, r * 0.15f), r * 0.11f, PortColor).fontStyle = FontStyles.Bold;
+        Text("ПБ", c + new Vector2(r * 0.34f, -r * 0.76f), new Vector2(r * 0.6f, r * 0.15f), r * 0.11f, StbdColor).fontStyle = FontStyles.Bold;
+        rotText = Text("", c + new Vector2(0f, -r * 0.42f), new Vector2(r, r * 0.22f), r * 0.17f, LabelColor);
+        rotText.fontStyle = FontStyles.Bold;
+        needle = MonitorDraw.Needle(Root, c, r * 0.86f, r * 0.045f, r * 0.14f, TickColor);
+        GaugeTop(c, r, r * 0.09f, ActualColor);
+
+        RightColumn(c, r, out float colX, out float colW, out float cx);
+        float top = Landscape ? H * 0.12f : c.y - r * 1.45f;
+        float digH = Landscape ? H * 0.24f : H * 0.12f;
+        Text("СКОРОСТЬ, уз", new Vector2(cx, top + digH * 0.85f), new Vector2(colW, digH * 0.4f), digH * 0.28f, EngraveColor);
+        speed = MonoDigits(5, new Vector2(cx, top), new Vector2(colW, digH));
+        sway = ColumnLine(colX, colW, top - digH * 1.0f, digH * 0.3f, LabelColor);
+    }
+
+    public override void Needles()
+    {
+        if (M.Nav != null) MonitorDraw.Point(needle, (float)scale.AngleOf(M.Nav.RateOfTurn));
+    }
+
+    public override void Texts()
+    {
+        if (M.Nav == null) return;
+        speed.text = MonoText(MonitorText.Speed(M.Nav.SpeedKnots), 5);
+        float r = M.Nav.RateOfTurn;
+        bool still = Mathf.Abs(r) < 0.5f;
+        rotText.text = still ? "0" : (r > 0f ? "+" : "−") + ScenarioText.Num(Mathf.Abs(r));
+        rotText.color = still ? LabelColor : r > 0f ? StbdColor : PortColor;
+        if (!M.Nav.Uses3Dof) { sway.text = "ЛАГОМ  —"; return; }
+        float v = M.Nav.SwayKnots;
+        sway.text = $"ЛАГОМ  {ScenarioText.Num(Mathf.Abs(v), 2)} уз{(Mathf.Abs(v) < 0.05f ? "" : v > 0f ? " ПБ" : " ЛБ")}";
+    }
+}
+
+// ─────────── M6: маршрут и карта ───────────
+// Карта «север вверху», своё судно в центре (точка и линия курса), линия маршрута с коридором (ширина 2·XTE_доп),
+// точки (следующая — янтарная), другие суда — точки с вектором скорости на 6 мин (опасные — красные, как на M7).
+// Масштаб — MapRange по дистанции до следующей точки (без маршрута — до ближайшей цели, иначе 1 миля).
+// Справа — следующая точка, дистанция, курс участка, XTE / предел, «ВНЕ КОРИДОРА». Карта обрезается окном (RectMask2D).
+public sealed class RouteScreen : MonitorScreen
+{
+    private static readonly Color RouteColor = new Color(0.3f, 0.76f, 0.98f, 1f);
+    private static readonly Color PassedColor = new Color(0.3f, 0.76f, 0.98f, 0.35f);
+    private static readonly Color CorridorColor = new Color(0.3f, 0.76f, 0.98f, 0.13f);
+    private static readonly Color RingColor = new Color(1f, 1f, 1f, 0.12f);
+    private const float VectorMin = 6f;   // вектор скорости цели, мин
+
+    private RectTransform corridorLayer, legLayer, pointLayer, targetLayer, own;
+    private float mapR;
+    private readonly List<Image> corridor = new List<Image>(), legs = new List<Image>(), points = new List<Image>(),
+                                 dots = new List<Image>(), vectors = new List<Image>();
+    private TextMeshProUGUI scaleText, point, pointName, dist, course, xte, alarm;
+
+    public RouteScreen() => Title = "Маршрут и карта";
+
+    protected override void Build()
+    {
+        Header("МАРШРУТ · КАРТА");
+        float top = H * 0.5f - Frame - S * 0.13f, bottom = -H * 0.5f + Frame + S * 0.06f;
+        float mh = top - bottom, mw = Mathf.Min(mh * 1.15f, (W - 2f * Margin) * 0.52f);
+        float left = -W * 0.5f + Margin;
+        Vector2 mc = new Vector2(left + mw * 0.5f, (top + bottom) * 0.5f);
+        MonitorDraw.Rect(Root, mc, new Vector2(mw + S * 0.02f, mh + S * 0.02f), new Color(0.3f, 0.34f, 0.38f, 1f), "MapFrame");
+        RectTransform map = MonitorDraw.Rect(Root, mc, new Vector2(mw, mh), new Color(0.015f, 0.03f, 0.045f, 1f), "Map").rectTransform;
+        map.gameObject.AddComponent<RectMask2D>();
+        mapR = Mathf.Min(mw, mh) * 0.5f * 0.92f;
+        MonitorDraw.Ring(map, Vector2.zero, mapR * 0.5f - 1.5f, mapR * 0.5f, RingColor);
+        MonitorDraw.Ring(map, Vector2.zero, mapR - 1.5f, mapR, RingColor);
+        // Слои по порядку рисования: коридор, линии, точки, цели, своё судно
+        corridorLayer = MonitorDraw.Node(map, "Corridor", Vector2.zero, Vector2.zero);
+        legLayer = MonitorDraw.Node(map, "Legs", Vector2.zero, Vector2.zero);
+        pointLayer = MonitorDraw.Node(map, "Points", Vector2.zero, Vector2.zero);
+        targetLayer = MonitorDraw.Node(map, "Targets", Vector2.zero, Vector2.zero);
+        own = MonitorDraw.Needle(map, Vector2.zero, mapR * 0.35f, 2.5f, 0f, ActualColor);
+        MonitorDraw.Disc(map, Vector2.zero, S * 0.014f, ActualColor);
+        float fsMap = S * 0.045f;
+        Text("N", new Vector2(-mw * 0.5f + fsMap, mh * 0.5f - fsMap), new Vector2(fsMap * 1.5f, fsMap * 1.3f), fsMap, EngraveColor,
+             TextAlignmentOptions.Center, map).fontStyle = FontStyles.Bold;
+        scaleText = Text("", new Vector2(-mw * 0.5f + fsMap * 0.4f, -mh * 0.5f + fsMap * 0.8f), new Vector2(mw * 0.9f, fsMap * 1.3f), fsMap,
+                         MutedColor, TextAlignmentOptions.MidlineLeft, map, new Vector2(0f, 0.5f));
+
+        float colX = left + mw + S * 0.06f, colW = W * 0.5f - Margin - colX, fs = S * 0.062f;
+        point = ColumnLine(colX, colW, top - fs * 0.6f, fs * 0.9f, EngraveColor);
+        pointName = ColumnLine(colX, colW, top - fs * 1.8f, fs, Color.white);
+        pointName.fontStyle = FontStyles.Bold;
+        dist = ColumnLine(colX, colW, top - fs * 3.2f, fs, LabelColor);
+        course = ColumnLine(colX, colW, top - fs * 4.4f, fs, LabelColor);
+        xte = ColumnLine(colX, colW, top - fs * 5.6f, fs, LabelColor);
+        alarm = ColumnLine(colX, colW, top - fs * 7.0f, fs, AlarmColor);
+        alarm.fontStyle = FontStyles.Bold;
+    }
+
+    public override void Needles()
+    {
+        if (M.Nav != null) MonitorDraw.Point(own, M.Nav.Heading);
+    }
+
+    public override void Texts()
+    {
+        if (M.Nav == null) return;
+        WorldPosition p = M.Nav.PositionEastNorth;
+
+        // Маршрут: в упражнении — по RouteTracker (активный участок), на брифинге — маршрут сценария с первого участка
+        ScenarioRunner rn = ScenarioRunner.Instance;
+        IReadOnlyList<RouteWaypoint> route = null;
+        int leg = 0;
+        bool tracked = false, finished = false;
+        if (rn != null && rn.Current != null && rn.CurrentPhase != ScenarioRunner.Phase.Idle)
+        {
+            tracked = rn.Route.Valid && rn.CurrentPhase != ScenarioRunner.Phase.Briefing;
+            route = tracked ? rn.Route.Route : rn.Current.route;
+            leg = tracked ? rn.Route.Leg : 0;
+            finished = tracked && rn.Route.Finished;
+        }
+        RouteReadout rr = RouteReadout.For(route, leg, p);
+        List<TargetRow> rows = TargetsScreen.Rows(M);
+
+        double rangeNm = rr.Valid && !finished ? MapRange.Choose(rr.DistanceM)
+            : finished ? 0.5
+            : rows.Count > 0 ? MapRange.Choose(MinRange(rows) * CpaCalculator.MetersPerNm) : 1.0;
+        float k = (float)(mapR / (rangeNm * CpaCalculator.MetersPerNm));
+        Vector2 P(WorldPosition w) => new Vector2((float)(w.East - p.East) * k, (float)(w.North - p.North) * k);
+        scaleText.text = $"РАДИУС {(rangeNm == 0.25 ? "0,25" : ScenarioText.Num(rangeNm, rangeNm < 1 ? 1 : 0))} мили";
+
+        int n = rr.Valid ? route.Count : 0;
+        Pool(corridor, Math.Max(0, n - 1), corridorLayer, CorridorColor);
+        Pool(legs, Math.Max(0, n - 1), legLayer, RouteColor);
+        for (int i = 0; i + 1 < n; i++)
+        {
+            Vector2 a = P(route[i].position), b = P(route[i + 1].position);
+            MonitorDraw.SetLine(corridor[i].rectTransform, a, b, Mathf.Max(2f, 2f * route[i + 1].xteLimit * k));
+            MonitorDraw.SetLine(legs[i].rectTransform, a, b, 2.5f);
+            legs[i].color = tracked && (i < leg || finished) ? PassedColor : RouteColor;
+        }
+        PoolPoints(n);
+        for (int i = 0; i < n; i++)
+        {
+            points[i].rectTransform.anchoredPosition = P(route[i].position);
+            points[i].color = !finished && i == rr.Next ? ActualColor : RouteColor;
+        }
+
+        // Цели — точки и векторы скорости
+        int t = 0;
+        foreach (ITrackedTarget tg in ExerciseTargets.All)
+        {
+            if (tg == null || WorkVessels.Is(tg.TargetId)) continue;
+            if (t >= dots.Count)
+            {
+                dots.Add(MonitorDraw.Disc(targetLayer, Vector2.zero, S * 0.011f, LabelColor));
+                vectors.Add(MonitorDraw.Line(targetLayer, Vector2.zero, Vector2.zero, 1.5f, LabelColor));
+            }
+            Vector2 a = P(tg.Position);
+            float len = (float)(tg.SpeedKnots * ShipParameters.KnotsToMs * VectorMin * 60.0) * k;
+            Vector2 b = a + MonitorDraw.Dir((float)tg.HeadingDeg) * len;
+            bool danger = rows.Exists(row => row.Id == tg.TargetId && row.Dangerous);
+            Color c = danger ? AlarmColor : LabelColor;
+            dots[t].gameObject.SetActive(true);
+            vectors[t].gameObject.SetActive(len > 1f);
+            dots[t].rectTransform.anchoredPosition = a;
+            MonitorDraw.SetLine(vectors[t].rectTransform, a, b, 1.5f);
+            dots[t].color = vectors[t].color = c;
+            t++;
+        }
+        for (int i = t; i < dots.Count; i++)
+        {
+            dots[i].gameObject.SetActive(false);
+            vectors[i].gameObject.SetActive(false);
+        }
+
+        // Столбец справа
+        dist.text = course.text = xte.text = alarm.text = "";
+        if (!rr.Valid) { point.text = "МАРШРУТ НЕ ЗАДАН"; pointName.text = ""; return; }
+        if (finished) { point.text = "МАРШРУТ ПРОЙДЕН"; pointName.text = route[n - 1].name; return; }
+        point.text = $"ТОЧКА {rr.Next} / {rr.Count - 1}";
+        pointName.text = rr.Name;
+        dist.text = $"ДО ТОЧКИ  {MonitorText.Nm(rr.DistanceM / CpaCalculator.MetersPerNm)} мили";
+        course.text = $"КУРС ПУТИ  {Mathf.RoundToInt((float)rr.LegCourseDeg) % 360:000}°";
+        xte.text = $"ОТКЛ.  {MonitorText.Xte(rr.Xte)} / {ScenarioText.Num(rr.XteLimit)}";
+        bool outside = tracked ? rn.Route.OutsideCorridor : rr.Outside;
+        alarm.text = outside && BridgeMonitors.BlinkOn ? "ВНЕ КОРИДОРА" : "";
+        xte.color = outside ? AlarmColor : LabelColor;
+    }
+
+    private static double MinRange(List<TargetRow> rows)
+    {
+        double m = double.MaxValue;
+        foreach (TargetRow r in rows) m = Math.Min(m, r.RangeNm);
+        return m;
+    }
+
+    private static void Pool(List<Image> list, int count, RectTransform layer, Color c)
+    {
+        while (list.Count < count) list.Add(MonitorDraw.Line(layer, Vector2.zero, Vector2.zero, 1f, c));
+        for (int i = 0; i < list.Count; i++) list[i].gameObject.SetActive(i < count);
+    }
+
+    private void PoolPoints(int count)
+    {
+        float r = S * 0.018f;
+        while (points.Count < count) points.Add(MonitorDraw.Ring(pointLayer, Vector2.zero, r * 0.6f, r, RouteColor));
+        for (int i = 0; i < points.Count; i++) points[i].gameObject.SetActive(i < count);
+    }
+}
+
+// ─────────── M7: цели ───────────
+// Таблица САРП (Core TargetTable): до 4 судов — сближающиеся по CPA, затем расходящиеся по дистанции; опасная
+// (CPA < 0,5 мили и 0 < TCPA ≤ 12 мин) — белым по красному, вверху справа мигает «ОПАСНАЯ ЦЕЛЬ».
+public sealed class TargetsScreen : MonitorScreen
+{
+    private const int RowCount = 4;
+    private static readonly float[] ColX = { 0.1f, 0.3f, 0.5f, 0.7f, 0.9f };   // центры столбцов — доли ширины
+    private readonly TextMeshProUGUI[,] cells = new TextMeshProUGUI[RowCount, 5];
+    private readonly Image[] rowBg = new Image[RowCount];
+    private TextMeshProUGUI empty, footer, alarm;
+
+    public TargetsScreen() => Title = "Цели (CPA, TCPA)";
+
+    /// <summary>Таблица целей по своему судну (и для карты M6).</summary>
+    public static List<TargetRow> Rows(BridgeMonitors m)
+    {
+        var input = new List<TargetInput>();
+        foreach (ITrackedTarget t in ExerciseTargets.All)
+            if (t != null) input.Add(new TargetInput(t.TargetId, t.Position, t.HeadingDeg, t.SpeedKnots));
+        if (m.Nav == null) return new List<TargetRow>();
+        return TargetTable.Build(m.Nav.PositionEastNorth, m.Nav.Heading, m.Nav.SpeedKnots, m.Nav.Uses3Dof ? m.Nav.SwayKnots : 0.0,
+                                 input, exclude: WorkVessels.Is);
+    }
+
+    protected override void Build()
+    {
+        Header("ЦЕЛИ · САРП");
+        float left = -W * 0.5f + Margin, width = W - 2f * Margin;
+        float top = H * 0.5f - Frame - S * 0.15f, bottom = -H * 0.5f + Frame + S * 0.12f;
+        float rowH = (top - bottom) / (RowCount + 1), fs = rowH * 0.5f, cw = width * 0.19f;
+        string[] heads = { "СУДНО", "ПЕЛ., °", "ДИСТ., мили", "CPA, мили", "TCPA, мин" };
+        for (int k = 0; k < 5; k++)
+            Text(heads[k], new Vector2(left + width * ColX[k], top - rowH * 0.5f), new Vector2(cw, rowH * 0.8f), fs * 0.75f, EngraveColor);
+        MonitorDraw.Rect(Root, new Vector2(0f, top - rowH), new Vector2(width, 1.5f), new Color(0.3f, 0.34f, 0.38f, 1f), "Rule");
+        for (int i = 0; i < RowCount; i++)
+        {
+            float y = top - rowH * (i + 1.5f);
+            rowBg[i] = MonitorDraw.Rect(Root, new Vector2(0f, y), new Vector2(width, rowH * 0.9f), new Color(0.6f, 0.08f, 0.06f, 0f), "RowAlarm");
+            for (int k = 0; k < 5; k++)
+                cells[i, k] = Text("", new Vector2(left + width * ColX[k], y), new Vector2(cw, rowH * 0.8f), fs, LabelColor);
+        }
+        empty = Text("", new Vector2(0f, top - rowH * 2.5f), new Vector2(width, rowH), fs, MutedColor);
+        float fy = -H * 0.5f + Frame + S * 0.06f;
+        footer = Text("", new Vector2(left, fy), new Vector2(width * 0.62f, fs), fs * 0.7f, MutedColor,
+                      TextAlignmentOptions.MidlineLeft, null, new Vector2(0f, 0.5f));
+        alarm = Text("", new Vector2(left + width, fy), new Vector2(width * 0.36f, fs), fs * 0.8f, AlarmColor,
+                     TextAlignmentOptions.MidlineRight, null, new Vector2(1f, 0.5f));
+        alarm.fontStyle = FontStyles.Bold;
+    }
+
+    public override void Texts()
+    {
+        List<TargetRow> rows = Rows(M);
+        bool anyDanger = false;
+        for (int i = 0; i < RowCount; i++)
+        {
+            bool has = i < rows.Count;
+            TargetRow r = has ? rows[i] : default;
+            cells[i, 0].text = has ? r.Id : "";
+            cells[i, 1].text = has ? $"{(int)Math.Round(r.BearingDeg) % 360:000}" : "";
+            cells[i, 2].text = has ? MonitorText.Nm(r.RangeNm) : "";
+            cells[i, 3].text = has ? MonitorText.Nm(r.CpaNm) : "";
+            cells[i, 4].text = has ? MonitorText.Tcpa(r.TcpaMin) : "";
+            Color c = !has ? LabelColor : r.Dangerous ? Color.white : r.Approaching ? LabelColor : MutedColor;
+            for (int k = 0; k < 5; k++) cells[i, k].color = c;
+            rowBg[i].color = new Color(0.6f, 0.08f, 0.06f, has && r.Dangerous ? 0.85f : 0f);
+            anyDanger |= has && r.Dangerous;
+        }
+        foreach (TargetRow r in rows) anyDanger |= r.Dangerous;
+        empty.text = rows.Count == 0 ? "ЦЕЛЕЙ НЕТ" : "";
+        string limits = $"CPA < {ScenarioText.Num(TargetTable.DefaultCpaLimitNm, 1)} мили, TCPA ≤ {TargetTable.DefaultTcpaLimitMin:0} мин";
+        footer.text = rows.Count > RowCount ? $"ЦЕЛЕЙ {rows.Count} · опасно: {limits}" : $"ОПАСНО: {limits}";
+        alarm.text = anyDanger && BridgeMonitors.BlinkOn ? "ОПАСНАЯ ЦЕЛЬ" : "";
+    }
+}
+
+// ─────────── M8: ветер и погода ───────────
+// Анемометр: неподвижная картушка «север вверху», стрелка — откуда дует истинный ветер (TowingController), синяя
+// метка на ободе — свой курс (видно, с какого борта ветер). Табло — скорость ветра, уз; ниже — м/с, волнение,
+// видимость, время суток (WeatherController). На судно ветер действует только в модели 3 СС (как и раньше).
+public sealed class WindScreen : MonitorScreen
+{
+    private RectTransform windNeedle, heading;
+    private TextMeshProUGUI wind, from, sea, vis, tod;
+
+    public WindScreen() => Title = "Ветер и погода";
+
+    protected override void Build()
+    {
+        Header("ВЕТЕР · ПОГОДА");
+        LeftGauge(out Vector2 c, out float r);
+        Gauge(c, r);
+        for (int b = 0; b < 360; b += 10)
+        {
+            bool major = b % 30 == 0;
+            MonitorDraw.Tick(Root, c, b, major ? r * 0.84f : r * 0.91f, r * 0.97f, major ? r * 0.03f : r * 0.013f, TickColor);
+            if (!major) continue;
+            string l = b == 0 ? "N" : b == 90 ? "E" : b == 180 ? "S" : b == 270 ? "W" : (b / 10).ToString();
+            Text(l, c + MonitorDraw.Dir(b) * (r * 0.66f), new Vector2(r * 0.4f, r * 0.24f), r * (b % 90 == 0 ? 0.19f : 0.13f),
+                 b % 90 == 0 ? LabelColor : MutedColor).fontStyle = b % 90 == 0 ? FontStyles.Bold : FontStyles.Normal;
+        }
+        heading = MonitorDraw.Node(Root, "Heading", c, Vector2.zero);
+        MonitorDraw.Tick(heading, Vector2.zero, 0f, r * 0.9f, r * 1.12f, r * 0.05f, OrderedColor);
+        windNeedle = MonitorDraw.Needle(Root, c, r * 0.8f, r * 0.06f, r * 0.2f, ActualColor);
+        GaugeTop(c, r, r * 0.08f, BezelColor);
+
+        RightColumn(c, r, out float colX, out float colW, out float cx);
+        float top = Landscape ? H * 0.2f : c.y - r * 1.45f;
+        float digH = Landscape ? H * 0.2f : H * 0.1f;
+        Text("ВЕТЕР, уз", new Vector2(cx, top + digH * 0.85f), new Vector2(colW, digH * 0.4f), digH * 0.3f, EngraveColor);
+        wind = MonoDigits(4, new Vector2(cx, top), new Vector2(colW, digH));
+        from = ColumnLine(colX, colW, top - digH * 1.0f, digH * 0.3f, LabelColor);
+        sea = ColumnLine(colX, colW, top - digH * 1.5f, digH * 0.28f, LabelColor);
+        vis = ColumnLine(colX, colW, top - digH * 1.95f, digH * 0.28f, LabelColor);
+        tod = ColumnLine(colX, colW, top - digH * 2.4f, digH * 0.28f, LabelColor);
+    }
+
+    private static Wind CurrentWind => TowingController.Instance != null ? TowingController.Instance.Wind : default;
+
+    public override void Needles()
+    {
+        Wind w = CurrentWind;
+        bool calm = w.SpeedMs / ShipParameters.KnotsToMs < 0.05;
+        if (windNeedle.gameObject.activeSelf == calm) windNeedle.gameObject.SetActive(!calm);
+        MonitorDraw.Point(windNeedle, (float)w.FromDeg);
+        if (M.Nav != null) MonitorDraw.Point(heading, M.Nav.Heading);
+    }
+
+    public override void Texts()
+    {
+        Wind w = CurrentWind;
+        double kn = w.SpeedMs / ShipParameters.KnotsToMs;
+        wind.text = MonoText(ScenarioText.Num(Math.Min(kn, 99.9), 1), 4);
+        double fromDeg = ((w.FromDeg % 360.0) + 360.0) % 360.0;
+        from.text = kn < 0.05 ? "ШТИЛЬ"
+            : $"ИЗ {(int)Math.Round(fromDeg) % 360:000}° ({MonitorText.Point8(fromDeg)}) · {ScenarioText.Num(w.SpeedMs, 1)} м/с";
+        WeatherController wc = WeatherController.Instance;
+        if (wc == null) { sea.text = vis.text = tod.text = ""; return; }
+        sea.text = $"ВОЛНЕНИЕ  {MonitorText.Sea(wc.CurrentPresetId)}";
+        double nm = wc.VisibilityM / CpaCalculator.MetersPerNm;
+        vis.text = nm >= 10 ? "ВИДИМОСТЬ  более 10 миль" : $"ВИДИМОСТЬ  {ScenarioText.Num(nm, 1)} мили";
+        tod.text = $"ВРЕМЯ СУТОК  {ScenarioText.TimeOfDayTitle(wc.CurrentTimeOfDay)}";
+    }
+}
+
+// ─────────── M1: сообщения ───────────
+// Состояние упражнения («ИДЁТ 12:34 · 01 · Фарватер», «БРИФИНГ», «СВОБОДНОЕ ПЛАВАНИЕ») и журнал последних событий
+// шины ExerciseEvents (BridgeMonitors.Messages: русское описание события, как в консоли и отчёте; без действий
+// обучающегося и служебных событий оценки — Core MonitorMessages). Новые — сверху, тревожные — красные.
+public sealed class MessagesScreen : MonitorScreen
+{
+    private const int RowCount = 6;
+    private readonly TextMeshProUGUI[] rows = new TextMeshProUGUI[RowCount];
+    private TextMeshProUGUI status;
+    private int shownVersion = -1;
+
+    public MessagesScreen() => Title = "Сообщения";
+
+    protected override void Build()
+    {
+        Header("СООБЩЕНИЯ");
+        float left = -W * 0.5f + Margin, width = W - 2f * Margin;
+        float top = H * 0.5f - Frame - S * 0.15f, bottom = -H * 0.5f + Frame + S * 0.05f, fs = S * 0.058f;
+        status = Text("", new Vector2(left, top), new Vector2(width, fs * 1.3f), fs, Color.white,
+                      TextAlignmentOptions.MidlineLeft, null, new Vector2(0f, 0.5f));
+        status.fontStyle = FontStyles.Bold;
+        MonitorDraw.Rect(Root, new Vector2(0f, top - fs * 0.95f), new Vector2(width, 1.5f), new Color(0.3f, 0.34f, 0.38f, 1f), "Rule");
+        float y0 = top - fs * 1.7f, rowH = (y0 - bottom) / RowCount;
+        for (int i = 0; i < RowCount; i++)
+            rows[i] = Text("", new Vector2(left, y0 - rowH * (i + 0.5f)), new Vector2(width, rowH * 0.9f), rowH * 0.55f, LabelColor,
+                           TextAlignmentOptions.MidlineLeft, null, new Vector2(0f, 0.5f));
+    }
+
+    public override void Texts()
+    {
+        ScenarioRunner rn = ScenarioRunner.Instance;
+        if (rn == null || rn.Current == null || rn.CurrentPhase == ScenarioRunner.Phase.Idle) status.text = "СВОБОДНОЕ ПЛАВАНИЕ";
+        else
+        {
+            string name = $"{rn.Current.id} · {rn.Current.title}", clock = ScenarioText.Clock(rn.ExerciseTime);
+            status.text = rn.CurrentPhase == ScenarioRunner.Phase.Briefing ? $"БРИФИНГ · {name}"
+                : rn.CurrentPhase == ScenarioRunner.Phase.Finished ? $"ЗАВЕРШЕНО {clock} · {name}"
+                : M.Nav != null && M.Nav.Paused ? $"ПАУЗА {clock} · {name}"
+                : $"ИДЁТ {clock} · {name}";
+        }
+
+        if (shownVersion == M.MessagesVersion) return;
+        shownVersion = M.MessagesVersion;
+        for (int i = 0; i < RowCount; i++)
+        {
+            if (i >= M.Messages.Count)
+            {
+                rows[i].text = i == 0 ? "Сообщений нет" : "";
+                rows[i].color = MutedColor;
+                continue;
+            }
+            BridgeMonitors.MonitorMessage m = M.Messages[i];
+            rows[i].text = $"{m.Time}  {m.Text}";
+            rows[i].color = m.Alarm ? AlarmColor : i == 0 ? Color.white : LabelColor;
+        }
+    }
+}
+
 // ─────────── M9: глубина и сигнализация мели ───────────
 // То же, что полоса над NavDisplay (B1): глубина по карте под судном, запас под килем; табло «МЕЛЬ» — тёмное,
 // мигает при опасном приближении (горит ровно после квитирования), горит на мели; ниже — опасность и «КВИТ.».
@@ -418,7 +884,6 @@ public sealed class AlarmScreen : MonitorScreen
 {
     private static readonly Color TileIdle = new Color(0.1f, 0.035f, 0.03f, 1f);
     private static readonly Color TileIdleText = new Color(0.32f, 0.12f, 0.1f, 1f);
-    private const string Mono = "<mspace=0.6em>";   // цифры одной ширины — живые ложатся на «погашенные» 8
 
     private TextMeshProUGUI depth, keel, hazard, ack, tileText;
     private Image tile;
@@ -434,11 +899,7 @@ public sealed class AlarmScreen : MonitorScreen
 
         // Слева — эхолот
         Text("ГЛУБИНА, м", new Vector2(lx, H * 0.2f), new Vector2(colW, fs * 1.2f), fs * 0.8f, EngraveColor);
-        MonitorDraw.Rect(Root, new Vector2(lx, -H * 0.01f), new Vector2(colW + S * 0.02f, digH + S * 0.02f), new Color(0.3f, 0.34f, 0.38f, 1f), "DigitsFrame");
-        RectTransform box = MonitorDraw.Rect(Root, new Vector2(lx, -H * 0.01f), new Vector2(colW, digH), new Color(0.012f, 0.012f, 0.015f, 1f), "Digits").rectTransform;
-        float dfs = Mathf.Min(digH * 0.75f, colW / (5 * 0.72f));
-        DigitText(Mono + "888,8", new Vector2(colW * 0.88f, digH), dfs, DigitGhost, TextAlignmentOptions.MidlineRight, box);
-        depth = DigitText("", new Vector2(colW * 0.88f, digH), dfs, DigitColor, TextAlignmentOptions.MidlineRight, box);
+        depth = MonoDigits(5, new Vector2(lx, -H * 0.01f), new Vector2(colW, digH));
         keel = Text("", new Vector2(lx, -H * 0.24f), new Vector2(colW, fs * 1.3f), fs * 0.85f, LabelColor);
 
         // Справа — табло «МЕЛЬ»
@@ -455,7 +916,7 @@ public sealed class AlarmScreen : MonitorScreen
     {
         GroundingMonitor g = M.Grounding;
         float d = g != null ? g.DepthUnderShip : float.NaN;
-        depth.text = float.IsNaN(d) ? Mono + "  —  " : Mono + ScenarioText.Num(Mathf.Min(d, 999.9f), 1).PadLeft(5);
+        depth.text = float.IsNaN(d) ? MonoText("—  ", 5) : MonoText(ScenarioText.Num(Mathf.Min(d, 999.9f), 1), 5);
         keel.text = float.IsNaN(d) ? "ПОД КИЛЕМ  —" : $"ПОД КИЛЕМ  {ScenarioText.Num(d - g.Draft, 1)} м";
         GroundingState st = g != null ? g.State : GroundingState.Clear;
         bool lit = st == GroundingState.Grounded || (st == GroundingState.Warning && (g.AlarmAcknowledged || BridgeMonitors.BlinkOn));

@@ -125,6 +125,22 @@ public static class MonitorDraw
 
     public static void Point(RectTransform needle, float angleDeg) => needle.localRotation = Quaternion.Euler(0f, 0f, -angleDeg);
 
+    /// <summary>Отрезок (16б: линии карты): прямоугольник от a до b шириной width; передвигается SetLine.</summary>
+    public static Image Line(RectTransform parent, Vector2 a, Vector2 b, float width, Color c)
+    {
+        Image i = Rect(parent, Vector2.zero, Vector2.zero, c, "Line");
+        SetLine(i.rectTransform, a, b, width);
+        return i;
+    }
+
+    public static void SetLine(RectTransform rt, Vector2 a, Vector2 b, float width)
+    {
+        Vector2 d = b - a;
+        rt.anchoredPosition = (a + b) * 0.5f;
+        rt.sizeDelta = new Vector2(d.magnitude, width);
+        rt.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg);
+    }
+
     public static Image GlareOn(RectTransform parent, Vector2 pos, float r, float alpha = 0.1f) =>
         Img(Node(parent, "Glare", pos, new Vector2(2f * r, 2f * r)), new Color(1f, 1f, 1f, alpha), Glare);
 

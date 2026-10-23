@@ -3,13 +3,13 @@
 //
 // Ставится сам на Ship (AfterSceneLoad и TrainerScenes.OnSceneLoaded) — Setup и правка сцены не нужны.
 // Экраны — части модели МОСТИКИ по именам (их назвал пользователь, слева направо):
-//   M1 Cube.6310 — задание и сообщения (16в)   M6 Cube.6298 — маршрут (16б)
-//   M2 Cube.6314 — машина                      M7 Cube.6302 — цели (16в)
-//   M3 Cube.6319 — руль                        M8 Cube.6303 — ветер и погода (16в)
-//   M4 Cube.6306 — курс                        M9 Cube.6286 — сигнализация и швартовка (16в)
+//   M1 Cube.6310 — сообщения (16б)             M6 Cube.6298 — маршрут и карта (16б)
+//   M2 Cube.6314 — машина                      M7 Cube.6302 — цели (16б)
+//   M3 Cube.6319 — руль                        M8 Cube.6303 — ветер и погода (16б)
+//   M4 Cube.6306 — курс                        M9 Cube.6286 — эхолот, сигнализация мели (16а-3)
 //   M5 Cube.6292 — скорость и поворот (16б)    P  Cube.6297 — большая панель на центральной стойке
-// По проверке 16а-2: M9 — эхолот и сигнализация мели (раньше 16в), остальные незаполненные — «ожидание» без технических
-// надписей; P скрыта (showBigPanel): стойка — цельная часть модели, холст на ней не ложится как надо — стойка как в модели.
+// По проверке 16а-2: M9 — эхолот и сигнализация мели (раньше 16в); 16б — заполнены M1 (журнал событий шины — Messages),
+// M5 (скорость, поворот), M6 (маршрут и карта — вместо большой панели), M7 (цели), M8 (ветер, погода); P скрыта (showBigPanel): стойка — цельная часть модели, холст на ней не ложится как надо — стойка как в модели.
 // Виртуальное табло (NavDisplay) на модели 45 м скрыто — данные на мониторах; меню Y «Общее» → «Виртуальное табло»
 // (запоминается на станции, PlayerPrefs). На катере табло — как раньше (мониторов там нет), на буксире его скрывает TugConsole.
 // На каждый экран — World Space Canvas точно по лицевой грани: по граням сетки (Core ScreenFace — самая большая плоская грань,
@@ -88,6 +88,28 @@ public class BridgeMonitors : MonoBehaviour
     }
 
     void Awake() => Instance = this;
+
+    // ─────────── Журнал для M1 «Сообщения» (16б) ───────────
+    public struct MonitorMessage { public string Time, Text; public bool Alarm; }
+
+    /// <summary>События шины для журнала, новые — первыми (не больше MaxMessages); с загрузкой сценария — заново.</summary>
+    public readonly List<MonitorMessage> Messages = new List<MonitorMessage>();
+    public int MessagesVersion { get; private set; }
+    private const int MaxMessages = 12;
+
+    void OnEnable() => ExerciseEvents.Raised += OnExerciseEvent;
+    void OnDisable() => ExerciseEvents.Raised -= OnExerciseEvent;
+
+    private void OnExerciseEvent(ExerciseEvent e)
+    {
+        MessageKind kind = MonitorMessages.Kind(e.Type);
+        if (kind == MessageKind.Hidden) return;
+        if (MonitorMessages.IsFailure(e.Type) && InstructorInputs.Instance != null && !InstructorInputs.Instance.announceFailures) return;
+        if (e.Type == ExerciseEventType.ScenarioLoaded) Messages.Clear();
+        Messages.Insert(0, new MonitorMessage { Time = e.InExercise ? ScenarioText.Clock(e.Time) : "—", Text = e.Describe(), Alarm = kind == MessageKind.Alarm });
+        if (Messages.Count > MaxMessages) Messages.RemoveRange(MaxMessages, Messages.Count - MaxMessages);
+        MessagesVersion++;
+    }
 
     void OnDestroy()
     {
