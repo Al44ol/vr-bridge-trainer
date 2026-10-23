@@ -65,6 +65,7 @@ public static class TrainerScenes
         TugWorkController.Ensure();
         ScenarioTriggers.Ensure();   // 21.6а
         XrRigTuning.Ensure();   // К2, К3
+        BridgeMonitors.Ensure();   // 16а
         StartMenu.Ensure();
     }
 
