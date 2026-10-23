@@ -8,7 +8,10 @@
 //   M3 Cube.6319 — руль                        M8 Cube.6303 — ветер и погода (16в)
 //   M4 Cube.6306 — курс                        M9 Cube.6286 — сигнализация и швартовка (16в)
 //   M5 Cube.6292 — скорость и поворот (16б)    P  Cube.6297 — большая панель: карта (16б)
-// На каждый экран — World Space Canvas точно по плоскости экрана: самая тонкая ось сетки экрана — нормаль,
+// На каждый экран — World Space Canvas точно по лицевой грани: по граням сетки (Core ScreenFace — самая большая плоская грань,
+// обращённая к игроку; наклон мониторов у модели «запечён» в вершины, поэтому габариты сетки не годятся), в сборке —
+// из ассета Resources/BridgeMonitorLayout (пишет редактор при входе в Play — BridgeMonitorLayoutSync).
+// Прежний способ (16а) — запасной: самая тонкая ось габаритов сетки — нормаль,
 // сторона — к игроку у штурвала (XR Origin при запуске), «верх» — ось, ближайшая к вертикали судна
 // (у лежащего экрана — от игрока); поля по краю — screenInset. Холсты — дочерние к Ship (качаются вместе с пультом),
 // без GraphicRaycaster (лучи XRI их не задевают). Ширина холста — canvasWidthPx пикселей при любом размере экрана.
@@ -37,7 +40,7 @@ public class BridgeMonitors : MonoBehaviour
 
     [Header("Экраны")]
     [Tooltip("Поле по краю экрана (доля стороны) — под рамку монитора")]
-    [Range(0f, 0.2f)] public float screenInset = 0.04f;
+    [Range(0f, 0.2f)] public float screenInset = 0.015f;   // рамку панели рисует сам экран
     [Tooltip("Холст над поверхностью экрана, м")]
     public float surfaceOffset = 0.003f;
     [Tooltip("Ширина холста, пикселей (высота — по пропорции экрана)")]
@@ -95,7 +98,8 @@ public class BridgeMonitors : MonoBehaviour
         Transform model = FindDeep(transform, ModelName) ?? transform;
         root = new GameObject("BridgeMonitors").transform;
         root.SetParent(transform, false);
-        Vector3 viewer = Viewer();
+        Vector3 viewer = ViewerFor(transform);
+        BridgeMonitorLayout layout = Resources.Load<BridgeMonitorLayout>(BridgeMonitorLayout.ResourcePath);
         var log = new StringBuilder();
         var missing = new List<string>();
         for (int i = 0; i <= ScreenNames.Length; i++)
@@ -103,32 +107,84 @@ public class BridgeMonitors : MonoBehaviour
             bool big = i == ScreenNames.Length;
             string name = big ? BigPanelName : ScreenNames[i];
             Transform t = FindDeep(model, name);
-            if (t == null || !Face(t, viewer, transform.up, screenInset, out Vector3 c, out Vector3 n, out Vector3 up, out float w, out float h))
+            if (t == null) { missing.Add(name); continue; }
+            // Плоскость: ассет раскладки (пишет редактор при входе в Play) → грани сетки на месте → габариты (запасной)
+            string source = "из ассета";
+            BridgeMonitorLayout.Entry e = layout != null ? layout.Find(name) : null;
+            if (e == null) { e = FaceFromMesh(transform, t, viewer); source = "по граням"; }
+            Vector3 c, n, up;
+            float w, h;
+            if (e != null)
             {
-                missing.Add(name);
-                continue;
+                c = transform.TransformPoint(e.center);
+                n = transform.TransformDirection(e.normal).normalized;
+                up = transform.TransformDirection(e.up).normalized;
+                w = e.width * (1f - 2f * screenInset);
+                h = e.height * (1f - 2f * screenInset);
             }
+            else if (Face(t, viewer, transform.up, screenInset, out c, out n, out up, out w, out h)) source = "по габаритам (запасной)";
+            else { missing.Add(name); continue; }
             string label = big ? "P" : $"M{i + 1}";
             RectTransform canvas = MakeCanvas($"Monitor {label} ({name})", c + n * surfaceOffset, n, up, w, h, out Vector2 size);
             MonitorScreen s = MonitorScreen.For(i, label, name, big);
             s.Setup(canvas, size, this);
             screens.Add(s);
-            log.Append($"\n  {label} {name} — {w * 100f:F0} × {h * 100f:F0} см, {s.Title}, нормаль {Facing(n)}");
+            log.Append($"\n  {label} {name} — {w * 100f:F0} × {h * 100f:F0} см, {s.Title}, нормаль {Facing(n)}, {source}");
         }
         if (logScreens)
             Debug.Log($"[Мониторы] Экраны: {screens.Count} из {ScreenNames.Length + 1} (модель «{model.name}»){log}" +
                       (missing.Count > 0 ? $"\n  не найдены: {string.Join(", ", missing)}" : ""), this);
     }
 
-    // Игрок у штурвала: XR Origin при запуске + рост
-    private Vector3 Viewer()
+    /// <summary>Игрок у штурвала: XR Origin (при запуске — у штурвала) + рост 1,6 м.</summary>
+    public static Vector3 ViewerFor(Transform ship)
     {
         XROrigin origin = FindAnyObjectByType<XROrigin>();
-        if (origin != null) return origin.transform.position + transform.up * 1.6f;
-        return transform.position + transform.up * 6f;
+        if (origin != null) return origin.transform.position + ship.up * 1.6f;
+        return ship.position + ship.up * 6f;
     }
 
-    /// <summary>Лицевая плоскость экрана по сетке: центр, нормаль к игроку, «верх», ширина и высота (без полей), м.</summary>
+    /// <summary>Модель пульта в Ship (или сам Ship) и экран по имени — для раскладки в редакторе.</summary>
+    public static Transform FindScreen(Transform ship, string name) => FindDeep(FindDeep(ship, ModelName) ?? ship, name);
+
+    /// <summary>Плоскость экрана по граням сетки (Core ScreenFace), в осях Ship; null — вершины не читаются или граней нет.</summary>
+    public static BridgeMonitorLayout.Entry FaceFromMesh(Transform ship, Transform screen, Vector3 viewer)
+    {
+        MeshFilter mf = screen.GetComponent<MeshFilter>();
+        Mesh mesh = mf != null ? mf.sharedMesh : null;
+        if (mesh == null || !(mesh.isReadable || Application.isEditor)) return null;
+        Vector3[] vs;
+        int[] tris;
+        try
+        {
+            vs = mesh.vertices;
+            tris = mesh.triangles;
+        }
+        catch (System.Exception) { return null; }
+        if (vs == null || vs.Length == 0 || tris == null || tris.Length < 3) return null;
+        var world = new List<V3>(vs.Length);
+        foreach (Vector3 v in vs)
+        {
+            Vector3 p = screen.TransformPoint(v);
+            world.Add(new V3(p.x, p.y, p.z));
+        }
+        Vector3 up = ship.up;
+        ScreenFaceResult f = ScreenFace.Find(world, tris, new V3(viewer.x, viewer.y, viewer.z), new V3(up.x, up.y, up.z));
+        if (f == null || f.Width < 0.01 || f.Height < 0.01) return null;
+        return new BridgeMonitorLayout.Entry
+        {
+            name = screen.name,
+            center = ship.InverseTransformPoint(ToV(f.Center)),
+            normal = ship.InverseTransformDirection(ToV(f.Normal)).normalized,
+            up = ship.InverseTransformDirection(ToV(f.Up)).normalized,
+            width = (float)f.Width,
+            height = (float)f.Height
+        };
+    }
+
+    private static Vector3 ToV(V3 v) => new Vector3((float)v.X, (float)v.Y, (float)v.Z);
+
+    /// <summary>Запасной вариант (16а): плоскость по габаритам сетки — верно только без «запечённого» поворота.</summary>
     public static bool Face(Transform t, Vector3 viewer, Vector3 shipUp, float inset,
                             out Vector3 center, out Vector3 normal, out Vector3 upAxis, out float width, out float height)
     {

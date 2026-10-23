@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e8aead3d1f914e5fb4a3cfb565c3a99a, type: 3}
   m_Name: Scenario_19-01_Berth
   m_EditorClassIdentifier: VRBridge.Core::ScenarioDefinition
-  id: 19-01
+  id: 05
   title: "\u0428\u0432\u0430\u0440\u0442\u043E\u0432\u043A\u0430 \u043A \u043F\u0440\u0438\u0447\u0430\u043B\u0443
     \u043B\u0430\u0433\u043E\u043C"
   briefing: "\u0414\u0435\u043D\u044C, \u0448\u0442\u0438\u043B\u044C. \u0421\u0432\u043E\u0451
@@ -56,6 +56,7 @@ MonoBehaviour:
     \xAB\u041F\u0420\u0418\u0427\u0410\u041B\xBB \u043D\u0430 \u043D\u0430\u0432\u0438\u0433\u0430\u0446\u0438\u043E\u043D\u043D\u043E\u043C
     \u0434\u0438\u0441\u043F\u043B\u0435\u0435.\n\n\u041B\u0438\u043C\u0438\u0442
     \u0432\u0440\u0435\u043C\u0435\u043D\u0438 \u2014 20 \u043C\u0438\u043D\u0443\u0442."
+  demoVersion: 0
   waterArea: {fileID: 11400000, guid: 0ba514230f4e52540b1d15725f406409, type: 2}
   shipParameters: {fileID: 11400000, guid: bfe9cbd8e43f5c34eb5c8969288c3bf6, type: 2}
   motionModel: 2
@@ -100,3 +101,30 @@ MonoBehaviour:
     mooredSpeedKnots: 0.1
     mooredHoldS: 30
     targetTimeS: 600
+  windKnots: 0
+  windFromDeg: 0
+  windRandomSectorDeg: 0
+  tugAvailable: 0
+  tugWork:
+    enabled: 0
+    berthIndex: 0
+    clientGapM: 30
+    clientAlongM: 0
+    tugDistanceM: 150
+    contactZoneM: 10
+    atFendersGapM: 1
+    linesGapM: 1
+    securedSpeedKnots: 0.1
+    securedHoldS: 30
+    clearDistanceM: 20
+    targetTimeS: 480
+    angleEvent: 0
+    eventGapMinM: 4
+    eventGapMaxM: 7
+    eventAngleMinDeg: 4
+    eventAngleMaxDeg: 8
+    endZoneX: 0.3
+  tugWorkClient: {fileID: 0}
+  ownShipType: 0
+  criteriaSwitches: []
+  triggers: []

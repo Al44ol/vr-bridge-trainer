@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e8aead3d1f914e5fb4a3cfb565c3a99a, type: 3}
   m_Name: Scenario_21-01_Triggers
   m_EditorClassIdentifier: VRBridge.Core::ScenarioDefinition
-  id: 21-01
+  id: 04
   title: "\u0424\u0430\u0440\u0432\u0430\u0442\u0435\u0440 \u0441 \u0442\u0440\u0438\u0433\u0433\u0435\u0440\u0430\u043C\u0438"
   briefing: "\u0421\u0432\u043E\u0451 \u0441\u0443\u0434\u043D\u043E \u2014 \u0432
     1,2 \u043C\u0438\u043B\u0438 \u043A \u044E\u0433\u0443 \u043E\u0442 \u0432\u0445\u043E\u0434\u0430

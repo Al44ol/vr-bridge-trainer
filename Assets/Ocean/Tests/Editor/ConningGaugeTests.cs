@@ -3,6 +3,7 @@
 // деления, точка на окружности), картушка (курс под курсовой чертой), обороты ГД по телеграфу с инерцией, подписи.
 // ============================================================
 using System;
+using System.Collections.Generic;
 using NUnit.Framework;
 
 public class ConningGaugeTests
@@ -50,6 +51,45 @@ public class ConningGaugeTests
         Assert.AreEqual(750.0, e.Rpm, 1e-9);
         for (int i = 0; i < 2000; i++) e.Step(1, true, 0.02);
         Assert.AreEqual(0.0, e.Rpm, 1e-9, "при отказе обороты падают до нуля");
+    }
+
+    // Корпус монитора W × H × T, наклонён назад на tiltDeg вокруг оси X (как запечённый поворот из Blender), центр — (0; 1; 0)
+    private static void Box(double w, double h, double t, double tiltDeg, out List<V3> v, out List<int> tri)
+    {
+        double a = tiltDeg * Math.PI / 180.0, ca = Math.Cos(a), sa = Math.Sin(a);
+        v = new List<V3>();
+        tri = new List<int>();
+        for (int i = 0; i < 8; i++)
+        {
+            double x = (i & 1) == 0 ? -w / 2 : w / 2, y = (i & 2) == 0 ? -h / 2 : h / 2, z = (i & 4) == 0 ? -t / 2 : t / 2;
+            v.Add(new V3(x, 1.0 + y * ca - z * sa, y * sa + z * ca));   // поворот вокруг X
+        }
+        int[][] quads = { new[] { 4, 5, 7, 6 }, new[] { 0, 2, 3, 1 }, new[] { 0, 1, 5, 4 }, new[] { 2, 6, 7, 3 }, new[] { 0, 4, 6, 2 }, new[] { 1, 3, 7, 5 } };
+        foreach (int[] q in quads) { tri.AddRange(new[] { q[0], q[1], q[2], q[0], q[2], q[3] }); }
+    }
+
+    [Test]
+    public void ScreenFace_TiltedAndLyingMonitor()
+    {
+        // Монитор 0,5 × 0,3 × 0,05 м, наклонён на 20°, игрок спереди (+Z) и выше
+        Box(0.5, 0.3, 0.05, 20, out List<V3> v, out List<int> tri);
+        ScreenFaceResult f = ScreenFace.Find(v, tri, new V3(0, 1.6, 1.5), new V3(0, 1, 0));
+        Assert.IsNotNull(f);
+        Assert.AreEqual(0.5, f.Width, 1e-6);
+        Assert.AreEqual(0.3, f.Height, 1e-6);
+        double a = 20 * Math.PI / 180;
+        Assert.AreEqual(-Math.Sin(a), f.Normal.Y, 1e-6, "нормаль лицевой грани — с наклоном (не по осям судна)");
+        Assert.AreEqual(Math.Cos(a), f.Normal.Z, 1e-6);
+        Assert.AreEqual(Math.Cos(a), f.Up.Y, 1e-6, "«верх» — по экрану");
+        Assert.AreEqual(0.025 * Math.Cos(a), f.Center.Z, 1e-6, "центр — на лицевой грани");
+
+        // Лежащая панель 1,1 × 0,9 × 0,04 (наклон 90°): «верх» — от игрока
+        Box(1.1, 0.9, 0.04, 90, out v, out tri);
+        f = ScreenFace.Find(v, tri, new V3(0, 1.6, 1.5), new V3(0, 1, 0));
+        Assert.AreEqual(1.0, f.Normal.Y, 1e-6, "лежит лицом вверх");
+        Assert.AreEqual(-1.0, f.Up.Z, 1e-6, "«верх» — от игрока");
+        Assert.AreEqual(1.1, f.Width, 1e-6);
+        Assert.AreEqual(0.9, f.Height, 1e-6);
     }
 
     [Test]

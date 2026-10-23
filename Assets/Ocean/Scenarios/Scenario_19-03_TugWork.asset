@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e8aead3d1f914e5fb4a3cfb565c3a99a, type: 3}
   m_Name: Scenario_19-03_TugWork
   m_EditorClassIdentifier: VRBridge.Core::ScenarioDefinition
-  id: 19-03
+  id: 07
   title: "\u0411\u0443\u043A\u0441\u0438\u0440 \u043F\u0440\u0438\u0436\u0438\u043C\u0430\u0435\u0442
     \u0441\u0443\u0434\u043D\u043E \u043A \u043F\u0440\u0438\u0447\u0430\u043B\u0443"
   briefing: "\u0414\u0435\u043D\u044C, \u0432\u043E\u043B\u043D\u0435\u043D\u0438\u044F
@@ -148,3 +148,5 @@ MonoBehaviour:
     endZoneX: 0.3
   tugWorkClient: {fileID: 11400000, guid: 1fb6909c64934144ba0b91ae85afcc01, type: 2}
   ownShipType: 1
+  criteriaSwitches: []
+  triggers: []
